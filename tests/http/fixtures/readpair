@@ -1,0 +1,10 @@
+Use Arg request, response
+response~content_type = "text/plain"
+Say "count="request~cookie()
+Say "first="request~cookie("first")
+Say "second="request~cookie("second")
+-- "0" must not be reported as an existing name: the counters live
+-- outside the stem key space (call this with ?x=1 so that arguments
+-- and cookies are both present and the probe is not vacuous).
+Say "zeroarg="request~arg("0","Exists")
+Say "zerocookie="request~cookie("0","Exists")

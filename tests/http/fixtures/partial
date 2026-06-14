@@ -1,0 +1,5 @@
+Use Arg request, response
+response~content_type = "text/plain"
+Say "before flush"
+response~flush
+Say "after flush"

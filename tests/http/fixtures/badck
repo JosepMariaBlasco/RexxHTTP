@@ -1,0 +1,7 @@
+Use Arg request, response
+response~content_type = "text/plain"
+c = .HTTP.Cookie~new("oops")
+c~value = "x"
+c~samesite = "None"
+response~addcookie(c)
+Say "should not reach here"

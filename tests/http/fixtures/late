@@ -1,0 +1,5 @@
+Use Arg request, response
+Say "body first line"
+response~content_type = "text/plain"
+response~x_late_header = "yes"
+Say "body second line"

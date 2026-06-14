@@ -1,0 +1,3 @@
+Use Arg request, response
+response~content_type = "text/plain"
+Say "Hola, mundo"

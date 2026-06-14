@@ -1,0 +1,10 @@
+Use Arg request, response
+response~content_type = "text/plain"
+c = .HTTP.Cookie~new("pref")
+c~value = "dark"
+c~path = "/"
+c~max_age = 3600
+c~samesite = "Lax"
+c~httponly = 1
+response~addcookie(c)
+Say "cookie set with options"

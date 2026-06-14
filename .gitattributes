@@ -1,0 +1,17 @@
+# RexxHTTP line-ending policy
+#
+# Repository stores text as LF (portable, canonical). On checkout, all
+# RexxHTTP sources are materialised as CRLF, because they are edited on
+# Windows (Notepad++) via Dropbox and only travel to the Apache/Ubuntu
+# box through a mounted folder.
+#
+# This is safe because RexxHTTP.rex is never exec'd directly by the
+# kernel: in production it is invoked via Call from a one-line wrapper
+# (LF, with its own shebang), so RexxHTTP.rex's own shebang is just an
+# inert comment. ooRexx reads CRLF, LF, or mixed line endings by design,
+# so the source eol has no effect on execution.
+
+* text=auto
+
+*.cls text eol=crlf
+*.rex text eol=crlf

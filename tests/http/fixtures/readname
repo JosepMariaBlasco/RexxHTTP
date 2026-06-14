@@ -1,0 +1,7 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- The field name "user name" arrives percent- or plus-encoded on the
+-- wire (user%20name or user+name). Both must resolve to arg("user name")
+-- now that the NAME is decoded with the same DeWeb as the value (v11).
+Say "spaced=["request~arg("user name")"]"
+Say "exists=["request~arg("user name","Exists")"]"

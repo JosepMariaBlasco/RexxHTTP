@@ -1,0 +1,2 @@
+Use Arg request, response
+Exit response~redirect("/result", 303)

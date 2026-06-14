@@ -1,0 +1,2 @@
+Use Arg request, response
+Exit response~error(404, "no such resource")

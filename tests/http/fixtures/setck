@@ -1,0 +1,7 @@
+Use Arg request, response
+response~content_type = "text/plain"
+c = .HTTP.Cookie~new("session")
+c~value = "abc123"
+c~path = "/"
+response~addcookie(c)
+Say "cookie set"

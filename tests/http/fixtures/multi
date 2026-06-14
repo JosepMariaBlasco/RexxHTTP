@@ -1,0 +1,7 @@
+Use Arg request, response
+response~content_type = "text/plain"
+n = request~arg()
+Say "count="n
+Do i = 1 To n
+  Say i": "request~arg(i,"Name")"="request~arg(i,"Value")
+End

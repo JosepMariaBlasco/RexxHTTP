@@ -1,0 +1,8 @@
+Use Arg request, response
+response~content_type = "text/plain"
+Say "ADDCKFAIL_BODY"
+response~flush
+c = .HTTP.Cookie~new("late")
+c~value = "boom"
+response~addcookie(c)
+Say "unreachable"

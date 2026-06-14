@@ -1,0 +1,7 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- With two cookies of the same name in the Cookie header, the by-name
+-- lookup is pinned to the FIRST sent (v11 first-wins); the positional
+-- count still sees both.
+Say "dup=["request~cookie("dup")"]"
+Say "count="request~cookie()

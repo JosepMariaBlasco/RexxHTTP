@@ -1,0 +1,6 @@
+Use Arg request, response
+response~content_type = "text/plain"
+Say "COMMITFAIL_BODY"
+response~flush
+response["X-Late"] = "boom"
+Say "unreachable"

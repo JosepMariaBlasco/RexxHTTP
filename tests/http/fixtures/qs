@@ -1,0 +1,5 @@
+Use Arg request, response
+response~content_type = "text/plain"
+Say "q="request~arg("q","Value")
+Say "exists="request~arg("q","Exists")
+Say "missing_exists="request~arg("nope","Exists")

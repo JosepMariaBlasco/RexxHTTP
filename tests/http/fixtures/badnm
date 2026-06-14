@@ -1,0 +1,7 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- "caf" || "e9"x: a cookie name carrying a non-ASCII byte, built in code
+-- so this fixture file itself stays pure ASCII. new must reject it.
+c = .HTTP.Cookie~new("caf"||"e9"x, "1")
+response~addcookie(c)
+Say "should not reach here"

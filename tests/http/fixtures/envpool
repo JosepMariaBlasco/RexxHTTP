@@ -1,0 +1,22 @@
+Use Arg request, response
+response~content_type = "text/plain"
+
+-- [] now always reaches the environment pool, even for a name that
+-- matches a method: ["content_type"] is the raw CGI variable, not the
+-- request method.
+Say "bracket_method_name=["request["content_type"]"]"
+
+-- A standard CGI variable through [] (was already pool, still pool).
+Say "bracket_server=["request["server_name"]"]"
+
+-- An operator-set variable with NO leading underscore, reached both
+-- ways. Under the Action sub-request it arrives REDIRECT_-prefixed and
+-- the general pool fallback recovers it.
+Say "plain_msg=["request~myplain"]"
+Say "plain_bracket=["request["myplain"]"]"
+
+-- An operator-set variable WITH a leading underscore still resolves
+-- (no longer a special branch -- just another pool name via the same
+-- REDIRECT_ fallback).
+Say "under_msg=["request~_myvar"]"
+Say "under_bracket=["request["_myvar"]"]"

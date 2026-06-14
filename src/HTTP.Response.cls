@@ -1,0 +1,363 @@
+/******************************************************************************/
+/*                                                                            */
+/* HTTP.Response.cls - The HTTP response class                                */
+/* ===========================================                                */
+/*                                                                            */
+/* This file is part of the RexxHTTP package                                  */
+/* [See https://rexx.epbcn.com/rexxhttp/]                                     */
+/*                                                                            */
+/* Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>  */
+/*                                                                            */
+/* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
+/*                                                                            */
+/* Version history:                                                           */
+/*                                                                            */
+/* Date     Version Details                                                   */
+/* -------- ------- --------------------------------------------------------- */
+/* 20061102    0.1  First version                                             */
+/* 20170301    0.2  Drop support for mod_rexx, OS/2, IIS, rsp compilers       */
+/*                  Change the way request~message works -- see 'unknown'.    */
+/*                  By default, it looks in the environment variable pool.    */
+/* 20260611    1.0  Global refactor, switch to Apache license                 */
+/*                                                                            */
+/******************************************************************************/
+
+.environment~HTTP.Response = .HTTP.Response
+
+::Class HTTP.Response Public
+
+--------------------------------------------------------------------------------
+-- INIT method                                                                --
+--------------------------------------------------------------------------------
+
+::Method init
+  Expose output headers cookies committed committing
+
+  headers    = .directory~of( ("CONTENT-TYPE", "text/plain; charset=utf-8") )
+  cookies    = .directory~new
+  committed  = .false
+  committing = .false
+
+  output = .HTTP.OutputStream~new(.output~current)
+
+--------------------------------------------------------------------------------
+-- [] Method                                                                  --
+--------------------------------------------------------------------------------
+
+::Method "[]"
+  Expose headers
+
+  Use Strict Arg headername
+
+  headername = headername~request("STRING")
+  If headername == .nil Then Raise syntax 93.916 array (1)
+
+  Return headers[headername~translate]
+
+--------------------------------------------------------------------------------
+-- []= Method                                                                 --
+--------------------------------------------------------------------------------
+
+::Method "[]="
+  Expose headers committed
+
+  If committed Then
+    Raise syntax 93.900 array (-
+      "Cannot set a header: the response is already committed")
+
+  Use Strict Arg headervalue, headername
+
+  headervalue = headervalue~request("STRING")
+  If headervalue == .nil Then Raise syntax 93.916 array (1)
+  headername  = headername~request("STRING")
+  If headername  == .nil Then Raise syntax 93.916 array (2)
+
+  headers[headername~translate] = headervalue
+
+--------------------------------------------------------------------------------
+-- ADDCOOKIE method                                                           --
+--------------------------------------------------------------------------------
+
+::Method addcookie
+  Expose cookies committed
+
+  -- Same fail-fast as []= and unknown: no header mutation is silently
+  -- dropped after commit. The commit state outranks argument validation,
+  -- so this guard precedes the type check below.
+  If committed Then
+    Raise syntax 93.900 array (-
+      "Cannot add a cookie: the response is already committed")
+
+  Use Strict Arg Cookie
+
+ If \Cookie~isA(.HTTP.Cookie) Then
+    Raise syntax 93.948 array (1,"HTTP.COOKIE")
+
+  name   = Cookie~name
+  path   = Cookie~path
+  domain = Cookie~domain
+
+  -- Force validation/serialisation now, while we are still inside the
+  -- servlet, so an inconsistent cookie raises here (and RexxHTTP's error
+  -- page can render) instead of at commit time, past the point of no
+  -- return. makestring memoises its result, so commit will not recompute.
+  Cookie~makestring
+
+  cookies[name";"path";"domain] = Cookie~copy
+
+--------------------------------------------------------------------------------
+-- COMMIT                                                                     --
+--------------------------------------------------------------------------------
+
+::Method commit
+  Expose output committed committing headers cookies
+
+  -- Do nothing if already committed
+
+  If committed Then Return
+
+  -- Point of no return: from here on, header bytes go to the stream. The
+  -- committing flag lets the error handler tell "mid-commit" (some headers
+  -- already emitted, committed still .false) apart from "untouched", so it
+  -- never re-asserts headers over a half-written response.
+  committing = .true
+
+  out = output~underlyingstream
+  out~Say("Content-Type:" self~content_type)
+  Do e over cookies
+    out~Say("Set-Cookie:" cookies[e]~makestring)
+  End
+  Do e over headers
+    If e == "CONTENT-TYPE" Then Iterate
+    out~Say(self~prettyHeader(e)":" headers[e])
+  End
+  out~Say()
+
+  committed = .true
+
+--------------------------------------------------------------------------------
+-- COMMITTED / COMMITTING -- read-only state flags                           --
+--------------------------------------------------------------------------------
+--
+-- committed  is .true once the headers have been emitted (end of commit).
+-- committing is .true from the moment commit starts emitting, so it covers
+-- the mid-commit window where committed is still .false. Both are Get-only:
+-- the response sets them internally; nothing outside may force them.
+--
+
+::Attribute committed  Get
+::Attribute committing Get
+
+--------------------------------------------------------------------------------
+-- FLUSH                                                                      --
+--------------------------------------------------------------------------------
+
+::Method flush
+  Expose output committed
+  Use Strict Arg
+
+  If \committed Then self~commit
+
+  x = output~flush  -- Throw away the result (always "READY:")
+
+--------------------------------------------------------------------------------
+-- OUTPUT                                                                     --
+--------------------------------------------------------------------------------
+
+::Method output
+  Expose output
+  Use Strict Arg
+  Return output
+
+--------------------------------------------------------------------------------
+-- PRETTYHEADER -- Title-case a header name for emission only                 --
+--------------------------------------------------------------------------------
+--
+-- Headers are stored UPPERCASE in the directory, which is what makes the
+-- case-insensitive lookup work (content_type, ["Content-Type"] and
+-- [Content Type] all hit the same entry). This is purely cosmetic: when we
+-- emit a header we title-case each dash-separated word (CONTENT-TYPE ->
+-- Content-Type, LOCATION -> Location). The mechanical rule is right for
+-- every header we emit; acronyms like WWW-Authenticate would come out as
+-- Www-Authenticate, but those are request headers we never send, so no
+-- exception table is kept. The stored key is never touched.
+--
+
+::Method prettyHeader Private
+  Use Strict Arg name
+  parts = name~translate(" ","-")~makeArray(" ")
+  Do i = 1 To parts~items
+    w = parts[i]
+    parts[i] = w~left(1)~upper || w~substr(2)~lower
+  End
+  Return parts~makeString("Line","-")
+
+--------------------------------------------------------------------------------
+-- STATUSREASON -- Reason phrase for an HTTP status code                      --
+--------------------------------------------------------------------------------
+--
+-- A short table covering the codes our apps actually use. A code that is not
+-- in the table falls back to a generic reason for its family (3xx Redirect,
+-- 4xx Client Error, 5xx Server Error), so an unusual code is never rejected;
+-- it just gets a decent phrase. The servlet model allows arbitrary status.
+--
+
+::Method statusReason
+  Expose reasons
+  Use Strict Arg code
+
+  If \reasons~isA(.Directory) Then Do
+    reasons = .Directory~new
+    reasons[301] = "Moved Permanently"
+    reasons[302] = "Found"
+    reasons[303] = "See Other"
+    reasons[307] = "Temporary Redirect"
+    reasons[308] = "Permanent Redirect"
+    reasons[400] = "Bad Request"
+    reasons[401] = "Unauthorized"
+    reasons[403] = "Forbidden"
+    reasons[404] = "Not Found"
+    reasons[405] = "Method Not Allowed"
+    reasons[500] = "Internal Server Error"
+    reasons[502] = "Bad Gateway"
+    reasons[503] = "Service Unavailable"
+  End
+
+  If reasons~hasIndex(code) Then Return reasons[code]
+
+  -- Generic fallback by family (first digit)
+  Select Case code~left(1)
+    When "3" Then Return "Redirect"
+    When "4" Then Return "Client Error"
+    When "5" Then Return "Server Error"
+    Otherwise     Return "Status"
+  End
+
+--------------------------------------------------------------------------------
+-- ESCAPEHTML -- Minimal HTML escaping for interpolated text                  --
+--------------------------------------------------------------------------------
+
+::Method escapeHTML Private
+  Use Strict Arg text
+  Return text~changeStr("&","&amp;")~changeStr("<","&lt;")~changeStr(">","&gt;")
+
+--------------------------------------------------------------------------------
+-- ERROR -- Emit an error response with the given status code                 --
+--------------------------------------------------------------------------------
+--
+-- error(status [,detail]) sets the status, discards any buffered body that
+-- has not been flushed, and writes a sober HTML5 error page. detail, if
+-- given, is shown (HTML-escaped) as a diagnostic line.
+--
+-- Servlet semantics: if the response is already committed, the headers have
+-- already gone to the client and the status cannot be changed, so this
+-- raises (the ooRexx equivalent of IllegalStateException). Otherwise it
+-- returns 0, so the one-line idiom "Exit .response~error(404)" works.
+--
+
+::Method error
+  Expose output headers
+  Use Strict Arg status, detail = ""
+
+  If self~committed Then
+    Raise syntax 93.900 array (-
+      "Cannot send an error response: the response is already committed")
+
+  reason = self~statusReason(status)
+
+  -- Discard whatever the servlet had written so far
+  output~reset
+
+  -- Status and content type as headers; the normal commit emits them
+  headers["STATUS"]       = status reason
+  headers["CONTENT-TYPE"] = "text/html; charset=utf-8"
+
+  title = status reason
+  Say "<!DOCTYPE html>"
+  Say "<html lang=""en"">"
+  Say "<head>"
+  Say "<meta charset=""utf-8"">"
+  Say "<meta name=""viewport"" content=""width=device-width, initial-scale=1"">"
+  Say "<title>"self~escapeHTML(title)"</title>"
+  Say "<style>"
+  Say "  body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;"-
+        "margin:4rem auto;padding:0 1.5rem;color:#1a1a1a}"
+  Say "  h1{font-size:1.5rem;margin:0 0 .5rem}"
+  Say "  .code{color:#888;font-variant-numeric:tabular-nums}"
+  Say "  p{margin:.5rem 0;color:#444}"
+  Say "</style>"
+  Say "</head>"
+  Say "<body>"
+  Say "<h1><span class=""code"">"status"</span>" self~escapeHTML(reason)"</h1>"
+  If detail \== "" Then
+    Say "<p>"self~escapeHTML(detail)"</p>"
+  Say "</body>"
+  Say "</html>"
+
+  Return 0
+
+--------------------------------------------------------------------------------
+-- 404 -- Shorthand for error(404 [,detail])                                  --
+--------------------------------------------------------------------------------
+
+::Method 404
+  Use Strict Arg detail = ""
+  Return self~error(404, detail)
+
+--------------------------------------------------------------------------------
+-- REDIRECT -- Emit a redirect to the given location                          --
+--------------------------------------------------------------------------------
+--
+-- redirect(location [,status]) sets Location and a 3xx status. status
+-- defaults to 302 Found, the conventional temporary redirect. A permanent
+-- (301) or Post/Redirect/Get (303) redirect is requested explicitly.
+-- Same commit discipline as error: raises if already committed, otherwise
+-- returns 0 for the "Exit .response~redirect(url)" idiom. No body is sent.
+--
+
+::Method redirect
+  Expose output headers
+  Use Strict Arg location, status = 302
+
+  If self~committed Then
+    Raise syntax 93.900 array (-
+      "Cannot redirect: the response is already committed")
+
+  reason = self~statusReason(status)
+
+  output~reset
+
+  headers["STATUS"]   = status reason
+  headers["LOCATION"] = location
+
+  Return 0
+
+--------------------------------------------------------------------------------
+-- UNKNOWN                                                                    --
+--------------------------------------------------------------------------------
+
+::Method unknown
+  Expose headers committed
+
+  Use arg message, args
+
+  -- "response~content_type = 'text/plain'" syntax
+
+  If message~right(1) == "=" Then Do
+    If committed Then
+      Raise syntax 93.900 array (-
+        "Cannot set a header: the response is already committed")
+    headername = message~left(message~length-1)~translate("-","_")
+    If args~dimension(1) < 1 Then Raise syntax 93.901 array (1)
+    If args~dimension(1) > 1 Then Raise syntax 93.902 array (1)
+    headervalue = args[1]~request("STRING")
+    If headervalue == .nil Then Raise syntax 93.916 array (1)
+    headers[headername] = headervalue
+    Return
+  End
+
+  -- "response~content_type" syntax
+
+  If args~dimension(1) > 0 Then Raise syntax 93.902 array (0)
+
+  Return headers[message~translate("-","_")]

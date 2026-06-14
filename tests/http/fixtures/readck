@@ -1,0 +1,4 @@
+Use Arg request, response
+response~content_type = "text/plain"
+Say "count="request~cookie()
+Say "session="request~cookie("session","Value")

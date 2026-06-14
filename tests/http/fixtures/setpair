@@ -1,0 +1,11 @@
+Use Arg request, response
+response~content_type = "text/plain"
+a = .HTTP.Cookie~new("first", "plain")
+a~path = "/"
+response~addcookie(a)
+-- The caller-encoded value: ";" and "+" must survive the round trip
+-- (encode on output, read plain on input).
+b = .HTTP.Cookie~new("second", "a%3Bb%2Bc")
+b~path = "/"
+response~addcookie(b)
+Say "two cookies set"

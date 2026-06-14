@@ -1,0 +1,5 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- arrayout was dead on arrival until v9 (shifted Arg indices); this
+-- exercises the restored method end-to-end: elements joined by LF.
+response~output~arrayout(.array~of("alpha","beta","gamma"))

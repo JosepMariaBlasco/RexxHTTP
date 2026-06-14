@@ -1,0 +1,6 @@
+Use Arg request, response
+response~content_type = "text/plain"
+Say "FLUSHCRASH_BODY"
+response~flush
+x = .nil~no_such_method_boom
+Say "unreachable"
