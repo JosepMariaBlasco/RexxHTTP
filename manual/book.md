@@ -1,7 +1,7 @@
 ---
 title: "RexxHTTP: Servlet programming in Rexx"
 author: Josep Maria Blasco
-date: TODO month 2026
+date: 11 June 2026
 lang: en
 rexxpub:
   docclass: book
@@ -9,48 +9,6 @@ rexxpub:
   number-figures: true
   outline: 3
 ---
-
-<!--
-  ============================================================================
-  RexxHTTP manual — book.md (RexxPub `book` document class)
-  ============================================================================
-
-  STATUS: PLACEHOLDER. Skeleton only. Each chapter carries a TODO note
-  describing what goes there. Fill in a fresh session (item 8).
-
-  AUTHORING RULES (decided in the v8 architecture session — see handoff):
-
-  1. This is the SUCCESSOR of the 2006 PDF manual,
-     https://www.epbcn.com/pdf/josep-maria-blasco/2006-11-02-RexxHttp-Servlet-programming-in-Rexx.pdf
-     distilled — not copied — to what the 1.0 actually is.
-
-  2. DROPPED for good (do NOT bring across from the 2006 manual):
-       - mod_rexx, OS/2, Microsoft IIS
-       - RSP / RSPCOMP / REXXTAGS / page compiler interface
-       - the "Writing portable servlets" chapter (it existed for mod_rexx)
-       - the CPL license appendix (now Apache 2.0)
-
-  3. CLASS REFERENCE RULE (critical, invariant 5 applied to the docs):
-     every method entry in chapter 5 is written by READING THE ACTUAL .cls
-     ON DISK and verifying signature + behaviour against the code. The 2006
-     PDF is used ONLY for rationale/prose, never as the source of truth for
-     what a method does. (The 2006 manual documents an `rc` that no longer
-     exists, Netscape/Version cookies that are gone, etc.) Code is the
-     state; the manual is the spec.
-
-  4. Rexx code goes in ```rexx fenced blocks — the Rexx Highlighter renders
-     them. Shell/Apache/config go in plain ``` blocks.
-
-  5. COMPILATION is done OUTSIDE this container by JMB (pagedjs-cli does not
-     run well here). Claude writes the .md; JMB renders, or uploads the
-     HTML/PDF for Claude to load and review.
-
-  6. RexxPub `book` defaults already set above: size 12, section-numbers 2.
-     Chapters use {.chapter} on an H1; parts use {.part}; the ToC is the
-     {#toc} div below; the running-header book title is the {.book-title}
-     span in the title page H1.
-  ============================================================================
--->
 
 ::::: title-page
 
@@ -66,7 +24,7 @@ Espacio Psicoanalítico de Barcelona
 :::
 
 ::: date
-TODO month 2026
+11 June 2026
 :::
 
 :::::
@@ -82,10 +40,11 @@ TODO month 2026
 Introduction {.chapter}
 =======================
 
-RexxHTTP is a servlet processor for ooRexx. It runs as a CGI program
-under the Apache HTTP server: Apache hands it an incoming request, and
-RexxHTTP turns the raw CGI environment into a small set of objects, runs
-your servlet against them, and writes the result back as an HTTP
+RexxHTTP is a servlet processor for ooRexx and Apache.
+It runs as a CGI program under the Apache HTTP server:
+Apache hands it an incoming request, and
+RexxHTTP turns the raw CGI environment into a small set of objects,
+runs your servlet against them, and writes the result back as an HTTP
 response. A servlet is an ordinary ooRexx program, so the whole of
 ooRexx is available to it, with the HTTP request and the response it is
 about to build handed in as objects rather than scraped out of
@@ -101,27 +60,33 @@ buffering is what makes the response headers *lazy* — you may keep
 changing status, headers and cookies after you have already started
 writing the body, right up until the response is committed. The request
 and the response reach the servlet as the `.request` and `.response`
-objects, placed in the environment by RexxHTTP; the body is produced
-with ordinary `Say` or `CharOut` instructions. (A servlet may also pick
-the two objects up with `Use Arg request, response`; both ways are
-official, but going through `.request` and `.response` is the more
-robust of the two.) The response is committed on the first flush — and
-that first flush is either one the servlet triggers itself, by calling
-`flush` (for instance to send an early partial response), or the one
-RexxHTTP performs automatically when the servlet ends. This is the
+objects, placed in the environment by RexxHTTP;[^historical]
+the body is produced with ordinary `Say` or `CharOut` instructions.
+The response is committed on the first flush, which normally
+happens when the servlet ends. This is the
 central idea of the design, and the chapter [The request/response model]
 returns to it in detail.
 
-RexxHTTP requires ooRexx 5.3.0 or later. It is released under the Apache
-License 2.0 and published at <https://rexx.epbcn.com> and on GitHub.
+[^historical]: A servlet may also pick
+the two objects up with `Use Arg request, response`; both ways are
+official, but going through `.request` and `.response` is the more
+robust of the two.
 
-A short historical note. RexxHTTP first appeared in 2006 as a more
+RexxHTTP requires ooRexx 5.3.0 or later and Apache 2.4 or later.
+It is released under the Apache License 2.0 and published
+at <https://rexx.epbcn.com/rexxhttp/> and
+on GitHub at <https://github.com/JosepMariaBlasco/RexxHTTP>.
+
+A short historical note
+-----------------------
+
+RexxHTTP first appeared in 2006 as a more
 ambitious thing: alongside CGI it supported mod_rexx, ran on OS/2 and
 Windows as well as Unix, was meant to work under Microsoft IIS, and
 defined a Rexx Server Pages compiler interface for mixing HTML and Rexx
-in a single page. None of that survives in the 1.0. This release is
+in a single page. None of that survives in the 1.0 version. This release is
 CGI-on-Apache only — no mod_rexx, no IIS, no OS/2, no page compilers —
-and the manual describes only what the 1.0 actually does, verified
+and the manual describes only what the 1.0 version actually does, verified
 against the code and against a live Apache. The 2006 manual[^manual-2006]
 remains the record of the wider original; this one is deliberately
 narrower, and says so plainly rather than promising features the
@@ -135,21 +100,6 @@ Rexx*, version 0.1, 2 November 2006:
 Installation {.chapter}
 =======================
 
-<!--
-  DRAFT (v20). RexxHTTP-specific install matter for an Apache-savvy
-  reader. The prerequisite install line and the smoke test were run live
-  in the container; the handler/whitelist directives mirror
-  tests/http/RunHTTPTests.rex.
-  Highlighter: every block here is a plain fence (shell/config), never a
-  rexx-tagged fence.
-  Scope: assumes an Apache-savvy reader. Covers only RexxHTTP-specific
-  matter (the five files, the wrapper/CRLF wrinkle, the handler +
-  whitelist directives). No full VirtualHost, no filesystem steps, no
-  platform-specific activation (a2ensite etc.) — those are the reader's.
-  RHDIR is a placeholder for the sources directory; reconcile naming and
-  the example paths with JMB before publishing.
--->
-
 RexxHTTP runs as a CGI program under Apache. This chapter assumes you
 already keep an Apache server and know how your platform applies its
 configuration; it covers only what is specific to RexxHTTP — which files
@@ -161,7 +111,7 @@ chapter explains the *why* alongside the *what*.
 Prerequisites
 -------------
 
-RexxHTTP needs ooRexx 5.3.0 or later and an Apache 2 server with the
+RexxHTTP needs ooRexx 5.3.0 or later and an Apache 2.4 server with the
 `cgid` and `actions` modules enabled. It also uses `curl` for the smoke
 test at the end.
 
@@ -179,9 +129,11 @@ sudo apt-get install -y apache2
 sudo a2enmod cgid actions
 ```
 
+::: noindent
 `cgid` is what runs the CGI program; `actions` is what lets you route a
 request to a CGI program of your choosing rather than executing the
 requested file directly. The next section explains why that matters.
+:::
 
 The five sources
 ----------------
@@ -193,49 +145,25 @@ are distributed together in the download.[^download] The processor's
 `::Requires` directives name the four classes, which ooRexx then locates
 by its ordinary search rules, so the classes need only be *reachable*
 from the processor — they do not have to sit in the same directory.
-Keeping all five together is simply the easy choice, and the one this
-chapter makes.
+Keeping all five together is recommended. The examples below assume
+the five files in a directory `RHDIR` and the wrapper, introduced next,
+in a CGI-enabled directory; substitute your own paths.
 
 [^download]: <https://rexx.epbcn.com/rexxhttp/rexxhttp-latest.zip>.
 
-Where the five files live is up to you, subject only to ooRexx being
-able to reach the classes from the processor. They can sit outside the
-document tree, or inside it — at <https://rexx.epbcn.com/rexxhttp/> the
-sources are deliberately served as browsable content, the same files
-that the processor runs, so the repository can be read online. This is
-not a contradiction: whether a file is a servlet or static content is
-not a property of the file or of where it sits, but of the
-configuration (the next sections build this up). A `.rex` can be served
-raw under one path and executed under another. The examples below assume
-the five files in a directory `RHDIR` and the wrapper, introduced next,
-in a CGI-enabled directory; substitute your own paths.
 
 The wrapper, and why it exists
 ------------------------------
 
-Here is the wrinkle. The RexxHTTP sources are stored with CRLF line
-endings — they are edited on Windows and travel through a shared folder
-to the server, and the chapter [Rationale] explains why that choice is
-deliberate rather than accidental. A consequence is that the first line
-of `RexxHTTP.rex`, its `#!` shebang, ends in a carriage return. If the
-kernel tried to `exec` the file directly, it would look for an
-interpreter literally named `rexx\r`, fail to find it, and Apache would
-report `Exec format error`. ooRexx itself is unbothered by CRLF — it
-reads CRLF, LF or mixed sources happily — but the kernel's shebang parser
-is not.
-
-The fix is a one-line wrapper. The only file the kernel ever execs is a
-tiny Rexx script stored with Unix (LF) line endings, whose entire body
-hands control to the processor:
+To avoid problems with CRLF line endings and shebangs,
+we use a one-line wrapper:
 
 ```
 #!/usr/bin/env rexx
 Call "RHDIR/RexxHTTP.rex"
 ```
 
-Reached by `Call`, `RexxHTTP.rex` is *loaded by name*, not exec'd by the
-kernel, so its CRLF shebang is just an inert comment and ooRexx reads the
-CRLF body without complaint. The wrapper is the one file that must be LF
+The wrapper is the one file that must be LF
 and executable; the five sources stay exactly as shipped.
 
 Telling Apache which files are servlets
@@ -331,15 +259,6 @@ against.
 
 Tutorial {.chapter}
 ===================
-
-<!--
-  DRAFT (v18). Progression built from, and verified against, the suite
-  fixtures: hola, multi, qs, late, setck/readck, partial. Each ```rexx
-  block is the body of a real servlet or a faithful reduction of one.
-  Re-verify against a live Apache run if any signature changes before
-  publishing. Cross-references point at the Class Reference and the
-  request/response model chapter by title, never by number.
--->
 
 This chapter builds a few small servlets, each one introducing a little
 more of the API, until the shape of a RexxHTTP servlet is familiar. It
@@ -693,15 +612,6 @@ account of the four classes is the [Class Reference].
 The request/response model {.chapter}
 =====================================
 
-<!--
-  DRAFT (v18). Conceptual chapter, verified against the code on disk:
-  HTTP.Response.cls (commit/flush/init), HTTP.OutputStream.cls (flush).
-  Authoring rule 3: code is the source of truth here, not the 2006 PDF.
-  The mod_deflate note is the v8 decision — flush kept for its internal
-  effect, NOT for client-visible streaming; do not repeat the 2006
-  "watch the page appear" promise. Cross-references by title.
--->
-
 The [Tutorial] showed servlets that work without explaining why they
 work. This chapter is the why. It describes the three objects RexxHTTP
 builds for each request, the buffering that sits under the response, and
@@ -863,21 +773,6 @@ processor's final flush commit and send the whole thing at once.
 
 Class Reference {.chapter}
 ==========================
-
-<!--
-  TODO. Method-by-method, like §5 of the 2006 manual, but VERIFIED AGAINST
-  THE CODE ON DISK (see authoring rule 3 above). Four classes. For each
-  method: signature, what it does, arguments, return, raised conditions,
-  and a short example where useful.
-
-  FIRST STEP of the writing session: read these four files IN FULL before
-  writing a single entry —
-    src/HTTP.Cookie.cls
-    src/HTTP.OutputStream.cls
-    src/HTTP.Request.cls
-    src/HTTP.Response.cls
-  (In v8 only HTTP.Response.cls was read in full; the others were skimmed.)
--->
 
 The `HTTP.Cookie` class
 -----------------------
@@ -2091,16 +1986,6 @@ was left out.
 
 License {.chapter .unnumbered}
 ==============================
-
-<!--
-  DRAFT (v18). Option A: copyright notice + standard Apache boilerplate +
-  pointer to the repo LICENSE, NOT the full 11 KB text (which would bloat
-  the PDF and duplicate the canonical copy in the repo). Copyright range
-  2006-2026: first publication (v0.1, 2006) to this release (1.0, 2026);
-  the 2017 v0.2 was never distributed. The grant is in the present tense
-  about THIS version — earlier versions were under the CPL, so the Apache
-  grant is not asserted retroactively. Replaces the 2006 CPL appendix.
--->
 
 RexxHTTP is free software, released under the Apache License, Version
 2.0.
