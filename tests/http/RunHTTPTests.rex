@@ -93,7 +93,7 @@
              "commitfail flushcrash addckfail" -
              "setpair readpair readname dupck" -
              "err404 errgen errescape errreset rdr rdr301 rdr303"  -
-             "envpool"
+             "envpool enc"
 
   -- Per-fixture SetEnv lines for the .htaccess block. Each entry is an
   -- array of "NAME value" strings; under the Action sub-request Apache

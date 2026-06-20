@@ -1,0 +1,52 @@
+.response~content_type = 'text/html; charset=utf-8'
+
+Say '<!DOCTYPE html>'
+Say '<html lang="en">'
+Say '  <head>'
+Say '    <title>RexxHTTP examples</title>'
+Say '    <link rel="stylesheet" href="/css/bootstrap.min.css">'
+Say "    <link rel='stylesheet' href=""/rexx-parser/css/rexx-dark.css"">"
+Say '    <style>'
+Say '      body { margin-left: 2rem; margin-right: 2rem; }'
+Say '      details > summary { list-style: none; cursor: pointer; }'
+Say '      details > summary::-webkit-details-marker { display: none; }'
+Say '      details > summary .arrow::before { content: "\25B6"; }'
+Say '      details[open] > summary .arrow::before { content: "\25BC"; }'
+Say '    </style>'
+Say '  </head>'
+Say '  <body>'
+
+Say "<h1>RexxHTTP examples</h1>"
+
+Say "<p>Click the links to see the servlet in action, and the arrows to inspect the source code.</p>"
+
+Examples = -
+  ("hello-world",                  'The simplest "Hello, world!" servlet'), -
+  ("hello-unicode-world",          '"Hello, world!" & Unicode'),            -
+  ("hello-html-world",             'A simple HTML servlet'),                -
+  ("hello-html-and-unicode-world", 'Servlet showing HTML and Unicode'),     -
+  ("simple-form",                  'Reading a GET form with arg'),          -
+  ("simple-cookie",                'Setting and reading a cookie'),         -
+  ("simple-aggregate",             'Fetching and merging JSON from the web')
+
+myDir = Directory()
+Call Directory "../../rexx-parser/bin"
+
+Say "    <ol>"
+Do Counter c pair Over Examples
+  Say "      <li>"
+  Say "<details>"
+  Say "<summary><span class='arrow' title='Press to see the source'></span> <a href='"pair[1]"/'>"pair[2]"</a></summary>"
+  Call Highlight "-h" myDir"/"pair[1]"/index"
+  Say "</details>"
+End
+Say "    </ol>"
+
+Say '  </body>'
+Say '</html>'
+
+::Resource HTML
+<ol>
+<li><a href="hello-html-and-unicode-world/"></a>
+<li><a href="hello-html-world/"></a>
+::END

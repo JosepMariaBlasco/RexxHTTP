@@ -19,6 +19,7 @@
 /*                  Change the way request~message works -- see 'unknown'.    */
 /*                  By default, it looks in the environment variable pool.    */
 /* 20260611    1.0  Global refactor, switch to Apache license                 */
+/* 20260615         Add decoding methods                                      */
 /*                                                                            */
 /******************************************************************************/
 
@@ -96,9 +97,9 @@
 
   -- Build SCRIPT_NAME
 
-  requri = DeWeb(request_uri)
-  pathinfolen = DeWeb(self~path_info)~length
-  querylen = DeWeb(query_string)~length
+  requri = self~decodeForm(request_uri)
+  pathinfolen = self~decodeForm(self~path_info)~length
+  querylen = self~decodeForm(query_string)~length
   If querylen > 0 Then querylen = querylen + 1
   script_name = requri~left(requri~length - pathinfolen - querylen)
 
@@ -184,13 +185,13 @@
     End
 
     Parse var token name"="value
-    -- Decode the NAME with the same DeWeb as the value (v11): a query
+    -- Decode the NAME with the same decodeForm as the value (v11): a query
     -- string is application/x-www-form-urlencoded, where BOTH sides of
     -- each pair are percent-encoded and "+" means space. Decoding only
     -- the value was a parity bug: arg("user name") could not find a
     -- field sent as user+name. Validate the DECODED name, since that is
     -- what the servlet sees and keys on.
-    name = DeWeb(name)
+    name = self~decodeForm(name)
     If name == "" Then Do
       arg_violation = "noname:"token         -- "=value", empty name
       Leave
@@ -209,7 +210,7 @@
 
     i = i + 1
     args[i,"NAME"]  = name                    -- decoded name (v11), as the servlet sees it
-    args[i,"VALUE"] = DeWeb(value)
+    args[i,"VALUE"] = self~decodeForm(value)
     args[key]       = i                        -- search key is uppercased
     nargs           = i
   End
@@ -241,14 +242,14 @@
   -- decode each piece AFTER, so that an encoded "%3B" in a value can never
   -- act as a separator. The space that follows each ";" is stripped from
   -- the name. Decoding is percent-only: the "+" convention belongs to
-  -- form-urlencoded data (see DeWeb), not to cookies.
+  -- form-urlencoded data (see decodeForm), not to cookies.
   i = 0
   Do While cookieline \== ""
     Parse var cookieline pair";"cookieline
     If pair~strip == "" Then Iterate
     Parse var pair name"="value
-    name  = PercentDecode(name~strip)
-    value = PercentDecode(value)
+    name  = self~decodeURIComponent(name~strip)
+    value = self~decodeURIComponent(value)
     i = i + 1
     cookies[i,"NAME"]  = name
     cookies[i,"VALUE"] = value
@@ -567,19 +568,50 @@
   Return uri
 
 --------------------------------------------------------------------------------
--- Env: Return the value of an environment variable                           --
+-- DECODEURICOMPONENT -- Percent-decode a URL component (no "+" rule)         --
 --------------------------------------------------------------------------------
+--
+-- %xx-decoding alone: "+" stays literal. This is the correct decode for a
+-- URL component and for cookie values, where "+" is a plus, not a space.
+-- Inverse of encodeURIComponent (HTTP.Response). Available as a class method
+-- (.HTTP.Request~decodeURIComponent(s)) and an instance method; the body
+-- lives once, on the class. process_cookies uses it internally.
+--
 
-::Routine Env
-  Return Value(Arg(1),,"ENVIRONMENT")
+::Method decodeURIComponent Class
+  Use Strict Arg from
+  to    = .mutablebuffer~new
+  lfrom = from~length
+  Do i = 1 To lfrom
+    c = from~substr(i,1)
+    If c == "%" , i+2 <= lfrom Then Do
+      hex = from~substr(i+1,2)
+      If hex~datatype("X") Then Do
+        i = i + 2
+        c = hex~x2c
+      End
+    End
+    to~append(c)
+  End
+  Return to~string
+
+::Method decodeURIComponent
+  Use Strict Arg from
+  Return .HTTP.Request~decodeURIComponent(from)
 
 --------------------------------------------------------------------------------
--- DeWeb                                                                      --
+-- DECODEFORM -- Decode application/x-www-form-urlencoded                     --
 --------------------------------------------------------------------------------
+--
+-- %xx-decoding PLUS the "+"->space rule. This is the decode for form data:
+-- a conforming form serialiser emits space as "+", and this accepts both
+-- "+" and %20 as space. Inverse of encodeForm (HTTP.Response). Available as
+-- a class method and an instance method; the body lives once, on the class.
+-- init and process_args use it internally.
+--
 
-::Routine DeWeb
-  Use arg from
-
+::Method decodeForm Class
+  Use Strict Arg from
   to    = .mutablebuffer~new
   lfrom = from~length
   Do i = 1 To lfrom
@@ -596,41 +628,14 @@
   End
   Return to~string
 
---------------------------------------------------------------------------------
--- PercentDecode: %xx-decoding alone, without DeWeb's "+" rule (cookies)      --
---------------------------------------------------------------------------------
-
-::Routine PercentDecode
-  Use arg from
-
-  to    = .mutablebuffer~new
-  lfrom = from~length
-  Do i = 1 To lfrom
-    c = from~substr(i,1)
-    If c == "%" , i+2 <= lfrom Then Do
-      hex = from~substr(i+1,2)
-      If hex~datatype("X") Then Do
-        i = i + 2
-        c = hex~x2c
-      End
-    End
-    to~append(c)
-  End
-  Return to~string
+::Method decodeForm
+  Use Strict Arg from
+  Return .HTTP.Request~decodeForm(from)
 
 --------------------------------------------------------------------------------
--- Escape                                                                     --
+-- Env: Return the value of an environment variable                           --
 --------------------------------------------------------------------------------
 
-::Routine Escape
-  Use arg from
+::Routine Env
+  Return Value(Arg(1),,"ENVIRONMENT")
 
-  to    = .mutablebuffer~new
-  lfrom = from~length
-  escape = XRange('00'x,'20'x)XRange('80'x,'ff'x)'<>%"{}[]\^`'
-  Do i = 1 To lfrom
-    c = from~substr(i,1)
-    If Pos(c,escape) > 0 Then c = "%"c~c2x
-    to~append(c)
-  End
-  Return to~string

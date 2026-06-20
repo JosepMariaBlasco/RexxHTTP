@@ -779,3 +779,61 @@ Else
     "an underscore-prefixed variable still resolves (no special branch)")
   self~assertContains(r~entry("body"), "under_bracket=[underscored]", -
     "the underscore variable resolves identically through []")
+
+/******************************************************************************/
+/* Encoding family: the four encoders (Response) and two decoders (Request),  */
+/* exercised through the instance accessor — the idiomatic servlet path,      */
+/* which delegates to the class method. The enc fixture runs each on a string */
+/* chosen to bite: reserved chars, space, tilde, quotes. encodeURI must keep  */
+/* the reserved chars a formed URL needs; encodeURIComponent must escape them; */
+/* encodeForm uses + for space and escapes ~ but keeps *; the decoders differ */
+/* on +; and each pair must round-trip.                                       */
+/******************************************************************************/
+
+::Method test_enc_html_five_entities
+  -- encodeHTML escapes all five (& < > " '), closing the attribute-context
+  -- hole that the old three-entity escapeHTML left open.
+  r = self~httpGet(self~url("enc"))
+  self~assertContains(r~entry("body"), "html=a&lt;b&gt;&amp;&quot;x&quot;&#39;", -
+    "encodeHTML escapes & < > "" ' (all five entities)")
+
+::Method test_enc_uricomponent_escapes_reserved
+  -- A component escapes the reserved chars so they cannot break the URL;
+  -- space is %20 and the unreserved tilde stays raw.
+  r = self~httpGet(self~url("enc"))
+  self~assertContains(r~entry("body"), "uric=a%20b%26c%3Dd%2Fe~z", -
+    "encodeURIComponent escapes & = / (space %20, ~ left raw)")
+
+::Method test_enc_uri_keeps_reserved
+  -- A formed URL keeps its reserved structure; only the space is escaped.
+  r = self~httpGet(self~url("enc"))
+  self~assertContains(r~entry("body"), "uri=http://a/b?x=1&y=2%20z", -
+    "encodeURI respects reserved chars and escapes only the space")
+
+::Method test_enc_form_plus_and_tilde
+  -- form-urlencoded: space is +, ~ is escaped (WHATWG safe set), * stays raw.
+  r = self~httpGet(self~url("enc"))
+  self~assertContains(r~entry("body"), "form=a+b%26c%7Ed*e", -
+    "encodeForm uses + for space, escapes ~, keeps *")
+
+::Method test_enc_decode_uricomponent_keeps_plus
+  -- decodeURIComponent leaves + literal; only %20 becomes space.
+  r = self~httpGet(self~url("enc"))
+  self~assertContains(r~entry("body"), "duric=a+b c", -
+    "decodeURIComponent leaves + literal, decodes %20 to space")
+
+::Method test_enc_decode_form_plus_to_space
+  -- decodeForm turns both + and %20 into space.
+  r = self~httpGet(self~url("enc"))
+  self~assertContains(r~entry("body"), "dform=a b c", -
+    "decodeForm decodes both + and %20 to space")
+
+::Method test_enc_roundtrip_uricomponent
+  r = self~httpGet(self~url("enc"))
+  self~assertContains(r~entry("body"), "rturic=Hello, World! a b&c=d/e~z", -
+    "decodeURIComponent(encodeURIComponent(s)) recovers s")
+
+::Method test_enc_roundtrip_form
+  r = self~httpGet(self~url("enc"))
+  self~assertContains(r~entry("body"), "rtform=Hello, World! a b&c=d/e~z", -
+    "decodeForm(encodeForm(s)) recovers s")

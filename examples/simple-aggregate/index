@@ -1,0 +1,61 @@
+.response~content_type = 'text/html; charset=utf-8'
+
+Say '<!DOCTYPE html>'
+Say '<html lang="en">'
+Say '  <head>'
+Say "    <title>A simple aggregating servlet</title>"
+Say '  </head>'
+Say '  <body>'
+Say '    <h1>Two posts, fetched and merged</h1>'
+Say '    <p>This servlet fetches two sample posts from the public'
+Say '       <a href="https://jsonplaceholder.typicode.com/">JSONPlaceholder</a>'
+Say '       API, parses their JSON, and shows them below. The placeholder text'
+Say '       is theirs &mdash; what this example demonstrates is a servlet reaching'
+Say '       out to the network and composing the results.</p>'
+
+Base = "https://jsonplaceholder.typicode.com/posts/"
+
+Do id = 1 To 2
+  post = FetchJSON(Base || id)
+  If post == .nil Then
+    Say '    <p>Could not load post 'id'.</p>'
+  Else Do
+    Say '    <article>'
+    Say '      <h2>#'.response~encodeHTML(post["id"])' &mdash; '.response~encodeHTML(post["title"])'</h2>'
+    Say '      <p>'.response~encodeHTML(post["body"])'</p>'
+    Say '    </article>'
+  End
+End
+
+Say '    <p>'
+Say '      <small><a href="../">⬅️ Back to the examples.</a></small>'
+Say '    </p>'
+Say '  </body>'
+Say '</html>'
+Exit
+
+-- Fetch a URL and parse the JSON body into a Rexx object.
+-- Returns .nil if the download fails or the body is not valid JSON.
+-- Note: this blocks the CGI process until wget returns, so we keep it
+-- on a short leash -- --timeout caps DNS/connect/read at 5s each, and
+-- --tries=1 stops wget's default 20 silent retries from hanging the
+-- request when the remote host is down.
+FetchJSON: Procedure
+  Use Strict Arg url
+
+  Address Command "wget -qO- --timeout=5 --tries=1" url With Output Stem lines.
+  If RC \= 0 Then Return .nil
+
+  text = ""
+  Do i = 1 To lines.0
+    If i > 1 Then text = text || "0a"x
+    text = text || lines.i
+  End
+
+  Signal On Syntax Name BadJSON
+  Return .json~fromJson(text)
+
+BadJSON:
+  Return .nil
+
+::Requires "json.cls"

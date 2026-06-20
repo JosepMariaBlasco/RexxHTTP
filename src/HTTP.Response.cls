@@ -19,6 +19,7 @@
 /*                  Change the way request~message works -- see 'unknown'.    */
 /*                  By default, it looks in the environment variable pool.    */
 /* 20260611    1.0  Global refactor, switch to Apache license                 */
+/* 20260615         Add encoding methods                                      */
 /*                                                                            */
 /******************************************************************************/
 
@@ -234,12 +235,105 @@
   End
 
 --------------------------------------------------------------------------------
--- ESCAPEHTML -- Minimal HTML escaping for interpolated text                  --
+-- ENCODEHTML -- Escape text for safe interpolation into HTML                 --
 --------------------------------------------------------------------------------
+--
+-- Escapes the five characters that are unsafe in HTML markup, including
+-- attribute context: & < > " '. Available both as a class method
+-- (.HTTP.Response~encodeHTML(s), no instance needed) and as an instance
+-- method (.response~encodeHTML(s)). The instance method delegates to the
+-- class method; the body lives once, on the class.
+--
 
-::Method escapeHTML Private
+::Method encodeHTML Class
   Use Strict Arg text
-  Return text~changeStr("&","&amp;")~changeStr("<","&lt;")~changeStr(">","&gt;")
+  Return text~changeStr("&","&amp;")~changeStr("<","&lt;") -
+             ~changeStr(">","&gt;")~changeStr('"',"&quot;") -
+             ~changeStr("'","&#39;")
+
+::Method encodeHTML
+  Use Strict Arg text
+  Return .HTTP.Response~encodeHTML(text)
+
+--------------------------------------------------------------------------------
+-- ENCODEURICOMPONENT -- Percent-encode a single URL component (RFC 3986)     --
+--------------------------------------------------------------------------------
+--
+-- Escapes everything that is not RFC 3986 unreserved (A-Z a-z 0-9 - . _ ~).
+-- Space becomes %20. Use for a value that goes inside a URL (a query field,
+-- a path segment): it escapes the reserved characters & / = ? # so they
+-- cannot break the surrounding URL structure. Contrast with encodeURI, which
+-- leaves the reserved characters intact for an already-formed URL.
+--
+
+::Method encodeURIComponent Class
+  Use Strict Arg from
+  to        = .mutablebuffer~new
+  unreserved = XRange("A","Z")XRange("a","z")XRange("0","9")"-._~"
+  Do i = 1 To from~length
+    c = from~substr(i,1)
+    If Pos(c,unreserved) = 0 Then c = "%"c~c2x
+    to~append(c)
+  End
+  Return to~string
+
+::Method encodeURIComponent
+  Use Strict Arg from
+  Return .HTTP.Response~encodeURIComponent(from)
+
+--------------------------------------------------------------------------------
+-- ENCODEURI -- Percent-encode an already-formed URL (RFC 3986)               --
+--------------------------------------------------------------------------------
+--
+-- Escapes illegal and unwise characters (controls, space, high ASCII, and
+-- < > % " { } [ ] \ ^ `) but RESPECTS the reserved characters that give a
+-- URL its structure (/ ? # & = @ : + ; , $ ! ' ( ) *). Space becomes %20.
+-- Use on a whole URL; use encodeURIComponent on a piece that goes inside
+-- one. (This is the JS pair: they differ by one word and do opposite things
+-- with & / = -- pick deliberately.)
+--
+
+::Method encodeURI Class
+  Use Strict Arg from
+  to     = .mutablebuffer~new
+  escape = XRange('00'x,'20'x)XRange('80'x,'ff'x)'<>%"{}[]\^`'
+  Do i = 1 To from~length
+    c = from~substr(i,1)
+    If Pos(c,escape) > 0 Then c = "%"c~c2x
+    to~append(c)
+  End
+  Return to~string
+
+::Method encodeURI
+  Use Strict Arg from
+  Return .HTTP.Response~encodeURI(from)
+
+--------------------------------------------------------------------------------
+-- ENCODEFORM -- Percent-encode for application/x-www-form-urlencoded         --
+--------------------------------------------------------------------------------
+--
+-- Twin of encodeURIComponent with the two differences the form-urlencoded
+-- media type mandates (WHATWG URL Standard): (a) the safe set is more
+-- aggressive -- only A-Z a-z 0-9 * - . _ stay raw (note that ~ IS escaped here,
+-- unlike in encodeURIComponent); (b) space becomes "+", not %20. This is the
+-- conforming serialisation for a form body; decodeForm is its inverse.
+--
+
+::Method encodeForm Class
+  Use Strict Arg from
+  to   = .mutablebuffer~new
+  safe = XRange("A","Z")XRange("a","z")XRange("0","9")"*-._"
+  Do i = 1 To from~length
+    c = from~substr(i,1)
+    If c == " " Then c = "+"
+    Else If Pos(c,safe) = 0 Then c = "%"c~c2x
+    to~append(c)
+  End
+  Return to~string
+
+::Method encodeForm
+  Use Strict Arg from
+  Return .HTTP.Response~encodeForm(from)
 
 --------------------------------------------------------------------------------
 -- ERROR -- Emit an error response with the given status code                 --
@@ -278,7 +372,7 @@
   Say "<head>"
   Say "<meta charset=""utf-8"">"
   Say "<meta name=""viewport"" content=""width=device-width, initial-scale=1"">"
-  Say "<title>"self~escapeHTML(title)"</title>"
+  Say "<title>"self~encodeHTML(title)"</title>"
   Say "<style>"
   Say "  body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;"-
         "margin:4rem auto;padding:0 1.5rem;color:#1a1a1a}"
@@ -288,9 +382,9 @@
   Say "</style>"
   Say "</head>"
   Say "<body>"
-  Say "<h1><span class=""code"">"status"</span>" self~escapeHTML(reason)"</h1>"
+  Say "<h1><span class=""code"">"status"</span>" self~encodeHTML(reason)"</h1>"
   If detail \== "" Then
-    Say "<p>"self~escapeHTML(detail)"</p>"
+    Say "<p>"self~encodeHTML(detail)"</p>"
   Say "</body>"
   Say "</html>"
 

@@ -1,0 +1,15 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- Exercise the encoder family via the instance accessor (the idiomatic
+-- servlet path), which delegates to the class method.
+Say "html="response~encodeHTML('a<b>&"x"'"'")
+Say "uric="response~encodeURIComponent("a b&c=d/e~z")
+Say "uri="response~encodeURI("http://a/b?x=1&y=2 z")
+Say "form="response~encodeForm("a b&c~d*e")
+-- Decoders via the request instance accessor.
+Say "duric="request~decodeURIComponent("a+b%20c")
+Say "dform="request~decodeForm("a+b%20c")
+-- Round trips through a full pair (decode of encode recovers the input).
+s = "Hello, World! a b&c=d/e~z"
+Say "rturic="request~decodeURIComponent(response~encodeURIComponent(s))
+Say "rtform="request~decodeForm(response~encodeForm(s))

@@ -1,0 +1,23 @@
+.response~content_type = 'text/html; charset=utf-8'
+
+Say .resources~HTML
+
+::Resource HTML
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>A 'Hello world!' HTML and Unicode servlet</title>
+  </head>
+  <body>
+    <p>
+       Hello, world!
+       <br>नमस्ते
+       <br>P ≝ 𝔐
+       <br>🦞🍐
+    </p>
+    <p>
+      <small><a href="../">⬅️ Back to the examples.</a></small>
+    </p>
+  </body>
+</html>
+::END

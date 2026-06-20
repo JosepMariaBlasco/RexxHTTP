@@ -44,25 +44,35 @@ Requirements
 ------------
 
 - [ooRexx](https://www.oorexx.org/) 5.3.0 or later.
-- [Apache](https://httpd.apache.org/) 2.0 or later, with `cgid` and
+- [Apache](https://httpd.apache.org/) 2.4 or later, with `cgid` and
   `actions` enabled.
 
 History
 -------
 
 RexxHTTP grew out of a servlet processor first published in 2006
-(version 0.1, with a full 73-page manual) and rewritten in 2017
-(version 0.2), which today serves some 40,000 URLs in production at
-epbcn.com. This release is a clean, distilled 1.0: the dead branches of
-the original (mod_rexx, OS/2, Microsoft IIS, the RSP page compiler) are
-gone, and the documentation describes only what is actually verified
+(version 0.1, with [a full 73-page manual](https://www.epbcn.com/pdf/josep-maria-blasco/2006-11-02-RexxHttp-Servlet-programming-in-Rexx.pdf))
+and rewritten in 2017 (version 0.2), which today serves
+some 40,000 URLs in production at
+epbcn.com and other sites. This release is a clean, distilled 1.0:
+the dead branches of the original (mod_rexx, OS/2, Microsoft IIS, the RSP page compiler)
+are gone, and the documentation describes only what is actually verified
 against the code.
 
 Documentation
 -------------
 
-The manual is in [manual/](manual/). It is written for
-[Pandoc Markdown](https://pandoc.org/) and rendered as a book.
+The manual is in [manual/](manual/). It is written using the
+[RexxPub publishing framework](https://rexx.epbcn.com/rexx-parser/doc/rexxpub/):
+a single Markdown file is rendered as a web page, and this
+same web page produces a print-quality
+manual when printed using the print menu of your browser.
+
+Examples
+--------
+
+You can also take a look at our [examples](examples/) (source
+code included).
 
 Repository layout
 -----------------
@@ -71,6 +81,7 @@ Repository layout
   `HTTP.Request.cls`, `HTTP.Response.cls`, `HTTP.OutputStream.cls`,
   `HTTP.Cookie.cls`).
 - [`manual/`](manual/) — the manual.
+- [`examples/`](examples/) — the examples.
 - [`tests/`](tests/) — the RexxHTTP test suite and a copy of the ooRexx test framework.
 
 Some sites that use RexxHTTP

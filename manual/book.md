@@ -1,7 +1,7 @@
 ---
 title: "RexxHTTP: Servlet programming in Rexx"
 author: Josep Maria Blasco
-date: 11 June 2026
+date: 15 June 2026
 lang: en
 rexxpub:
   docclass: book
@@ -24,7 +24,7 @@ Espacio Psicoanalítico de Barcelona
 :::
 
 ::: date
-11 June 2026
+15 June 2026
 :::
 
 :::::
@@ -1494,6 +1494,38 @@ servlet runs — this is where the `400` of the strict policy comes from
 — so a servlet never needs to: by the time a servlet runs, `validate`
 has already returned the null string.
 
+### `decodeURIComponent`
+
+```rexx
+text = .request~decodeURIComponent( enc )
+text = .HTTP.Request~decodeURIComponent( enc )
+```
+
+Reverses percent-encoding: each `%xx` triple, where `xx` is two hex digits,
+becomes the byte it names; everything else passes through untouched. It is
+the inverse of `encodeURIComponent` on the response object, and the routine
+the processor uses internally to decode path and query components. A lone
+`%` not followed by two hex digits is left as a literal `%`, so malformed
+input degrades gracefully rather than raising.
+
+Like the encoders, it exists both as a class method
+(`.HTTP.Request~decodeURIComponent(s)`, no request in hand) and as an
+instance method that delegates to it.
+
+### `decodeForm`
+
+```rexx
+text = .request~decodeForm( enc )
+text = .HTTP.Request~decodeForm( enc )
+```
+
+Decodes one field of an `application/x-www-form-urlencoded` body: `%xx`
+triples become their bytes, *and* a `+` becomes a space. Since a conforming
+form serialiser emits a space as `+` but a hand-built query string may use
+`%20`, it accepts both. It is the inverse of the response object's
+`encodeForm`, and the routine the processor uses internally to split a form
+body into its fields. The same class-and-instance pairing applies.
+
 The `HTTP.Response` class
 -------------------------
 
@@ -1563,6 +1595,93 @@ Every response carries a `Content-Type`: the header directory is seeded at
 creation time with the default `text/plain; charset=utf-8`, which the
 servlet may overwrite but not remove.
 
+### Encoding text for output
+
+Four methods turn raw text into a form that is safe to drop into HTML or
+into a URL. They are the counterpart to the two decoders on the request
+object (`decodeURIComponent` and `decodeForm`), which undo the URL forms on
+the way in; there is deliberately no HTML *decoder*, since a servlet emits
+HTML but is never handed HTML to parse.
+
+Each method exists twice: as a class method, callable with no response in
+hand (`.HTTP.Response~encodeHTML(s)`), and as an instance method on a live
+response (`.response~encodeHTML(s)`). The two are identical — the instance
+form delegates to the class form — so a servlet uses whichever is closer to
+hand. None of them touches the response; they are pure string functions
+that happen to live here because emitting safe output is the response's job.
+
+### `encodeHTML`
+
+```rexx
+safe = .response~encodeHTML( text )
+safe = .HTTP.Response~encodeHTML( text )
+```
+
+Escapes the five characters that are unsafe in HTML, returning a string fit
+to interpolate into either element content or a quoted attribute value. The
+five are `&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`, `"` → `&quot;` and
+`'` → `&#39;`; `&` is converted first, so an escape is never double-escaped.
+Escaping the two quote characters as well as the three markup characters is
+what makes the result safe inside an attribute, not only between tags — a
+value escaped for element content but interpolated into `title="..."` would
+otherwise let a `"` break out of the attribute. This is the method `error`
+uses for its diagnostic line.
+
+### `encodeURIComponent`
+
+```rexx
+enc = .response~encodeURIComponent( text )
+enc = .HTTP.Response~encodeURIComponent( text )
+```
+
+Percent-encodes *text* for use as a single component inside a URL — a query
+field value, one path segment — following RFC 3986. Every character outside
+the unreserved set (`A`–`Z`, `a`–`z`, `0`–`9`, `-`, `.`, `_`, `~`) is
+replaced by `%` followed by its hexadecimal byte value; a space becomes
+`%20`. Crucially it escapes the reserved characters `& / = ? #` too, so a
+component carrying any of them cannot break out and alter the structure of
+the URL it sits in. Use it on the *pieces*, never on a whole URL — for that,
+see `encodeURI`.
+
+```rexx
+url = "/search?q=".response~encodeURIComponent(term)
+```
+
+### `encodeURI`
+
+```rexx
+enc = .response~encodeURI( text )
+enc = .HTTP.Response~encodeURI( text )
+```
+
+Percent-encodes an *already-assembled* URL, escaping only what is illegal or
+unwise in a URL — control characters, space, the high-ASCII bytes, and the
+literal characters ``< > % " { } [ ] \ ^ ` `` — while leaving intact the
+reserved characters that give a URL its structure
+(`/ ? # & = @ : + ; , $ ! ' ( ) *`). A space
+becomes `%20`. The contrast with `encodeURIComponent` is the whole point of
+having both: that method escapes `& / = ? #`, this one preserves them. The
+two carry the same names as their JavaScript namesakes and divide the work
+the same way — `encodeURI` for a complete URL, `encodeURIComponent` for a
+value going inside one. Reach for the one that matches the job; they are not
+interchangeable.
+
+### `encodeForm`
+
+```rexx
+enc = .response~encodeForm( text )
+enc = .HTTP.Response~encodeForm( text )
+```
+
+Percent-encodes *text* for an `application/x-www-form-urlencoded` body, the
+conforming serialisation defined by the WHATWG URL Standard. It is the twin
+of `encodeURIComponent` with the two differences the form media type
+mandates: the safe set is narrower — only `A`–`Z`, `a`–`z`, `0`–`9`, `*`,
+`-`, `.`, `_` stay raw, so `~` *is* escaped here though it is not by
+`encodeURIComponent` — and a space becomes `+` rather than `%20`. It is the
+exact inverse of the request object's `decodeForm`; the two are designed as
+a round-trip pair.
+
 ### The status line
 
 There is no first-class status method, and none is needed. Under CGI the
@@ -1592,8 +1711,9 @@ call, and are written to be the last statement a servlet runs:
 
 Emits an error response with HTTP status *status* and a short HTML page,
 and returns `0`. *status* is a numeric code; *detail*, if given, is shown
-on the page as a single diagnostic line and is HTML-escaped, so a detail
-containing `<`, `>` or `&` is displayed literally rather than interpreted.
+on the page as a single diagnostic line and is HTML-escaped (see the
+encoding methods below), so a detail containing any of `& < > " '` is
+displayed literally rather than interpreted.
 
 The reason phrase is supplied automatically for the codes a servlet is
 likely to use (the `3xx` redirects, `400`, `401`, `403`, `404`, `405`,
@@ -1953,36 +2073,6 @@ the door. Strict-by-default turns a class of ambiguous input into a clear
 argument it sees has a name and a value, and that a name names exactly
 one argument. The strictness is a feature paid for once, at the boundary,
 so that no servlet has to pay for it again.
-
-Why the sources are stored CRLF
--------------------------------
-
-The repository stores its sources with CRLF line endings — specifically
-the `.rex` and `.cls` files — and this is deliberate, not an accident of
-the editing platform. The sources are maintained on Windows, ooRexx reads
-CRLF, LF or mixed line endings equally by design, and the wrapper that
-Apache executes is the one place the choice would otherwise bite: a
-shebang line is sensitive to what follows the interpreter path. Pinning
-the convention per file, and documenting it, means a checkout on any
-platform materialises sources that run, and that nobody "tidies" the line
-endings into a wrapper that no longer executes. The full rule, and how it
-is enforced through `.gitattributes`, is in the project's `agents.md`.
-
-Why CGI only
-------------
-
-The remaining question the 2006 manual would have asked — why CGI rather
-than something faster — now answers itself. mod_rexx, the high-performance
-path the original offered alongside CGI, is no longer maintained upstream,
-so it is not a path the 1.0 can responsibly ship. CGI is what is left, and
-for the workloads RexxHTTP actually carries it is enough: the cost is a
-process per request, which on a personal site or a small business — a
-large fraction of the real web — disappears into the noise. Choosing the
-one gateway that is current and maintained, rather than carrying a second
-that is neither, is the same conservative instinct that runs through the
-rest of this chapter: ship what is known to work, and say plainly what
-was left out.
-
 
 License {.chapter .unnumbered}
 ==============================
