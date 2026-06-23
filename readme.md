@@ -47,6 +47,13 @@ Requirements
 - [Apache](https://httpd.apache.org/) 2.4 or later, with `cgid` and
   `actions` enabled.
 
+Trying it in an AI assistant
+----------------------------
+
+If you'd like to experiment with RexxHTTP inside an AI assistant, you can
+try our skill at <https://rexx.epbcn.com/skills/rexxhttp.md>, part of the
+[Rexx skills collection](https://rexx.epbcn.com/skills/).
+
 History
 -------
 
