@@ -5,11 +5,23 @@
 # Windows (Notepad++) via Dropbox and only travel to the Apache/Ubuntu
 # box through a mounted folder.
 #
-# This is safe because RexxHTTP.rex is never exec'd directly by the
-# kernel: in production it is invoked via Call from a one-line wrapper
-# (LF, with its own shebang), so RexxHTTP.rex's own shebang is just an
-# inert comment. ooRexx reads CRLF, LF, or mixed line endings by design,
-# so the source eol has no effect on execution.
+# Why CRLF sources are safe:
+#
+# - On Unix, RexxHTTP.rex is never exec'd directly by the kernel. Apache
+#   execs a small wrapper, which Calls RexxHTTP.rex as a sibling; reached
+#   by Call, RexxHTTP.rex's CRLF and its own shebang are inert. ooRexx
+#   reads CRLF, LF, or mixed line endings by design.
+#
+# - On Windows, Apache execs RexxHTTP.rex directly, reading its #!rexx
+#   shebang via the default ScriptInterpreterSource. CRLF is native there
+#   and causes no trouble. No wrapper is used.
+#
+# The wrapper is the one file that must be LF (Apache execs it by its
+# shebang, and a trailing CR would have the kernel look for "rexx\r"). It
+# is NOT stored here: pack.rex generates it fresh, in LF, from a
+# ::RESOURCE on every build, and .gitignore keeps it out of the repo so
+# no second copy can drift. Being generated and ignored, it never passes
+# through these attributes at all.
 
 * text=auto
 

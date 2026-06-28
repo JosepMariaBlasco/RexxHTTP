@@ -29,8 +29,7 @@ Examples = -
   ("simple-cookie",                'Setting and reading a cookie'),         -
   ("simple-aggregate",             'Fetching and merging JSON from the web')
 
-myDir = Directory()
-Call Directory "../../rexx-parser/bin"
+myDir = Directory("../../rexx-parser/bin")
 
 Say "    <ol>"
 Do Counter c pair Over Examples
