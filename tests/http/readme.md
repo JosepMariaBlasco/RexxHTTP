@@ -1,9 +1,9 @@
 RexxHTTP integration tests
 ==========================
 
-End-to-end integration tests for the RexxHTTP servlet processor. They
+End-to-end integration tests for the RexxHTTP rexxlet processor. They
 exercise the whole pipeline via Apache + curl: a request goes through
-Apache to the wrapper, which `Call`s `RexxHTTP.rex`, which runs a servlet;
+Apache to the wrapper, which `Call`s `RexxHTTP.rex`, which runs a rexxlet;
 the generated response (status, headers, body) is then verified.
 
 These are not unit tests of the classes in isolation. The point is to
@@ -92,7 +92,7 @@ Reached via `Call` from the LF wrapper, that shebang is just an inert
 comment, and ooRexx reads the CRLF body fine.
 
 The fixtures are deployed to `/var/www/html/test/` with a whitelist
-`.htaccess`: only the listed files are handled as servlets; anything else
+`.htaccess`: only the listed files are handled as rexxlets; anything else
 is served statically.
 
 The real production montage may differ in detail. When `setup.md` is
@@ -103,12 +103,12 @@ rewritten to the real deployment, the VirtualHost/wrapper resources in
 Test fixtures
 -------------
 
-All fixtures are in `fixtures/`. Each is a small servlet exercising one
+All fixtures are in `fixtures/`. Each is a small rexxlet exercising one
 facet of the processor:
 
 | File        | Purpose                                                   |
 |-------------|-----------------------------------------------------------|
-| `hola`      | Minimal hello-world servlet                               |
+| `hola`      | Minimal hello-world rexxlet                               |
 | `multi`     | Echo GET/POST args in order, including duplicates         |
 | `qs`        | Named-argument lookup (Value, Exists)                     |
 | `check`     | Report method, script_name, uri                           |
@@ -135,14 +135,14 @@ What is tested
 - **Cookies**: Set-Cookie emission, the full attribute string
   (Max-Age/SameSite/HttpOnly), a browser-style round trip via a cookie
   jar, and the strict guard — an inconsistent cookie now raises inside
-  the servlet (at `addcookie`), so RexxHTTP's own error page renders
+  the rexxlet (at `addcookie`), so RexxHTTP's own error page renders
   rather than a bare Apache 500.
 - **Lazy headers**: a header set after the body was written still appears.
 - **Partial flush**: an explicit early flush still yields the full body.
-- **Error page**: rendered on a servlet runtime error as plain text, with
+- **Error page**: rendered on a rexxlet runtime error as plain text, with
   the program path trimmed to the DOCUMENT_ROOT-relative form and an
   ooRexx-style traceback (from the condition's stack frames).
-- **Unconsumed POST body**: a POST whose body the servlet never reads
+- **Unconsumed POST body**: a POST whose body the rexxlet never reads
   still returns a complete response (the processor reads the body eagerly
   while parsing arguments).
 
@@ -170,7 +170,7 @@ Notes and known limitations
 ----------------------------
 
 - **Direct-call 404**: `RexxHTTP.rex` guards against being run as a
-  servlet itself (returning a 404). That guard is not tested here: in this
+  rexxlet itself (returning a 404). That guard is not tested here: in this
   montage a direct request to the processor is intercepted by the
   ScriptAlias and fails the CRLF-shebang exec before ooRexx runs. Reaching
   the guard needs a request routed through the wrapper whose request_uri

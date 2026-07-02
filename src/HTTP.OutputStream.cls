@@ -228,7 +228,7 @@
 --
 -- Discards any buffered output that has not yet been flushed. Used by
 -- HTTP.Response~error and ~redirect to clear a half-built body before
--- emitting an error or redirect response, mirroring the servlet model's
+-- emitting an error or redirect response, mirroring the rexxlet model's
 -- implicit buffer reset. Has no effect on already-flushed (committed)
 -- output: bytes that have left the buffer cannot be recalled.
 --

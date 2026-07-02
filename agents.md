@@ -9,15 +9,15 @@ know them.
 What this project is
 --------------------
 
-RexxHTTP is a servlet processor for [ooRexx](https://www.oorexx.org/):
-it runs web servlets — ordinary ooRexx programs — under CGI on Apache.
-A servlet receives a `request` and a `response` object (also available
+RexxHTTP is a rexxlet processor for [ooRexx](https://www.oorexx.org/):
+it runs web *rexxlets* — ordinary ooRexx programs — under CGI on Apache.
+A rexxlet receives a `request` and a `response` object (also available
 as `.request` and `.response` in the environment) and produces its body
 with `Say` or `CharOut`.
 
 The pipeline, end to end: Apache routes a request to a one-line wrapper,
 which `Call`s `RexxHTTP.rex`; the processor builds the request/response
-objects, runs the servlet, and flushes the response. The response is
+objects, runs the rexxlet, and flushes the response. The response is
 buffered, which is what makes *lazy headers* possible — see below.
 
 The full specification is the manual in [`manual/book.md`](manual/book.md).
@@ -43,20 +43,20 @@ default bias is **conservative**: no observable behaviour change without
 a real HTTP test against Apache to back it. "Looks equivalent" is not
 a proof.
 
-1. **The invocation contract is frozen.** A servlet receives
+1. **The invocation contract is frozen.** A rexxlet receives
    `Use Arg request, response`; `.request`/`.response` exist in the
    environment; `.output` is redirected to the buffered stream during
-   the servlet's run; `Say` works. Production servlets must keep running
+   the rexxlet's run; `Say` works. Production rexxlets must keep running
    unchanged against any new version. Do not narrow or rename any of this.
 
 2. **`request~unknown` resolution is contract, not detail.**
    `request~whatever` resolves against the environment-variable pool
    (HTTP_* direct; `_var` with a REDIRECT_ fallback; otherwise a direct
-   `Value` lookup, cached). Servlets depend on this. Do not narrow it.
+   `Value` lookup, cached). Rexxlets depend on this. Do not narrow it.
 
 3. **Lazy headers is the thesis of the design.** Body content can be
    written before the headers are fixed; the commit emits the headers on
-   the first flush (whether the servlet calls `flush` for an early
+   the first flush (whether the rexxlet calls `flush` for an early
    partial response, or the processor flushes automatically at the end).
    Any refactor of the OutputStream must preserve this exactly.
 

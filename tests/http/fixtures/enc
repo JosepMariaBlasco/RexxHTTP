@@ -1,7 +1,7 @@
 Use Arg request, response
 response~content_type = "text/plain"
 -- Exercise the encoder family via the instance accessor (the idiomatic
--- servlet path), which delegates to the class method.
+-- rexxlet path), which delegates to the class method.
 Say "html="response~encodeHTML('a<b>&"x"'"'")
 Say "uric="response~encodeURIComponent("a b&c=d/e~z")
 Say "uri="response~encodeURI("http://a/b?x=1&y=2 z")

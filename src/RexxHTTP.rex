@@ -1,7 +1,7 @@
 #!rexx
 /******************************************************************************/
 /*                                                                            */
-/* RexxHTTP.rex - A ooRexx servlet processor                                  */
+/* RexxHTTP.rex - A ooRexx rexxlet processor                                  */
 /* =========================================                                  */
 /*                                                                            */
 /* This file is part of the RexxHTTP package                                  */
@@ -34,10 +34,10 @@
   -- The response object creates a buffered output stream
   bufferedOutput       = .response~output
 
-  -- The servlet we have to call has been computed by the request object
+  -- The rexxlet we have to call has been computed by the request object
   callee   = .request~path_translated
 
-  -- Apply the argument policy BEFORE running the servlet. validate parses
+  -- Apply the argument policy BEFORE running the rexxlet. validate parses
   -- the request arguments eagerly (consuming any POST body) and reports
   -- the first violation. We reject here, while output is still untouched,
   -- so the error page is clean. "" means the request is acceptable.
@@ -50,7 +50,7 @@
 
   -- Set the buffered output stream as the default output stream
   originalOutput = .output~destination(bufferedOutput)
-    -- Call our servlet!
+    -- Call our rexxlet!
     Call (callee) .request, .response
   -- Restore the previous output stream
  .output~destination(originaloutput)

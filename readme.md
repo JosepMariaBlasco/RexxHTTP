@@ -17,17 +17,17 @@ has version control, bug reporting, and all the features offered by GitHub.
 What it is
 ----------
 
-RexxHTTP is a servlet processor for [ooRexx](https://en.wikipedia.org/wiki/Object_REXX):
-it lets you write web servlets as ordinary ooRexx programs running under
-CGI on [Apache](https://httpd.apache.org/). A servlet receives a `request`
+RexxHTTP is a rexxlet processor for [ooRexx](https://en.wikipedia.org/wiki/Object_REXX):
+it lets you write web rexxlets as ordinary ooRexx programs running under
+CGI on [Apache](https://httpd.apache.org/). A rexxlet receives a `request`
 and a `response` object and produces its body with ordinary `Say` or
 `CharOut`; the `request` and `response` objects are also placed in the
 environment as `.request` and `.response`.
 
-The central design idea is *lazy headers*: a servlet may write body content
+The central design idea is *lazy headers*: a rexxlet may write body content
 before fixing the response headers, and the headers are emitted on the
 first flush. This is made possible by a buffered output stream that sits
-between the servlet and Apache.
+between the rexxlet and Apache.
 
 RexxHTTP is written by Josep Maria Blasco
 &lt;<josep.maria.blasco@epbcn.com>&gt; and distributed
@@ -57,7 +57,7 @@ try our skill at <https://rexx.epbcn.com/skills/rexxhttp.md>, part of the
 History
 -------
 
-RexxHTTP grew out of a servlet processor first published in 2006
+RexxHTTP grew out of a rexxlet processor first published in 2006
 (version 0.1, with [a full 73-page manual](https://www.epbcn.com/pdf/josep-maria-blasco/2006-11-02-RexxHttp-Servlet-programming-in-Rexx.pdf))
 and rewritten in 2017 (version 0.2), which today serves
 some 40,000 URLs in production at

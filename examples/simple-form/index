@@ -3,7 +3,7 @@
 Say '<!DOCTYPE html>'
 Say '<html lang="en">'
 Say '  <head>'
-Say "    <title>A simple GET-form servlet</title>"
+Say "    <title>A simple GET-form rexxlet</title>"
 Say '  </head>'
 Say '  <body>'
 

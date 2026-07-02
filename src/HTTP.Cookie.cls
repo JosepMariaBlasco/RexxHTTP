@@ -209,7 +209,7 @@
 --------------------------------------------------------------------------------
 -- CHECKCONSISTENCY (Private)                                                 --
 -- Strict cross-attribute validation, run from makestring. Raises on the      --
--- first violation so a servlet never emits a Set-Cookie the browser would    --
+-- first violation so a rexxlet never emits a Set-Cookie the browser would    --
 -- silently discard.                                                          --
 --------------------------------------------------------------------------------
 

@@ -1,5 +1,5 @@
 ---
-title: "RexxHTTP: Servlet programming in Rexx"
+title: "RexxHTTP: Rexxlet programming in Rexx"
 author: Josep Maria Blasco
 date: 15 June 2026
 lang: en
@@ -12,7 +12,7 @@ rexxpub:
 
 ::::: title-page
 
-[RexxHTTP]{.book-title} <small>Servlet programming in Rexx</small>
+[RexxHTTP]{.book-title} <small>Rexxlet programming in Rexx</small>
 ==================================================================
 
 ::: author
@@ -40,12 +40,12 @@ Espacio Psicoanalítico de Barcelona
 Introduction {.chapter}
 =======================
 
-RexxHTTP is a servlet processor for ooRexx and Apache.
+RexxHTTP is a rexxlet processor for ooRexx and Apache.
 It runs as a CGI program under the Apache HTTP server:
 Apache hands it an incoming request, and
 RexxHTTP turns the raw CGI environment into a small set of objects,
-runs your servlet against them, and writes the result back as an HTTP
-response. A servlet is an ordinary ooRexx program, so the whole of
+runs your rexxlet against them, and writes the result back as an HTTP
+response. A rexxlet is an ordinary ooRexx program, so the whole of
 ooRexx is available to it, with the HTTP request and the response it is
 about to build handed in as objects rather than scraped out of
 environment variables by hand.
@@ -59,15 +59,15 @@ it is a buffering subclass of the built-in `Stream` class, and that
 buffering is what makes the response headers *lazy* — you may keep
 changing status, headers and cookies after you have already started
 writing the body, right up until the response is committed. The request
-and the response reach the servlet as the `.request` and `.response`
+and the response reach the rexxlet as the `.request` and `.response`
 objects, placed in the environment by RexxHTTP;[^historical]
 the body is produced with ordinary `Say` or `CharOut` instructions.
 The response is committed on the first flush, which normally
-happens when the servlet ends. This is the
+happens when the rexxlet ends. This is the
 central idea of the design, and the chapter [The request/response model]
 returns to it in detail.
 
-[^historical]: A servlet may also pick
+[^historical]: A rexxlet may also pick
 the two objects up with `Use Arg request, response`; both ways are
 official, but going through `.request` and `.response` is the more
 robust of the two.
@@ -92,9 +92,9 @@ remains the record of the wider original; this one is deliberately
 narrower, and says so plainly rather than promising features the
 released code no longer carries.
 
-[^manual-2006]: Josep Maria Blasco, *RexxHttp: Servlet programming in
+[^manual-2006]: Josep Maria Blasco, *RexxHttp: Rexxlet programming in
 Rexx*, version 0.1, 2 November 2006:
-<https://www.epbcn.com/pdf/josep-maria-blasco/2006-11-02-RexxHttp-Servlet-programming-in-Rexx.pdf>.
+<https://www.epbcn.com/pdf/josep-maria-blasco/2006-11-02-RexxHttp-Rexxlet-programming-in-Rexx.pdf>.
 
 
 Installation {.chapter}
@@ -104,7 +104,7 @@ RexxHTTP runs as a CGI program under Apache. This chapter assumes you
 already keep an Apache server and know how your platform applies its
 configuration; it covers only what is specific to RexxHTTP — which files
 make up the package, the one wrinkle in how the processor is invoked,
-and the handful of directives that turn a file into a servlet. The
+and the handful of directives that turn a file into a rexxlet. The
 wrinkle is worth understanding rather than copying blindly, so the
 chapter explains the *why* alongside the *what*.
 
@@ -166,7 +166,7 @@ Call "RHDIR/RexxHTTP.rex"
 The wrapper is the one file that must be LF
 and executable; the five sources stay exactly as shipped.
 
-Telling Apache which files are servlets
+Telling Apache which files are rexxlets
 ---------------------------------------
 
 The `actions` module lets you define a *handler* — a named action backed
@@ -185,26 +185,25 @@ Action RexxHTTPCGI /rexxhttp-bin/wrapper
 Nothing under `/rexxhttp-bin/` is meant for the public — it is only the
 address the handler dispatches through.
 
-With the handler defined, you decide which files are servlets. The
+With the handler defined, you decide which files are rexxlets. The
 recommended model — the reasoning is in the [Rationale] chapter — is a
-**whitelist**: a file is a servlet only when you say so explicitly, and
+**whitelist**: a file is a rexxlet only when you say so explicitly, and
 everything else is served as ordinary static content. You whitelist a
 file by handing it to the handler with `SetHandler`. The RexxHTTP-specific
 part of a site's configuration is therefore just these directives,
-scoped to wherever the servlets live:
+scoped to wherever the rexxlets live:
 
 ```
 <Directory "/path/to/your/site">
-    Options +ExecCGI
     <Files "index">
         SetHandler RexxHTTPCGI
     </Files>
 </Directory>
 ```
 
-A request for `/index` now runs the servlet; everything beside it —
+A request for `/index` now runs the rexxlet; everything beside it —
 templates, images, stylesheets — is served straight off disk. Each extra
-servlet is one more `<Files>` block. The same `<Files>` lines work
+rexxlet is one more `<Files>` block. The same `<Files>` lines work
 verbatim in an `.htaccess` file inside the directory, if you prefer
 per-directory control to editing the server config, provided
 `AllowOverride` permits it.
@@ -216,9 +215,9 @@ enabled with `a2ensite` and a reload; on a prepackaged Windows Apache
 they go in the bundled `httpd.conf` or an included fragment. RexxHTTP
 does not care which, as long as the handler, the `ScriptAlias` and the
 `<Files>` whitelist end up in effect for the directory that holds your
-servlets.
+rexxlets.
 
-If a servlet needs environment values of its own, set them the usual
+If a rexxlet needs environment values of its own, set them the usual
 Apache way, with `SetEnv`, and read them back through the request object
 as the [request/response model][The request/response model] chapter
 describes.
@@ -226,7 +225,7 @@ describes.
 Smoke test
 ----------
 
-A minimal servlet confirms the montage end to end. Put this in a file
+A minimal rexxlet confirms the montage end to end. Put this in a file
 named `hola` in a whitelisted directory:
 
 ```
@@ -244,7 +243,7 @@ Hola, mundo
 
 A `200` with that body means all the moving parts line up: Apache routed
 the request through the handler, the wrapper called the processor, the
-processor built the request and response objects, ran the servlet, and
+processor built the request and response objects, ran the rexxlet, and
 flushed the body back. If instead you get a `500`, the first place to
 look is the wrapper's line endings and the path it `Call`s; if you get
 the file's source text rather than its output, the file was served
@@ -260,26 +259,26 @@ against.
 Tutorial {.chapter}
 ===================
 
-This chapter builds a few small servlets, each one introducing a little
-more of the API, until the shape of a RexxHTTP servlet is familiar. It
+This chapter builds a few small rexxlets, each one introducing a little
+more of the API, until the shape of a RexxHTTP rexxlet is familiar. It
 assumes RexxHTTP is installed and reachable, as the [Installation]
-chapter describes; the examples are written for a servlet directory
-mapped at `/test`, the layout the test suite uses, so a servlet in the
+chapter describes; the examples are written for a rexxlet directory
+mapped at `/test`, the layout the test suite uses, so a rexxlet in the
 file `hola` answers at `/test/hola`. Adjust the path to wherever your
-own deployment maps its servlets.
+own deployment maps its rexxlets.
 
-A servlet is an ordinary ooRexx program. There is no framework class to
-subclass and no entry point to declare: the file *is* the servlet, and
+A rexxlet is an ordinary ooRexx program. There is no framework class to
+subclass and no entry point to declare: the file *is* the rexxlet, and
 running it produces the response. What RexxHTTP adds is the two objects
-it hands the servlet — the request that came in, and the response being
+it hands the rexxlet — the request that came in, and the response being
 built — and the redirection that turns a plain `Say` into body output.
 Everything below is a consequence of those two facts.
 
-A first servlet
+A first rexxlet
 ---------------
 
-The smallest useful servlet greets the world. Put this in a file named
-`hola` in the servlet directory:
+The smallest useful rexxlet greets the world. Put this in a file named
+`hola` in the rexxlet directory:
 
 ```rexx
 Use Arg request, response
@@ -297,18 +296,18 @@ Hola, mundo
 Three lines, and each earns its place. `Use Arg request, response`
 picks up the two objects the processor passes in. The assignment sets
 the response's `Content-Type`; a fresh response already carries
-`text/plain; charset=utf-8`, so for this particular servlet the line is
+`text/plain; charset=utf-8`, so for this particular rexxlet the line is
 strictly redundant, but it is worth writing out once to see where the
 content type comes from — and the moment you emit HTML you will need it
 in earnest (`response~content_type = "text/html"`). The `Say` writes
 the body.
 
 That last point is the one to dwell on. `Say` does not print to a
-terminal here: while the servlet runs, the default output stream is the
+terminal here: while the rexxlet runs, the default output stream is the
 response's buffered body, so `Say` *appends a line to the response*.
 Nothing is sent yet — the body is collected in a buffer — and when the
-servlet ends, the processor flushes it, writing the headers and then the
-body to the client. A servlet that does nothing but `Say` still
+rexxlet ends, the processor flushes it, writing the headers and then the
+body to the client. A rexxlet that does nothing but `Say` still
 produces a complete, well-formed HTTP response; the processor handles
 the envelope.
 
@@ -316,7 +315,7 @@ The `request` and `response` arguments are one of two equivalent ways to
 reach those objects. The processor also publishes them in the global
 environment as `.request` and `.response`, which work in any scope —
 inside a routine or a method, without the variable having to be passed
-along — and that is the form this manual prefers. The servlet above
+along — and that is the form this manual prefers. The rexxlet above
 could just as well have read:
 
 ```rexx
@@ -332,20 +331,20 @@ whichever reads more clearly at the point in question.
 :::
 
 In fact the content type can go too. A fresh response already carries
-`Content-Type: text/plain; charset=utf-8`, so the smallest servlet that
+`Content-Type: text/plain; charset=utf-8`, so the smallest rexxlet that
 works is a single line:
 
 ```rexx
 Say "Hello, world"
 ```
 
-That is a complete servlet. The `Say` writes the body, the processor
+That is a complete rexxlet. The `Say` writes the body, the processor
 flushes it, and the default content type RexxHTTP seeded the response
 with does the rest.
 
 The `charset=utf-8` in that default is not decoration. RexxHTTP labels
 the response as UTF-8, so if your editor speaks Unicode you can write it
-straight into the servlet and it reaches the browser intact:
+straight into the rexxlet and it reaches the browser intact:
 
 ```rexx
 Say "नमस्ते", "P ≝ 𝔐", "🦞🍐"
@@ -360,7 +359,7 @@ the charset, and the body is sent as written.
 Reading the request
 -------------------
 
-Most servlets do something with what the client sent. Request arguments
+Most rexxlets do something with what the client sent. Request arguments
 — the query string of a `GET`, the form body of a `POST` — are reached
 through `arg`, which is modelled on the built-in Rexx `Arg` function:
 called with no argument it returns the count, and otherwise the first
@@ -368,7 +367,7 @@ argument selects one, by position when it is a whole number and by name
 otherwise. A second argument says what to return — `Value` (the
 default), `Name`, `Exists` or `Omitted`.
 
-Here is a servlet that enumerates every argument it received, by
+Here is a rexxlet that enumerates every argument it received, by
 position:
 
 ```rexx
@@ -390,7 +389,7 @@ count=2
 ```
 
 Lookup by name is the more common case, and it is caseless — `arg("lang")`
-finds `Lang` — while `Exists` lets a servlet branch on whether an
+finds `Lang` — while `Exists` lets a rexxlet branch on whether an
 argument was sent at all:
 
 ```rexx
@@ -406,17 +405,17 @@ exists=1
 missing_exists=0
 ```
 
-Two things are happening here that the servlet never has to code around.
+Two things are happening here that the rexxlet never has to code around.
 First, names and values arrive *decoded*: percent-escapes and the
 `+`-for-space convention of form encoding are already undone, on both
 sides of each pair, so an argument the form sent as `user+name` is
 reached as `arg("user name")`. Second, the arguments are guaranteed
-well-formed before the servlet runs. RexxHTTP applies a strict argument
+well-formed before the rexxlet runs. RexxHTTP applies a strict argument
 policy — every parameter must have the shape *name*`=`*value*, names
 must be non-empty, must not begin with a digit, and must be unique
 caselessly — and a request that breaks a rule is answered with `400 Bad
-Request` and never reaches the servlet. So `arg` never has to cope with a
-malformed or duplicated parameter; the servlet may assume every argument
+Request` and never reaches the rexxlet. So `arg` never has to cope with a
+malformed or duplicated parameter; the rexxlet may assume every argument
 has a name and a value and that a name names exactly one argument. The
 [Rationale] chapter explains why strict-by-default is the right policy
 for this kind of deployment, rather than a hazard. The full repertoire
@@ -424,7 +423,7 @@ of `arg` — positional versus named lookup, the four options, the
 treatment of duplicates — is in the `HTTP.Request` reference in the
 [Class Reference].
 
-The same servlet code serves a `GET` and a form `POST` without change:
+The same rexxlet code serves a `GET` and a form `POST` without change:
 the processor parses the query string of the one and the
 `application/x-www-form-urlencoded` body of the other into the same
 arguments, so `arg` reads identically either way.
@@ -491,7 +490,7 @@ Headers after the body: lazy headers
 Because the body is buffered, the response headers stay changeable
 *after* output has begun — right up until the response is committed.
 This is unusual enough to be worth seeing directly. The following
-servlet writes a line of body, *then* sets a header, then writes more
+rexxlet writes a line of body, *then* sets a header, then writes more
 body:
 
 ```rexx
@@ -514,10 +513,10 @@ body first line
 body second line
 ```
 
-The body the servlet "wrote" went into the buffer, not onto the wire, so
+The body the rexxlet "wrote" went into the buffer, not onto the wire, so
 when `x_late_header` was assigned the head had not yet been sent and the
 new header simply joined the others. Nothing is committed until the
-first flush — here, the processor's automatic one after the servlet
+first flush — here, the processor's automatic one after the rexxlet
 returns — at which point the whole head goes out in front of the whole
 body. (The message form `.response~x_late_header = "yes"` reaches the
 header `X-Late-Header`; the response object turns underscores into
@@ -528,14 +527,14 @@ reference.)
 This freedom has one edge. Once the response *is* committed the head is
 on the wire and can no longer change, so a header assignment after that
 point is a programming error and raises, rather than failing silently. A
-servlet that just writes body and lets the processor flush never meets
-this edge; a servlet that flushes early does, deliberately — which is
+rexxlet that just writes body and lets the processor flush never meets
+this edge; a rexxlet that flushes early does, deliberately — which is
 the next topic.
 
 Flushing early
 --------------
 
-A servlet may flush the response itself, before it returns, by calling
+A rexxlet may flush the response itself, before it returns, by calling
 `.response~flush`:
 
 ```rexx
@@ -551,7 +550,7 @@ before flush
 after flush
 ```
 
-The output is identical to a servlet that never flushed — and that is
+The output is identical to a rexxlet that never flushed — and that is
 the honest result to show. The first flush commits the response: it
 writes the headers, then the body buffered so far, and from that point
 the head is frozen. What an explicit flush buys is therefore not what
@@ -559,19 +558,19 @@ intuition (or the 2006 manual) suggests. It does *not* reliably make the
 client see "before flush" appear before "after flush": in a production
 deployment `mod_deflate` sits downstream and buffers the CGI output to
 compress it, so progressive, client-visible streaming is not something a
-servlet can count on. What an early flush does buy is control over
+rexxlet can count on. What an early flush does buy is control over
 *when* the head is committed — fixing the headers and status at a chosen
 point — which is occasionally what you want and is the mechanism behind
 the lazy-header behaviour above. The [The request/response model]
 chapter tells this story properly, `mod_deflate` and all; for everyday
-servlets, simply never calling `flush` and letting the processor do it
+rexxlets, simply never calling `flush` and letting the processor do it
 is exactly right.
 
 Errors and redirects
 --------------------
 
 Two common responses have their own one-line forms, written to be the
-last thing a servlet does. To send an error page:
+last thing a rexxlet does. To send an error page:
 
 ```rexx
 If \recordExists(.request~arg("id")) Then
@@ -600,7 +599,7 @@ Their full behaviour is in the `HTTP.Response` reference.
 Where to go next
 ----------------
 
-These servlets exercise most of the everyday API: reading arguments and
+These rexxlets exercise most of the everyday API: reading arguments and
 cookies, writing the body, setting headers and cookies on the response,
 and the two shorthand exits. The one idea underneath all of them — the
 buffered body, the lazy headers, the single commit — is the subject of
@@ -612,26 +611,26 @@ account of the four classes is the [Class Reference].
 The request/response model {.chapter}
 =====================================
 
-The [Tutorial] showed servlets that work without explaining why they
+The [Tutorial] showed rexxlets that work without explaining why they
 work. This chapter is the why. It describes the three objects RexxHTTP
 builds for each request, the buffering that sits under the response, and
 the single moment — the *commit* — that turns a buffer full of headers
 and body into bytes on the wire. Almost everything that can surprise a
-servlet author, from a header that takes effect after it was "too late"
+rexxlet author, from a header that takes effect after it was "too late"
 to set, to one that mysteriously raises, follows from this one model.
 
 The three objects
 -----------------
 
-For each request, before the servlet runs, RexxHTTP builds three objects
-and hands the servlet the first two.
+For each request, before the rexxlet runs, RexxHTTP builds three objects
+and hands the rexxlet the first two.
 
 A **request** (`HTTP.Request`) is the incoming side, read-only. It holds
 the request line and headers — reached as named accessors or, for
 anything CGI passed as an environment variable, through the environment
 pool — and it holds the arguments and cookies the client sent, parsed
-and decoded. By the time the servlet runs the parsing is already done
-and the argument policy already applied, so the request a servlet sees
+and decoded. By the time the rexxlet runs the parsing is already done
+and the argument policy already applied, so the request a rexxlet sees
 is always well-formed.
 
 A **response** (`HTTP.Response`) is the outgoing side, and it is the
@@ -644,17 +643,17 @@ serialised only once, at commit.
 
 An **output stream** (`HTTP.OutputStream`) is that body buffer: a
 write-only subclass of `Stream` that the response creates for itself.
-While the servlet runs, the default output stream is redirected to it,
+While the rexxlet runs, the default output stream is redirected to it,
 which is why a plain `Say` writes to the response body rather than to a
-console that is not there. The servlet almost never names this object;
+console that is not there. The rexxlet almost never names this object;
 it just uses `Say`.
 
-The request and response reach the servlet two ways at once — as the two
+The request and response reach the rexxlet two ways at once — as the two
 arguments to `Use Arg`, and as the environment symbols `.request` and
 `.response` — and the two are the same objects. This manual prefers the
 environment symbols, because they reach the response from any scope
 (a routine, a method) without the object having to be passed along, and
-because the body of a servlet rarely wants to thread `response` through
+because the body of a rexxlet rarely wants to thread `response` through
 every call that might need to set a header.
 
 Buffering, and why
@@ -672,15 +671,15 @@ server. The output stream collects it in a buffer instead. While the
 buffer fills, the headers and cookies are still just entries in two
 directories on the response object: setting one, changing one, adding a
 cookie are all ordinary updates to in-memory state, and the order in
-which the servlet does them relative to its `Say`s does not matter,
+which the rexxlet does them relative to its `Say`s does not matter,
 because none of it has been serialised yet.
 
 This is what the introduction and the Tutorial called *lazy headers*. A
-servlet can write half its page, decide from what it computed there that
+rexxlet can write half its page, decide from what it computed there that
 the content type should be `text/html` rather than the default, set it,
 and finish the page — and the header is correct on the wire, because at
 the moment it was set nothing had yet been committed. The buffer buys
-the servlet the freedom to decide late.
+the rexxlet the freedom to decide late.
 
 Commit
 ------
@@ -694,27 +693,27 @@ After commit the head is on the wire and cannot be changed.
 
 Commit is **idempotent**: the first call emits the head and marks the
 response committed; any later call returns at once, having done nothing.
-A servlet therefore never has to track whether the response is "already"
+A rexxlet therefore never has to track whether the response is "already"
 committed before asking for a flush — asking twice is harmless.
 
-Servlets rarely call `commit` directly. It is driven by *flush*. The
+Rexxlets rarely call `commit` directly. It is driven by *flush*. The
 response's `flush` (and the output stream's, which it delegates to)
 commits the response if it has not been committed yet, and only then
 writes the buffered body out and empties the buffer. So the **first
 flush is what commits**, and that first flush is one of two things:
 
-- one the servlet performs itself, by calling `.response~flush` — for
+- one the rexxlet performs itself, by calling `.response~flush` — for
   instance to fix the headers at a deliberate point; or
-- the one RexxHTTP performs automatically after the servlet returns.
+- the one RexxHTTP performs automatically after the rexxlet returns.
 
-A servlet that never flushes still gets exactly one flush, the
+A rexxlet that never flushes still gets exactly one flush, the
 processor's final one, and so still produces a complete response with
 its head committed once. The common case needs no `flush` at all.
 
 Commit discipline
 -----------------
 
-Everything a servlet can do to the head — set a header (`.response[...]=`
+Everything a rexxlet can do to the head — set a header (`.response[...]=`
 or the message form), schedule a cookie (`addcookie`), or replace the
 response wholesale (`error`, `404`, `redirect`) — is legal *before*
 commit and an error *after* it. The reason is physical: past commit the
@@ -733,12 +732,12 @@ which discard an uncommitted buffered body and do their work, but raise
 on a committed response instead of pretending to change a status that
 has already shipped.
 
-There is also a brief internal window the servlet never sees but which
+There is also a brief internal window the rexxlet never sees but which
 explains the care in the design: while `commit` is partway through
 writing the head, the response is *committing* but not yet *committed*.
 RexxHTTP's own error handling distinguishes the two, so that a fault
 raised in the middle of emitting headers does not try to re-assert
-headers over a response that is already half-written. A servlet only
+headers over a response that is already half-written. A rexxlet only
 ever observes the two stable states, before and after; `committed`
 reports which. The per-method detail — what `error`, `addcookie`,
 `commit` and `committed` each do, argument by argument — is in the
@@ -747,26 +746,26 @@ reports which. The per-method detail — what `error`, `addcookie`,
 A note on streaming and mod_deflate
 ------------------------------------
 
-It is tempting to read "the servlet can flush early" as "the servlet can
+It is tempting to read "the rexxlet can flush early" as "the rexxlet can
 stream a page to the browser progressively, a piece at a time." The 2006
 manual made roughly that promise. In a modern production deployment it
 no longer holds, and this manual will not repeat it.
 
 The reason is `mod_deflate`. To compress the response, Apache's
 `mod_deflate` buffers the CGI program's output on its own account before
-sending it on, which means the boundaries at which a servlet flushes are
+sending it on, which means the boundaries at which a rexxlet flushes are
 not the boundaries at which the client receives anything: the compressor
 decides those. An early `.response~flush` does *not* reliably make the
-first half of a page appear in the browser before the servlet has
+first half of a page appear in the browser before the rexxlet has
 finished computing the second half.
 
 What an early flush still does — and the reason the flush mechanism is
 kept — is *internal* and entirely real. It commits the response at a
 chosen point, fixing the headers and status exactly there rather than at
 the end. That control over commit ordering is occasionally what a
-servlet wants, and it is the mechanism behind the lazy-header behaviour
+rexxlet wants, and it is the mechanism behind the lazy-header behaviour
 this chapter described. Think of `flush` as "decide the head now," not
-as "push bytes to the browser now." For the great majority of servlets
+as "push bytes to the browser now." For the great majority of rexxlets
 neither concern arises: they write their body, return, and let the
 processor's final flush commit and send the whole thing at once.
 
@@ -778,7 +777,7 @@ The `HTTP.Cookie` class
 -----------------------
 
 An `HTTP.Cookie` instance represents one cookie the response will set:
-one instance, one `Set-Cookie` header. The servlet creates the cookie,
+one instance, one `Set-Cookie` header. The rexxlet creates the cookie,
 sets its attributes, and hands it to `.response~addcookie`:
 
 ```rexx
@@ -790,7 +789,7 @@ c~httponly = 1
 ```
 
 This is a response-side class only. Cookies arriving *with* the request
-are not `HTTP.Cookie` instances; they reach the servlet as plain
+are not `HTTP.Cookie` instances; they reach the rexxlet as plain
 name/value pairs through `.request~cookie` (see the `HTTP.Request`
 reference).
 
@@ -801,7 +800,7 @@ and the `SameSite`, `Secure` and `HttpOnly` attributes and the `__Host-`
 and `__Secure-` name prefixes are supported.
 
 The class validates eagerly, so that an invalid cookie fails in the
-servlet, never as a `Set-Cookie` line the browser silently discards. An
+rexxlet, never as a `Set-Cookie` line the browser silently discards. An
 invalid *name* is rejected at creation. Rules that involve *several*
 attributes are checked when the cookie is serialised — in practice, at
 `addcookie` — so that attributes may be set in any order.
@@ -954,7 +953,7 @@ not serialise. Attributes appear in a fixed order: `name=value`, then
 id=v; Max-Age=3600; Domain=example.org; Path=/; SameSite=Lax; Secure; HttpOnly
 ```
 
-Servlets rarely need `makestring` — `addcookie` drives it — but it is
+Rexxlets rarely need `makestring` — `addcookie` drives it — but it is
 convenient for logging or testing what a cookie will look like on the
 wire.
 
@@ -965,9 +964,9 @@ The `HTTP.OutputStream` class
   Verified against src/HTTP.OutputStream.cls (v9) + isolated runs + suite.
 -->
 
-An `HTTP.OutputStream` collects the response body. The servlet does not
+An `HTTP.OutputStream` collects the response body. The rexxlet does not
 create it: the response object does, and `.response~output` returns it.
-During servlet execution the default output stream (`.output`) is
+During rexxlet execution the default output stream (`.output`) is
 redirected to it, so the three statements below write to the same place:
 
 ```rexx
@@ -980,8 +979,8 @@ Nothing reaches the client until the stream is flushed; the first flush
 commits the response — headers out first, then the buffered body. This
 buffering is what makes lazy headers possible, and it is the reason the
 class exists; the request/response model chapter tells that story. The
-servlet rarely needs to do anything: the processor flushes once after the
-servlet returns.
+rexxlet rarely needs to do anything: the processor flushes once after the
+rexxlet returns.
 
 The class is a subclass of `Stream` and honours the stream protocol as
 far as it makes sense for what it is: a *write-only*, *transient* stream.
@@ -1066,13 +1065,13 @@ The workhorse. Commits the response if it is not yet committed — this is
 where the headers get written, in front of everything — then writes the
 buffered body to the underlying CGI stream, flushes it, and empties the
 buffer. `.response~flush` does the same thing through the response
-object. Flushing explicitly mid-servlet is allowed, and fixes the point
+object. Flushing explicitly mid-rexxlet is allowed, and fixes the point
 past which headers can no longer change; what it does *not* promise is
 client-visible streaming — see the request/response model chapter.
 
 ### `init`
 
-Servlets do not construct output streams: the response object creates
+Rexxlets do not construct output streams: the response object creates
 one, wrapped around the real CGI output stream, when *it* is created.
 The wrapped stream must be a `Stream` instance proper — in particular,
 output streams do not nest: an `HTTP.OutputStream` will not accept
@@ -1149,7 +1148,7 @@ stream = .response~output~underlyingstream
 
 Returns the wrapped stream: the real CGI output, connected to the web
 server. This is the response's plumbing — `commit` writes the headers
-through it — and a servlet has no business writing to it directly:
+through it — and a rexxlet has no business writing to it directly:
 anything sent there bypasses the buffer and lands in front of content
 the response has not emitted yet, headers included.
 
@@ -1161,8 +1160,8 @@ The `HTTP.Request` class
 -->
 
 An `HTTP.Request` instance represents the request being served. The
-servlet does not create it: the processor instantiates one per incoming
-request, before the servlet runs, and hands it to the servlet as its
+rexxlet does not create it: the processor instantiates one per incoming
+request, before the rexxlet runs, and hands it to the rexxlet as its
 first argument; like the response, it is also published in the global
 environment, as `.request` (the two forms are equivalent — see the
 introduction to `HTTP.Response`).
@@ -1172,11 +1171,11 @@ what came with the request line and the headers (the environment pool,
 and a set of accessors), what arguments the query string or the request
 body carried (`arg`), and what cookies the user agent sent (`cookie`).
 
-By the time the servlet runs, the groundwork is done: the processor has
+By the time the rexxlet runs, the groundwork is done: the processor has
 parsed the arguments — reading the request body, for a POST — and
-applied the argument policy, so the arguments a servlet sees are always
+applied the argument policy, so the arguments a rexxlet sees are always
 well-formed; and creating the request has set the current directory to
-the directory of the servlet file, so relative paths in the servlet
+the directory of the rexxlet file, so relative paths in the rexxlet
 resolve next to it.
 
 ### The environment pool
@@ -1220,7 +1219,7 @@ per-directory `SetEnv` is all it takes to configure it (next section).
 
 ### Arguments, and the strict policy
 
-Before the servlet runs, the processor parses the request arguments —
+Before the rexxlet runs, the processor parses the request arguments —
 the query string of a GET, the `application/x-www-form-urlencoded` body
 of a POST — and applies the *argument policy*. The policy of the 1.0,
 `strict`, the default and the only one, demands of every parameter
@@ -1234,21 +1233,21 @@ that:
 - the name is unique, compared caselessly: `X` and `x` are the same
   name.
 
-These rules are applied to the *decoded* name — the one the servlet
+These rules are applied to the *decoded* name — the one the rexxlet
 will see and key on. Two spellings that decode to one name (say
 `user+name` and `user%20name`) are therefore a single name, and a
 request carrying both is rejected as a duplicate.
 
 A request that breaks one of these rules is answered with `400 Bad
-Request`, stating the reason, and the servlet never runs. Stray `&`s —
+Request`, stating the reason, and the rexxlet never runs. Stray `&`s —
 doubled, or trailing — are ignored, not rejected. The policy is
-configured per directory or per servlet with `SetEnv
+configured per directory or per rexxlet with `SetEnv
 REXXHTTP_ARGPOLICY` in the Apache configuration; the value is caseless,
 `strict` is the only value the 1.0 recognises, and an unknown value is
 answered with a `500` configuration error — an operator mistake, not a
 client one.
 
-The payoff is what the servlet gets to assume: every argument it sees
+The payoff is what the rexxlet gets to assume: every argument it sees
 has a name and a value, and a name names exactly one argument.
 
 Argument names and values alike are delivered decoded — percent-escapes,
@@ -1307,7 +1306,7 @@ nonblank character, caselessly, again in the manner of the built-in:
 - `Omitted` returns the opposite.
 
 ```rexx
--- /servlet?q=hello&Lang=ca
+-- /rexxlet?q=hello&Lang=ca
 .request~arg                   -- 2
 .request~arg(2, "Name")        -- "Lang" (the spelling is preserved...)
 .request~arg("lang")           -- "ca"   (...but lookup is caseless)
@@ -1383,7 +1382,7 @@ If .request~cookie("session", "Exists") Then
 path = .request~filename
 ```
 
-The full filesystem path of the servlet file. `path_translated` answers
+The full filesystem path of the rexxlet file. `path_translated` answers
 the same.
 
 ### `method`, `request_method`
@@ -1402,8 +1401,8 @@ extra = .request~path_info
 ```
 
 The extra path: what the request URI carries beyond the part that
-locates the servlet, decoded, `/`-separated. A request for
-`/test/show/reports/2026`, served by the servlet file `show`, has the
+locates the rexxlet, decoded, `/`-separated. A request for
+`/test/show/reports/2026`, served by the rexxlet file `show`, has the
 `script_name` `/test/show` and the `path_info` `/reports/2026`. The
 null string when there is none.
 
@@ -1413,7 +1412,7 @@ null string when there is none.
 path = .request~path_translated
 ```
 
-The full filesystem path of the servlet file — where the request URI
+The full filesystem path of the rexxlet file — where the request URI
 landed once Apache translated it. `filename` answers the same.
 
 ### `post_string`
@@ -1423,7 +1422,7 @@ body = .request~post_string
 ```
 
 The body of a POST request, exactly as received — still in its transfer
-encoding; the processor has already read it by the time the servlet
+encoding; the processor has already read it by the time the rexxlet
 runs. The null string for a GET. The parsed, decoded view of the same
 data is `arg`.
 
@@ -1452,7 +1451,7 @@ still encoded. `unparseduri` is the same method under a second name.
 name = .request~script_name
 ```
 
-The URI path that locates the servlet, decoded: `uri` without the
+The URI path that locates the rexxlet, decoded: `uri` without the
 `path_info`.
 
 ### `system_version`
@@ -1490,8 +1489,8 @@ The processor's hook. Parses the arguments eagerly — reading the body
 of a POST — and applies the argument policy, returning the null string
 when the request is acceptable, and a short `code:detail` description
 of the first violation otherwise. The processor calls it before the
-servlet runs — this is where the `400` of the strict policy comes from
-— so a servlet never needs to: by the time a servlet runs, `validate`
+rexxlet runs — this is where the `400` of the strict policy comes from
+— so a rexxlet never needs to: by the time a rexxlet runs, `validate`
 has already returned the null string.
 
 ### `decodeURIComponent`
@@ -1530,9 +1529,9 @@ The `HTTP.Response` class
 -------------------------
 
 An `HTTP.Response` instance represents the response being built for the
-current request. The servlet does not create it: the processor instantiates
-one response per request, before the servlet runs, and hands it to the
-servlet as its second argument. It is also published in the global
+current request. The rexxlet does not create it: the processor instantiates
+one response per request, before the rexxlet runs, and hands it to the
+rexxlet as its second argument. It is also published in the global
 environment, so both of these reach the same object:
 
 ```rexx
@@ -1549,10 +1548,10 @@ form, `.request` and `.response`, throughout.
 A response is made of three parts: a set of *headers*, an optional set of
 *cookies*,
 and a buffered *output stream* that collects the body. The headers and
-cookies remain freely modifiable while the servlet writes the body; they
+cookies remain freely modifiable while the rexxlet writes the body; they
 are serialised only when the response is *committed*, which happens at the
-first flush (see the request/response model chapter). After the servlet
-returns, the processor issues a final flush, so a servlet that never
+first flush (see the request/response model chapter). After the rexxlet
+returns, the processor issues a final flush, so a rexxlet that never
 touches the response object beyond `Say` still produces a complete,
 well-formed response.
 
@@ -1593,20 +1592,20 @@ compares a raw header block case-sensitively need take note.
 
 Every response carries a `Content-Type`: the header directory is seeded at
 creation time with the default `text/plain; charset=utf-8`, which the
-servlet may overwrite but not remove.
+rexxlet may overwrite but not remove.
 
 ### Encoding text for output
 
 Four methods turn raw text into a form that is safe to drop into HTML or
 into a URL. They are the counterpart to the two decoders on the request
 object (`decodeURIComponent` and `decodeForm`), which undo the URL forms on
-the way in; there is deliberately no HTML *decoder*, since a servlet emits
+the way in; there is deliberately no HTML *decoder*, since a rexxlet emits
 HTML but is never handed HTML to parse.
 
 Each method exists twice: as a class method, callable with no response in
 hand (`.HTTP.Response~encodeHTML(s)`), and as an instance method on a live
 response (`.response~encodeHTML(s)`). The two are identical — the instance
-form delegates to the class form — so a servlet uses whichever is closer to
+form delegates to the class form — so a rexxlet uses whichever is closer to
 hand. None of them touches the response; they are pure string functions
 that happen to live here because emitting safe output is the response's job.
 
@@ -1699,7 +1698,7 @@ not reach the client). A response that sets no status is a `200 OK`.
 Setting `status` by hand is the low-level route. For the common cases —
 sending an error page or redirecting — `error`, `404` and `redirect`
 set the status, the matching headers and (for errors) a body in one
-call, and are written to be the last statement a servlet runs:
+call, and are written to be the last statement a rexxlet runs:
 `Exit .response~error(404)`.
 
 ### `error`
@@ -1715,22 +1714,22 @@ on the page as a single diagnostic line and is HTML-escaped (see the
 encoding methods below), so a detail containing any of `& < > " '` is
 displayed literally rather than interpreted.
 
-The reason phrase is supplied automatically for the codes a servlet is
+The reason phrase is supplied automatically for the codes a rexxlet is
 likely to use (the `3xx` redirects, `400`, `401`, `403`, `404`, `405`,
 `500`, `502`, `503`). A code outside that set still works: it is given a
 generic phrase for its family — *Redirect*, *Client Error* or *Server
 Error* — so an unusual status is never refused.
 
 `error` follows the buffering model. If the response has **not** been
-committed, any body the servlet had written so far is discarded, the
+committed, any body the rexxlet had written so far is discarded, the
 status and a `text/html` content type are set, and the error page replaces
 the buffered body; the normal flush then sends it. If the response **has**
 been committed — the head has already reached the client, so the status can
 no longer be changed — `error` raises a `Syntax` condition rather than
-pretend to do the impossible. This mirrors the servlet rule for `sendError`
+pretend to do the impossible. This mirrors the rexxlet rule for `sendError`
 on a committed response.
 
-Because it returns `0`, `error` reads naturally as a servlet's final act:
+Because it returns `0`, `error` reads naturally as a rexxlet's final act:
 
 ```rexx
 If \record~exists Then Exit .response~error(404, "no such record")
@@ -1744,7 +1743,7 @@ If \record~exists Then Exit .response~error(404, "no such record")
 ```
 
 Shorthand for `error(404 [, detail])` — the single most common error from a
-servlet, given its own name. Same return value and same buffering rules.
+rexxlet, given its own name. Same return value and same buffering rules.
 
 ### `redirect`
 
@@ -1845,7 +1844,7 @@ underlying CGI output stream, ahead of the buffered body. Commit is
 idempotent: the first call emits the head and marks the response
 committed; subsequent calls return immediately.
 
-Servlets rarely call `commit` directly: the first `flush` — explicit, or
+Rexxlets rarely call `commit` directly: the first `flush` — explicit, or
 the processor's final one — commits the response if needed. Once the head
 is committed it cannot be changed: any later attempt to set a header (`[]=`
 or `response~name = value`), schedule a cookie (`addcookie`) or replace the
@@ -1870,14 +1869,14 @@ emitted), `.false` otherwise. Takes no arguments.
 
 Commits the response if it is not yet committed, then flushes the buffered
 output stream, writing the body collected so far to the underlying CGI
-stream. Returns nothing. The processor calls it once after the servlet
-returns; a servlet may also call it explicitly at any point (see the
+stream. Returns nothing. The processor calls it once after the rexxlet
+returns; a rexxlet may also call it explicitly at any point (see the
 request/response model chapter for what an early flush does — and does not
 — buy you once `mod_deflate` sits downstream).
 
 ### `init`
 
-Servlets do not create responses; the processor does, once per request.
+Rexxlets do not create responses; the processor does, once per request.
 A fresh response starts with exactly one header, `Content-Type:
 text/plain; charset=utf-8`; no cookies; not committed; and a new
 `HTTP.OutputStream` wrapped around the current default output stream as
@@ -1890,7 +1889,7 @@ stream = .response~output
 ```
 
 Returns the response's buffered output stream, an `HTTP.OutputStream`
-instance. During servlet execution the default output stream (`.output`)
+instance. During rexxlet execution the default output stream (`.output`)
 is redirected to this same object, which is why a plain `Say` writes to
 the response body; `.response~output` is the explicit handle, for stream
 methods like `~charout` or an explicit `~flush`:
@@ -1951,11 +1950,11 @@ negotiation.
 Associating Rexx files with a handler
 -------------------------------------
 
-A servlet is an ordinary Rexx file, and the web server has to be told
+A rexxlet is an ordinary Rexx file, and the web server has to be told
 to run it through RexxHTTP rather than serve it or execute it directly.
 Apache's `Action` directive is the mechanism: it binds a handler name to
 the RexxHTTP processor, and a small wrapper invokes that handler for the
-servlet files you nominate. This is the same approach the 2006 manual
+rexxlet files you nominate. This is the same approach the 2006 manual
 described, and it has aged well precisely because it asks nothing unusual
 of Apache — `Action` is a stock directive, and the routing is data in the
 configuration rather than logic in the processor.
@@ -1965,7 +1964,7 @@ broad extensions — `.htm`, `.html`, `.rsp` — to the handler, because the
 point was to run whole trees of pages, some of them compiled, through one
 gateway. The 1.0 has no page compilers and no such ambition, and the
 [Installation] chapter recommends the opposite default: a whitelist, so
-that only the files you explicitly mark are run as servlets and
+that only the files you explicitly mark are run as rexxlets and
 everything else is served as a static file. On infrastructure that has
 served tens of thousands of URLs for years, "run as code only what is
 named" is the conservative and correct default; opening an extension to
@@ -1980,7 +1979,7 @@ recognise with the value of the like-named environment variable. This is
 the single most Rexx-like decision in the design. Rexx programs reach
 their world through `Value` and through variables; making
 `request~remote_addr` resolve to the `REMOTE_ADDR` the server set means a
-servlet author touches the CGI environment the same way they touch
+rexxlet author touches the CGI environment the same way they touch
 everything else, without a lookup table or an import step. The mechanics
 are in the Class Reference under [The environment pool]; the reason is
 that the request object should feel like Rexx, not like a wrapper bolted
@@ -2011,15 +2010,15 @@ The problem of request values
 
 The trickiest part of the 2006 rationale was titled "the problem of
 request values," and the problem was real: what Apache actually invokes
-is the RexxHTTP processor, not your servlet, so the raw CGI variables
-describe the processor's invocation, not the request the servlet means to
+is the RexxHTTP processor, not your rexxlet, so the raw CGI variables
+describe the processor's invocation, not the request the rexxlet means to
 read. On top of that, the CGI specification is in places ambiguous or
 self-contradictory, and the 2006 system had to paper over differences
 between what CGI reported and what mod_rexx reported for the same notion.
 
 With mod_rexx gone, the second half of that problem evaporates: there is
 one gateway, so there is nothing to reconcile. What remains is the first
-half — reconstructing the values a servlet *should* see from the values
+half — reconstructing the values a rexxlet *should* see from the values
 the processor is *handed* — and a commitment the 2006 design made and the
 1.0 keeps: where CGI is inconsistent, RexxHTTP is consistent, and it
 documents what its methods mean rather than passing the server's quirks
@@ -2027,7 +2026,7 @@ through. Three cases from the original are worth keeping, because the
 methods still behave as described and the reasoning is still the cleanest
 account of why:
 
-`path_translated` always answers the full filesystem path of the servlet
+`path_translated` always answers the full filesystem path of the rexxlet
 file, whether or not there is extra path information after it. The CGI
 specification's own definition of this variable is incoherent — it
 promises a "translated version" of the extra path info, which by
@@ -2035,21 +2034,21 @@ construction has no physical mapping — and Apache, left to itself,
 returns something useless. RexxHTTP picks the meaning that is actually
 useful and holds to it.
 
-`script_name` always answers the virtual path that locates the servlet,
+`script_name` always answers the virtual path that locates the rexxlet,
 with any extra path information stripped — what you want for building
 self-referential URLs — and `path_info` answers that extra path, decoded,
 or the null string when there is none. The split between the two is clean
-by design, so a servlet can always ask "where am I?" and "what came after
+by design, so a rexxlet can always ask "where am I?" and "what came after
 me?" as separate questions.
 
 `request_uri` (with its alias `unparseduri`) answers the request URI
 exactly as the client sent it, still encoded; `uri` answers the decoded
 path with the query string removed. Naming both, with stable meanings,
-spares the servlet author from guessing which encoding and which trimming
+spares the rexxlet author from guessing which encoding and which trimming
 a given server happened to apply.
 
 The thread through all three is the same: the request object is a
-*specification* the servlet can rely on, not a thin pass-through of
+*specification* the rexxlet can rely on, not a thin pass-through of
 whatever the gateway felt like reporting.
 
 Strict by default
@@ -2059,7 +2058,7 @@ The 1.0 parses GET and POST arguments under a single, default, and
 currently only argument policy, `strict`: every parameter must be a
 genuine *name*`=`*value* pair, the name must be a usable Rexx symbol and
 must be unique caselessly, and a request that breaks any of these is
-answered `400 Bad Request` before the servlet runs at all. The mechanics
+answered `400 Bad Request` before the rexxlet runs at all. The mechanics
 are in [Arguments, and the strict policy]; the decision is to make this
 the default rather than an opt-in.
 
@@ -2069,10 +2068,10 @@ was extracted from — malformed argument input is not a case to be
 handled gracefully; it is a request that cannot have come from the
 site's own pages, and the safe, predictable response is to reject it at
 the door. Strict-by-default turns a class of ambiguous input into a clear
-`400`, and in exchange every servlet downstream gets to assume that each
+`400`, and in exchange every rexxlet downstream gets to assume that each
 argument it sees has a name and a value, and that a name names exactly
 one argument. The strictness is a feature paid for once, at the boundary,
-so that no servlet has to pay for it again.
+so that no rexxlet has to pay for it again.
 
 License {.chapter .unnumbered}
 ==============================

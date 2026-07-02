@@ -1,0 +1,489 @@
+#!/usr/bin/env rexx
+/******************************************************************************/
+/*                                                                            */
+/* Linux.install - Installer for RexxHTTP on Debian/Ubuntu Linux (and WSL)    */
+/* =======================================================================    */
+/*                                                                            */
+/* This file is part of the RexxHTTP package                                  */
+/* [See https://rexx.epbcn.com/rexxhttp/]                                     */
+/*                                                                            */
+/* Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>  */
+/*                                                                            */
+/* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
+/*                                                                            */
+/* Installs RexxHTTP on a CLEAN Debian/Ubuntu machine, following the recipe   */
+/* of the manual's Installation chapter: it installs Apache 2.4 with the      */
+/* cgid and actions modules, deploys the six source files to the standard     */
+/* cgi-bin, drops in the rexxhttp.conf fragment, plants a minimal index       */
+/* rexxlet in the document root, and smoke-tests the whole montage with curl. */
+/*                                                                            */
+/* This first version targets the CLEAN-MACHINE case. If it finds Apache      */
+/* already present, it STOPS and does nothing, rather than risk touching a    */
+/* server the user set up for something else. Reusing or extending an         */
+/* existing Apache is left for a later iteration.                             */
+/*                                                                            */
+/* It is independent of the test runner (tests/http/RunHTTPTests.rex): the    */
+/* runner builds a throwaway test montage and tears it down; this installer   */
+/* materialises the manual's production recipe and leaves it in place.        */
+/*                                                                            */
+/* This script targets Linux (Debian/Ubuntu, including WSL): it uses apt-get  */
+/* and the Apache paths specific to Debian/Ubuntu.                            */
+/*                                                                            */
+/* Version history:                                                           */
+/*                                                                            */
+/* Date     Version Details                                                   */
+/* -------- ------- --------------------------------------------------------- */
+/* 20260630    1.0  First version.                                            */
+/*                                                                            */
+/******************************************************************************/
+
+--------------------------------------------------------------------------------
+-- Locate the sources (src/ is a sibling of this install/ directory)          --
+--------------------------------------------------------------------------------
+
+  sep = .File~separator
+  srcDir = .File~new(.Context~package~name)~parentFile~parent || sep"src"
+
+  -- The six files that make up a Unix installation: the five sources plus
+  -- the LF wrapper Apache execs (which Calls RexxHTTP.rex beside it).
+  sources = "HTTP.Request.cls HTTP.Response.cls HTTP.OutputStream.cls" -
+            "HTTP.Cookie.cls RexxHTTP.rex RexxHTTP_wrapper"
+
+  -- Deployment locations on Debian/Ubuntu. cgi-bin is already aliased as
+  -- executable CGI by the prepackaged Apache, so no ScriptAlias of our own.
+  cgiBinDir = "/usr/lib/cgi-bin"
+  docRoot   = "/var/www/html"
+  confFile  = "/etc/apache2/conf-available/rexxhttp.conf"
+  indexFile = docRoot || "/index"
+
+--------------------------------------------------------------------------------
+-- Options come pre-parsed and sanitized from the driver (install/uninstall)  --
+-- as a Directory; this script does no argument parsing of its own.           --
+--------------------------------------------------------------------------------
+
+  Use Strict Arg opts
+  assumeYes  = opts~assumeYes
+  uninstall  = (opts~mode == "uninstall")
+  keepApache = opts~keepApache
+
+  If uninstall Then
+    Return Uninstall(assumeYes, keepApache, -
+                     cgiBinDir, docRoot, confFile, indexFile, sources)
+
+  Say
+  Say "RexxHTTP Installer for Debian/Ubuntu Linux"
+  Say "==========================================="
+  Say
+  Say "Sources directory:" srcDir
+  Say
+
+--------------------------------------------------------------------------------
+-- Step 1: Require apt-get (Debian/Ubuntu family)                             --
+--------------------------------------------------------------------------------
+
+  Say "Checking for apt-get (Debian/Ubuntu family)..."
+  Address System "which apt-get > /dev/null 2>&1"
+  If RC \== 0 Then Do
+    Say "  ERROR: apt-get not found. This installer targets the Debian/Ubuntu"
+    Say "  family. On other distributions, install Apache 2.4 with the cgid and"
+    Say "  actions modules by hand, then follow the manual's recipe."
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 2: Check ooRexx (installing it is out of scope, per the manual)       --
+--------------------------------------------------------------------------------
+
+  Say "Checking ooRexx..."
+  Address System "rexx -v > /dev/null 2>&1"
+  If RC \== 0 Then Do
+    Say "  ERROR: ooRexx is not installed or not in PATH."
+    Say "  RexxHTTP needs ooRexx 5.3.0 or later. Install it first, from the"
+    Say "  Open Object Rexx project: https://sourceforge.net/projects/oorexx/"
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 3: Stop if Apache is already present (clean-machine policy)           --
+--------------------------------------------------------------------------------
+
+  Say "Checking that Apache is NOT already installed..."
+  Address System "which apache2 apachectl > /dev/null 2>&1"
+  apacheBin = (RC == 0)
+  Address System "test -d /etc/apache2"
+  apacheConf = (RC == 0)
+
+  If apacheBin | apacheConf Then Do
+    Say
+    Say "  STOP: Apache appears to be already installed on this machine"
+    If apacheBin  Then Say "        (found the apache2/apachectl binary)"
+    If apacheConf Then Say "        (found the /etc/apache2 configuration tree)"
+    Say
+    Say "  This first version of the installer only operates on a clean machine:"
+    Say "  it installs Apache itself and will not touch a server that is already"
+    Say "  here, to avoid disturbing a setup made for something else."
+    Say
+    Say "  Nothing was changed. To install RexxHTTP onto this existing Apache,"
+    Say "  follow the recipe in the manual's Installation chapter by hand."
+    Return 1
+  End
+
+  -- Beyond an apt-installed Apache, refuse if anything else already holds TCP
+  -- port 80 (a hand-built Apache, nginx, whatever): we would put Apache on 80
+  -- too, and they cannot share it. ss is the modern tool; if it is missing or
+  -- silent we do not block on a guess -- the checks above already cover the
+  -- common case. Local address is ss's 4th column; the port follows its last
+  -- colon, which is also correct for IPv6 forms like [::]:80.
+  port80 = .Array~new
+  Address System "ss -ltn 2>/dev/null" With Output Using (port80) Error Using (.Array~new)
+  Do line Over port80
+    If \line~word(1)~caselessEquals("LISTEN") Then Iterate
+    localAddr = line~word(4)
+    colon = localAddr~lastPos(":")
+    If colon == 0 Then Iterate
+    If localAddr~substr(colon + 1) == "80" Then Do
+      Say
+      Say "  STOP: something is already listening on TCP port 80."
+      Say "  That is not the Apache this installer manages -- it may be nginx or"
+      Say "  another web server. Apache would need port 80 too, and the two cannot"
+      Say "  share it. Free port 80 (or use a machine where it is free) and re-run."
+      Say "  Nothing was changed."
+      Return 1
+    End
+  End
+
+  Say "  OK (clean machine)."
+
+--------------------------------------------------------------------------------
+-- Step 4: Confirm before making changes                                      --
+--------------------------------------------------------------------------------
+
+  Say
+  Say "About to install, as root (sudo):"
+  Say "  - Apache 2.4 (apt-get install apache2), with cgid + actions enabled"
+  Say "  - RexxHTTP sources -> " || cgiBinDir
+  Say "  - config fragment  -> " || confFile
+  Say "  - smoke-test rexxlet -> " || indexFile
+  Say
+  If \assumeYes Then
+    If \Ask("Proceed?") Then Do
+      Say "Aborted. Nothing was changed."
+      Return 1
+    End
+
+--------------------------------------------------------------------------------
+-- Step 5: Install Apache + enable modules                                    --
+--------------------------------------------------------------------------------
+
+  Say
+  Say "Installing Apache..."
+  Address System "sudo apt-get update -qq && sudo apt-get install -y -qq apache2 2>&1"
+  If RC \== 0 Then Do
+    Say "  ERROR: Failed to install apache2."
+    Return 1
+  End
+  Say "  OK."
+
+  Say "Enabling modules (cgid, actions)..."
+  Address System "sudo a2enmod cgid actions 2>&1"
+  If RC \== 0 Then Do
+    Say "  ERROR: Failed to enable cgid/actions."
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 6: Deploy the six sources to cgi-bin                                  --
+--------------------------------------------------------------------------------
+
+  Say "Deploying sources to" cgiBinDir"..."
+  Address System "sudo mkdir -p" cgiBinDir
+  Do src Over sources~makeArray(" ")
+    Address System "sudo cp" '"'srcDir || sep || src'"' cgiBinDir
+    If RC \== 0 Then Do
+      Say "  ERROR: Failed to copy" src
+      Return 1
+    End
+  End
+  -- The wrapper must be executable; Apache will not run a CGI it cannot exec.
+  Address System "sudo chmod +x" cgiBinDir"/RexxHTTP_wrapper"
+
+  -- Apache runs CGIs with a minimal PATH that need not contain rexx (on a
+  -- self-built ooRexx it usually does not). The wrapper ships with a
+  -- "#!/usr/bin/env rexx" shebang, which fails when env cannot find rexx on
+  -- that PATH. Pin the shebang to the absolute rexx we are running under, so
+  -- the deployed wrapper does not depend on Apache's PATH. We rewrite only the
+  -- copy in cgi-bin, never the canonical source.
+  Call PinShebang cgiBinDir"/RexxHTTP_wrapper"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 7: Drop in the rexxhttp.conf fragment and enable it                   --
+--------------------------------------------------------------------------------
+
+  Say "Writing config fragment" confFile"..."
+  tmpConf = "/tmp/rexxhttp.conf.tmp"
+  conf = .Resources~RexxHTTPConf~makeString("L", "0A"x)
+  Call Stream tmpConf, "C", "Open Write Replace"
+  Call CharOut tmpConf, conf
+  Call Stream tmpConf, "C", "Close"
+  Address System "sudo cp" tmpConf confFile
+  Address System "rm -f" tmpConf
+  Address System "sudo a2enconf rexxhttp > /dev/null 2>&1"
+  If RC \== 0 Then Do
+    Say "  ERROR: Failed to enable the rexxhttp config."
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 8: Plant the smoke-test index rexxlet                                 --
+--------------------------------------------------------------------------------
+
+  Say "Planting smoke-test rexxlet" indexFile"..."
+  tmpIndex = "/tmp/rexxhttp-index.tmp"
+  index = SmokeTest()~makeString
+  Call Stream tmpIndex, "C", "Open Write Replace"
+  Call CharOut tmpIndex, index
+  Call Stream tmpIndex, "C", "Close"
+  Address System "sudo cp" tmpIndex indexFile
+  Address System "rm -f" tmpIndex
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 8b: Deploy the bundled example rexxlets                               --
+--------------------------------------------------------------------------------
+-- The welcome page planted above links to these. examples/ is a sibling of
+-- src/ in the distribution; each example is a rexxlet at examples/<name>/index
+-- copied to htdocs/examples/<name>/index. The <Files "index"> handler in the
+-- conf fragment matches by basename across the whole document tree, so these
+-- run as rexxlets without any per-directory configuration of their own.
+
+  examplesSrc = .File~new(.Context~package~name)~parentFile~parent || sep"examples"
+  Say "Deploying example rexxlets to" docRoot"/examples..."
+  Do name Over ExampleDirs()~makeArray(" ")
+    Address System "sudo mkdir -p" '"'docRoot"/examples/"name'"'
+    Address System "sudo cp" '"'examplesSrc || sep || name || sep"index"'"' -
+                             '"'docRoot"/examples/"name"/index"'"'
+    If RC \== 0 Then Do
+      Say "  ERROR: failed to copy example" name
+      Return 1
+    End
+  End
+  -- Plant an index at examples/ itself, so /examples/ returns this listing
+  -- instead of Apache's default directory index.
+  tmpEIndex = "/tmp/rexxhttp-examples-index.tmp"
+  Call Stream tmpEIndex, "C", "Open Write Replace"
+  Call CharOut tmpEIndex, ExamplesIndex()~makeString
+  Call Stream tmpEIndex, "C", "Close"
+  Address System "sudo cp" tmpEIndex '"'docRoot"/examples/index"'"'
+  Address System "rm -f" tmpEIndex
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 9: Restart Apache to pick everything up                               --
+--------------------------------------------------------------------------------
+
+  Say "Restarting Apache..."
+  Address System "sudo systemctl restart apache2 2>/dev/null"
+  If RC \== 0 Then
+    -- Fall back to apachectl where systemd is not the init (e.g. plain WSL).
+    Address System "sudo apachectl restart 2>/dev/null"
+  Call SysSleep 0.5
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 10: Smoke test                                                        --
+--------------------------------------------------------------------------------
+
+  Say "Smoke test (curl http://localhost/)..."
+  out = .Array~new
+  Address System "curl -s --noproxy localhost http://localhost/" -
+    With Output Using (out) Error Using (.Array~new)
+  body = ""
+  Do l Over out
+    body = body || l
+  End
+
+  Say
+  If body~caselessContains("Welcome to RexxHTTP") Then Do
+    Say "============================================================"
+    Say " SUCCESS: a minimal RexxHTTP installation is up and running."
+    Say "============================================================"
+    Say
+    Say " Open it in a browser at:  http://localhost/"
+    Say " or from the command line:  curl http://localhost/"
+    Say
+    Say " The welcome page links to a set of example rexxlets you can"
+    Say " explore. They are small Rexx programs; follow a link to see"
+    Say " each one run."
+    Say
+    Say " The official RexxHTTP documentation is at:"
+    Say "   https://rexx.epbcn.com/rexxhttp/"
+    Say
+    Return 0
+  End
+  Else Do
+    Say "============================================================"
+    Say " WARNING: install finished, but the smoke test did not return"
+    Say " the expected output. http://localhost/ returned:"
+    Say "   " || body~strip~left(200)
+    Say " Check /var/log/apache2/error.log and the config fragment."
+    Say "============================================================"
+    Return 1
+  End
+
+/******************************************************************************/
+/* Uninstall: remove what the installer put here. By default this is          */
+/* symmetric with the clean-machine install -- it also removes Apache,        */
+/* returning the machine to its pre-install state. With keepApache it retires  */
+/* ONLY RexxHTTP (fragment + Include + sources + index), leaving Apache: the   */
+/* "coexist" path, where RexxHTTP was a guest on someone else's Apache.        */
+/******************************************************************************/
+Uninstall: Procedure
+  Use Strict Arg assumeYes, keepApache, cgiBinDir, docRoot, confFile, indexFile, sources
+
+  Say
+  Say "RexxHTTP Uninstaller for Debian/Ubuntu Linux"
+  Say "============================================="
+  Say
+
+  -- Nothing to do if there is no Apache config tree at all.
+  Address System "test -d /etc/apache2"
+  If RC \== 0 Then Do
+    Say "Apache does not appear to be installed (no /etc/apache2)."
+    Say "Nothing to uninstall."
+    Return 0
+  End
+
+  Say "About to remove, as root (sudo):"
+  Say "  - the RexxHTTP config fragment ("confFile") and disable it"
+  Say "  - the RexxHTTP sources from" cgiBinDir
+  Say "  - the smoke-test rexxlet" indexFile
+  If \keepApache Then
+    Say "  - Apache itself (apt-get purge apache2*), to undo the install"
+  Else
+    Say "  - (Apache is kept: --keep-apache)"
+  Say
+  If \assumeYes Then
+    If \Ask("Proceed?") Then Do
+      Say "Aborted. Nothing was changed."
+      Return 1
+    End
+
+  -- 1. Disable and delete the config fragment.
+  Say
+  Say "Disabling and removing the config fragment..."
+  Address System "sudo a2disconf rexxhttp > /dev/null 2>&1"
+  Address System "sudo rm -f" confFile
+  Say "  OK."
+
+  -- 2. Remove the deployed sources from cgi-bin.
+  Say "Removing sources from" cgiBinDir"..."
+  Do src Over sources~makeArray(" ")
+    Address System "sudo rm -f" cgiBinDir"/"src
+  End
+  Say "  OK."
+
+  -- 3. Remove the smoke-test rexxlet.
+  Say "Removing smoke-test rexxlet" indexFile"..."
+  Address System "sudo rm -f" indexFile
+  Say "  OK."
+
+  -- 3b. Remove the bundled example rexxlets.
+  Say "Removing example rexxlets" docRoot"/examples..."
+  Address System "sudo rm -rf" '"'docRoot"/examples"'"'
+  Say "  OK."
+
+  If keepApache Then Do
+    -- Coexist path: reload Apache so it forgets the handler, and stop here.
+    Say "Reloading Apache (without the RexxHTTP config)..."
+    Address System "sudo systemctl reload apache2 2>/dev/null"
+    If RC \== 0 Then
+      Address System "sudo apachectl graceful 2>/dev/null"
+    Say "  OK."
+    Say
+    Say "============================================================"
+    Say " RexxHTTP removed. Apache is still installed and running."
+    Say "============================================================"
+    Return 0
+  End
+
+  -- 4. Symmetric uninstall: remove Apache itself, as the install added it.
+  Say "Removing Apache (apt-get purge apache2*)..."
+  Address System "sudo apt-get purge -y -qq 'apache2*' 2>&1"
+  Address System "sudo apt-get autoremove -y -qq 2>&1"
+  Say "  OK."
+
+  Say
+  Say "============================================================"
+  Say " RexxHTTP and Apache removed. The machine is back to its"
+  Say " pre-install state."
+  Say "============================================================"
+  Return 0
+
+/******************************************************************************/
+/* PinShebang: rewrite the deployed wrapper's first line from                 */
+/* "#!/usr/bin/env rexx" to "#!<absolute rexx>", so it does not depend on     */
+/* Apache's PATH. Resolves rexx with SysSearchPath (the same rexx running     */
+/* this installer). Writes via a temp file + sudo cp, since cgi-bin is root-  */
+/* owned. If rexx cannot be resolved, leaves the wrapper untouched (the       */
+/* env-based shebang still works wherever Apache's PATH includes rexx).       */
+/******************************************************************************/
+PinShebang: Procedure
+  Use Strict Arg wrapper
+  rexxPath = SysSearchPath("PATH", "rexx")
+  If rexxPath == "" Then Return          -- cannot resolve; leave env shebang
+
+  -- Read the deployed wrapper, replace only the first line if it is the
+  -- env shebang, and write the result through a temp file.
+  body = .Array~new
+  Do While Lines(wrapper) > 0
+    body~append(LineIn(wrapper))
+  End
+  Call Stream wrapper, "C", "Close"
+  If body~items == 0 Then Return
+  If body[1]~strip == "#!/usr/bin/env rexx" Then
+    body[1] = "#!"rexxPath
+
+  tmp = "/tmp/RexxHTTP_wrapper."Random(1, 99999)
+  Do line Over body
+    Call LineOut tmp, line
+  End
+  Call Stream tmp, "C", "Close"
+  Address System "sudo cp" '"'tmp'"' '"'wrapper'"'
+  Address System "sudo chmod +x" '"'wrapper'"'
+  Address System "rm -f" '"'tmp'"'
+  Return
+
+/******************************************************************************/
+/* Resources: the files this installer generates.                            */
+/******************************************************************************/
+
+-- The drop-in config fragment. Declares ONLY the handler and a whitelist for
+-- a single rexxlet named "index" in the document root, with DirectoryIndex so
+-- that requesting the directory runs it. This mirrors the manual's recipe.
+::Resource RexxHTTPConf
+# RexxHTTP drop-in configuration (Debian/Ubuntu).
+# Installed by install/InstallLinux.rex. Enable with: a2enconf rexxhttp
+#
+# The handler routes a request to the processor (reached through the wrapper
+# on Unix) instead of to the file the request names.
+
+# Give Apache a name so it stops emitting AH00558 ("Could not reliably
+# determine the server's fully qualified domain name") at start/stop.
+ServerName localhost
+
+Action RexxHTTP /cgi-bin/RexxHTTP_wrapper
+
+<Directory "/var/www/html">
+    DirectoryIndex index
+    <Files "index">
+        SetHandler RexxHTTP
+    </Files>
+</Directory>
+::END
+
+::Requires "InstallHelpers.cls"

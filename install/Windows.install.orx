@@ -1,0 +1,739 @@
+/******************************************************************************/
+/*                                                                            */
+/* Windows.install - Installer for RexxHTTP on Windows                        */
+/* ===================================================                        */
+/*                                                                            */
+/* This file is part of the RexxHTTP package                                  */
+/* [See https://rexx.epbcn.com/rexxhttp/]                                     */
+/*                                                                            */
+/* Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>  */
+/*                                                                            */
+/* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
+/*                                                                            */
+/* Installs RexxHTTP on a CLEAN Windows machine, following the recipe of the  */
+/* manual's Installation chapter. Because the Apache project ships no Windows */
+/* binary, this fetches a ready-built Apache from Apache Lounge over HTTP,    */
+/* unpacks it, enables the cgi and actions modules and the RexxHTTP handler   */
+/* through an Include fragment (the main httpd.conf is left untouched bar one */
+/* appended Include line), deploys the sources to cgi-bin, plants a minimal   */
+/* index rexxlet, installs Apache as a service and smoke-tests with curl.      */
+/*                                                                            */
+/* On Windows there is NO wrapper: Apache runs RexxHTTP.rex directly through  */
+/* its #!rexx shebang, so the handler points straight at the processor.       */
+/*                                                                            */
+/* This first version targets the CLEAN-MACHINE case. If the chosen server    */
+/* root already exists, it STOPS and does nothing, rather than disturb an     */
+/* Apache the user set up for something else.                                 */
+/*                                                                            */
+/* Prerequisites the installer checks but does NOT install:                   */
+/*   - ooRexx 5.3.0 or later (out of scope; from the ooRexx project).         */
+/*   - The Visual C++ Redistributable (x64, the 14.x "2015-2022" family).     */
+/*     Apache Lounge binaries will not start without it; its absence shows up */
+/*     as a missing VCRUNTIME140.dll. The installer detects it and, if it is  */
+/*     missing, stops with the download link rather than install it silently. */
+/*   - curl (shipped with Windows 10/11). Used to fetch Apache and to smoke   */
+/*     test. If absent, the installer stops.                                  */
+/*                                                                            */
+/* Usage:                                                                     */
+/*   rexx InstallWindows.rex [--yes] [--zip-url URL] [--root PATH]            */
+/*   rexx InstallWindows.rex --uninstall [--yes] [--root PATH]                */
+/*                                              [--keep-apache]               */
+/*                                                                            */
+/*   --yes         Assume "yes" to every prompt (non-interactive).            */
+/*   --zip-url U   Override the Apache Lounge ZIP URL (e.g. a newer build).   */
+/*   --root P      Server root (default C:\Apache24). For --uninstall, the    */
+/*                 same root the install used.                                */
+/*   --uninstall   Remove what the installer put here. Symmetric with the     */
+/*                 clean-target install: it also deletes the server root,     */
+/*                 returning the machine to its pre-install state.            */
+/*   --keep-apache With --uninstall, retire ONLY RexxHTTP (the Include line,  */
+/*                 the fragment, the cgi-bin sources, the index rexxlet) and  */
+/*                 leave the Apache tree in place. The "coexist" path.        */
+/*                                                                            */
+/* Version history:                                                           */
+/*                                                                            */
+/* Date     Version Details                                                   */
+/* -------- ------- --------------------------------------------------------- */
+/* 20260630    1.0  First version.                                            */
+/*                                                                            */
+/******************************************************************************/
+
+  Parse Source . . myPath
+
+--------------------------------------------------------------------------------
+-- Locate the sources (src\ is a sibling of this install\ directory)          --
+--------------------------------------------------------------------------------
+
+  srcDir = .File~new(.Context~package~name)~parentFile~parent"\src"
+
+  -- The five sources. On Windows the wrapper is NOT used: Apache runs
+  -- RexxHTTP.rex directly via its shebang, so the wrapper is not deployed.
+  sources = "HTTP.Request.cls HTTP.Response.cls HTTP.OutputStream.cls" -
+            "HTTP.Cookie.cls RexxHTTP.rex"
+
+--------------------------------------------------------------------------------
+-- Defaults (overridable on the command line)                                 --
+--------------------------------------------------------------------------------
+
+  -- Apache Lounge VS17 is a long-established, conservative choice: it runs on
+  -- the 14.x VC++ runtime that most machines already carry. Each VS series
+  -- page lists exactly one (latest) build; we read it and extract the Win64
+  -- ZIP href, so this stays current without hand-editing. The URL can also be
+  -- given outright with --zip-url, skipping the page read entirely.
+  loungePage = "https://www.apachelounge.com/download/VS17/"
+  zipUrl     = ""                 -- empty => discover from loungePage
+  serverRoot = "C:\Apache24"
+
+--------------------------------------------------------------------------------
+-- Options come pre-parsed and sanitized from the driver (install/uninstall)  --
+-- as a Directory; this script does no argument parsing of its own. A quoted   --
+-- --root with spaces survived parsing intact, because the driver read it from --
+-- .sysCargs (already tokenized) -- it is never re-split here.                  --
+--------------------------------------------------------------------------------
+
+  Use Strict Arg opts
+  assumeYes  = opts~assumeYes
+  uninstall  = (opts~mode == "uninstall")
+  keepApache = opts~keepApache
+
+  -- Override the defaults only when the user actually supplied a value
+  -- (the driver leaves these empty otherwise, preserving "discover/default").
+  If opts~serverRoot \== "" Then serverRoot = opts~serverRoot
+  If opts~zipUrl     \== "" Then zipUrl     = opts~zipUrl
+
+  -- Derived paths, all under the server root we control.
+  apacheBin  = serverRoot"\bin\httpd.exe"
+  cgiBinDir  = serverRoot"\cgi-bin"
+  docRoot    = serverRoot"\htdocs"
+  confFile   = serverRoot"\conf\httpd.conf"
+  extraConf  = serverRoot"\conf\extra\rexxhttp.conf"
+  indexFile  = docRoot"\index"
+
+  If uninstall Then
+    Return Uninstall(assumeYes, keepApache, serverRoot, apacheBin, -
+                     cgiBinDir, confFile, extraConf, indexFile, sources)
+
+  Say
+  Say "RexxHTTP Installer for Windows"
+  Say "==============================="
+  Say
+  Say "Sources directory:" srcDir
+  Say "Server root:       " serverRoot
+  Say
+
+--------------------------------------------------------------------------------
+-- Step 1: Require curl                                                        --
+--------------------------------------------------------------------------------
+
+  Say "Checking for curl..."
+  curlRC = SysCmd("curl --version >nul 2>&1")
+  If curlRC \== 0 Then Do
+    Say "  ERROR: curl not found. It ships with Windows 10 and 11; this"
+    Say "  installer needs it to fetch Apache and to smoke-test. Install or"
+    Say "  enable curl and try again."
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 2: Check ooRexx (installing it is out of scope)                        --
+--------------------------------------------------------------------------------
+
+  Say "Checking ooRexx..."
+  If SysCmd("rexx -v >nul 2>&1") \== 0 Then Do
+    Say "  ERROR: ooRexx is not installed or not in PATH."
+    Say "  RexxHTTP needs ooRexx 5.3.0 or later, from the Open Object Rexx"
+    Say "  project: https://sourceforge.net/projects/oorexx/"
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 3: Check the Visual C++ Redistributable (x64, 14.x family)            --
+--------------------------------------------------------------------------------
+
+  Say "Checking the Visual C++ Redistributable (x64)..."
+  If \HasVCRedist() Then Do
+    Say "  ERROR: the x64 Visual C++ Redistributable does not appear to be"
+    Say "  installed. Apache Lounge binaries will not start without it (the"
+    Say "  symptom is a missing VCRUNTIME140.dll). Install it first, then"
+    Say "  re-run this installer. The current redistributable is at:"
+    Say "    https://aka.ms/vs/17/release/vc_redist.x64.exe"
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 3b: Refuse to run on a machine that already serves the web             --
+--------------------------------------------------------------------------------
+-- Two independent probes, by running executable and by port, so we catch an   --
+-- existing web server whatever its service is called and wherever its files   --
+-- live -- the curious user who once installed XAMPP and forgot, an Apache     --
+-- under Program Files, IIS, anything. We never adopt or fight another server; --
+-- we stop and let the user sort it out. Both probes report through their text --
+-- (tasklist and netstat return 0 regardless), so we scan the output.          --
+
+  Say "Checking that no web server is already running..."
+
+  -- Probe 1: any httpd.exe process alive (Apache under any name or path).
+  If CmdOutputHas('tasklist /FI "IMAGENAME eq httpd.exe" /NH', "httpd.exe") Then Do
+    Say
+    Say "  STOP: an Apache process (httpd.exe) is already running."
+    Say "  This installer sets up its own Apache and will not disturb one that"
+    Say "  is already there -- XAMPP, WampServer, a manual install, whatever it"
+    Say "  may be. Stop that Apache (or use the machine it is not on) and re-run."
+    Say "  Nothing was changed."
+    Return 1
+  End
+
+  -- Probe 2: is TCP port 80 already taken (by IIS or anything else)? The local
+  -- address is the second token; its port is whatever follows the last colon,
+  -- which also does the right thing for IPv6 forms like [::]:80. We match only
+  -- an exact :80 in LISTENING state, so :8080 and ephemeral :NNN80 do not fool
+  -- us.
+  net80 = .Array~new
+  Address System "netstat -ano -p tcp" With Output Using (net80) Error Using (.Array~new)
+  Do line Over net80
+    If \line~caselessContains("LISTENING") Then Iterate
+    Parse Var line . localAddr .
+    colon = localAddr~lastPos(":")
+    If colon == 0 Then Iterate
+    If localAddr~substr(colon + 1) == "80" Then Do
+      Say
+      Say "  STOP: something is already listening on TCP port 80."
+      Say "  That may be IIS or another web server. This installer would put"
+      Say "  Apache on port 80 too, and the two cannot share it. Free port 80"
+      Say "  (or install RexxHTTP on a machine where it is free) and re-run."
+      Say "  Nothing was changed."
+      Return 1
+    End
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 4: Stop if the server root already exists (clean-machine policy)       --
+--------------------------------------------------------------------------------
+
+  Say "Checking that" serverRoot "does not already exist..."
+  If SysFileExists(serverRoot) Then Do
+    Say
+    Say "  STOP:" serverRoot "already exists."
+    Say "  This first version of the installer only operates on a clean target:"
+    Say "  it will not touch an Apache that is already there. Choose another"
+    Say "  location with --root, or remove the existing one, and try again."
+    Say "  Nothing was changed."
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 5: Resolve the Apache Lounge ZIP URL                                   --
+--------------------------------------------------------------------------------
+
+  If zipUrl == "" Then Do
+    Say "Finding the latest Apache (Win64) on" loungePage"..."
+    zipUrl = DiscoverZipUrl(loungePage)
+    If zipUrl == "" Then Do
+      Say "  ERROR: could not find a Win64 build link on the download page."
+      Say "  The page layout may have changed. Pass the ZIP URL directly with"
+      Say "  --zip-url, copying it from" loungePage
+      Return 1
+    End
+    Say "  Found:" zipUrl
+  End
+  Else
+    Say "Using the ZIP URL given on the command line:" zipUrl
+
+--------------------------------------------------------------------------------
+-- Step 6: Confirm before making changes                                      --
+--------------------------------------------------------------------------------
+
+  Say
+  Say "About to:"
+  Say "  - download and unpack Apache into" serverRoot
+  Say "  - enable cgi + actions and the RexxHTTP handler via an Include"
+  Say "  - deploy the RexxHTTP sources to" cgiBinDir
+  Say "  - plant a smoke-test rexxlet at" indexFile
+  Say "  - install Apache as a service, start it and smoke-test it"
+  Say
+  If \assumeYes Then
+    If \Ask("Proceed?") Then Do
+      Say "Aborted. Nothing was changed."
+      Return 1
+    End
+
+--------------------------------------------------------------------------------
+-- Step 7: Download Apache                                                     --
+--------------------------------------------------------------------------------
+
+  Say
+  Say "Downloading Apache..."
+  zipTmp = .File~temporaryPath || "rexxhttp-apache.zip"
+  -- -L follows redirects; a browser-like UA avoids the odd 403.
+  cmd = 'curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"' -
+        '-o "'zipTmp'" "'zipUrl'"'
+  If SysCmd(cmd) \== 0 Then Do
+    Say "  ERROR: download failed."
+    Return 1
+  End
+  If \SysFileExists(zipTmp) Then Do
+    Say "  ERROR: nothing was downloaded."
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 8: Unpack Apache with tar.exe (native on Windows 10/11)               --
+--------------------------------------------------------------------------------
+
+  Say "Unpacking Apache..."
+  -- The ZIP contains a top-level Apache24\ folder. Unpack into a temp staging
+  -- dir, then move Apache24's contents to the chosen server root, so the
+  -- result is serverRoot\bin (not serverRoot\Apache24\bin).
+  stageDir = .File~temporaryPath || "rexxhttp-stage"
+  Call SysFileTree stageDir, "found.", "DO"      -- probe; ignore result
+  "cmd /c rmdir /s /q """stageDir""" 2>nul"
+  "cmd /c mkdir """stageDir""""
+  If SysCmd('tar -xf "'zipTmp'" -C "'stageDir'"') \== 0 Then Do
+    Say "  ERROR: failed to unpack the archive (is tar.exe present?)."
+    Return 1
+  End
+
+  -- Verify the expected layout before trusting it: Apache24\bin\httpd.exe.
+  If \SysFileExists(stageDir"\Apache24\bin\httpd.exe") Then Do
+    Say "  ERROR: the download did not contain Apache24\bin\httpd.exe."
+    Say "  What downloaded may not be a valid Apache Lounge ZIP."
+    Return 1
+  End
+
+  "cmd /c move """stageDir"\Apache24"" """serverRoot""" >nul"
+  If \SysFileExists(apacheBin) Then Do
+    Say "  ERROR: could not place Apache at" serverRoot"."
+    Return 1
+  End
+  "cmd /c rmdir /s /q """stageDir""" 2>nul"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 9: Point ServerRoot at our chosen location                            --
+--------------------------------------------------------------------------------
+
+  -- Apache Lounge ships ServerRoot baked to its own build path (it varies by
+  -- build). Rewrite it to the location we actually installed into, so every
+  -- derived path (htdocs, cgi-bin, logs) resolves correctly.
+  Say "Setting ServerRoot in httpd.conf..."
+  Call RewriteServerRoot confFile, serverRoot
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 10: Write the RexxHTTP Include fragment and reference it              --
+--------------------------------------------------------------------------------
+
+  Say "Writing config fragment" extraConf"..."
+  frag = .Resources~RexxHTTPConf~makeString("L", "0D0A"x)
+  Call CharOut extraConf, frag
+  Call Stream extraConf, "C", "Close"
+
+  -- Append a single Include line to httpd.conf (additive, reversible).
+  Say "Adding Include to httpd.conf..."
+  Call LineOut confFile, ""
+  Call LineOut confFile, "# RexxHTTP: enable the cgi/actions modules and the handler."
+  Call LineOut confFile, "Include conf/extra/rexxhttp.conf"
+  Call Stream confFile, "C", "Close"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 11: Deploy the sources to cgi-bin                                     --
+--------------------------------------------------------------------------------
+
+  Say "Deploying sources to" cgiBinDir"..."
+  Do src Over sources~makeArray(" ")
+    Call SysFileCopy srcDir'\'src, cgiBinDir'\'src
+    If result \== 0 Then Do
+      Say "  ERROR: failed to copy" src", error code=" result
+      Return 1
+    End
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 12: Plant the smoke-test index rexxlet                                --
+--------------------------------------------------------------------------------
+
+  Say "Planting smoke-test rexxlet" indexFile"..."
+  index = SmokeTest()~makeString
+  Call CharOut indexFile, index
+  Call Stream indexFile, "C", "Close"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 12b: Deploy the bundled example rexxlets                              --
+--------------------------------------------------------------------------------
+-- The welcome page planted above links to these. examples/ is a sibling of
+-- src/ in the distribution; each is a rexxlet at examples\<name>\index copied
+-- to docRoot\examples\<name>\index. The <Files "index"> handler in the conf
+-- fragment matches by basename across the whole document tree, so these run
+-- as rexxlets with no per-directory configuration of their own. SysFileCopy
+-- does not create directories, so each subdirectory is made first.
+
+  examplesSrc = .File~new(.Context~package~name)~parentFile~parent"\examples"
+  Say "Deploying example rexxlets to" docRoot"\examples..."
+  Call SysMkDir docRoot"\examples"
+  Do name Over ExampleDirs()~makeArray(" ")
+    Call SysMkDir docRoot"\examples\"name
+    Call SysFileCopy examplesSrc"\"name"\index", docRoot"\examples\"name"\index"
+    If result \== 0 Then Do
+      Say "  ERROR: failed to copy example" name", error code=" result
+      Return 1
+    End
+  End
+  -- Plant an index at examples\ itself, so /examples/ returns this listing
+  -- instead of Apache's default directory index.
+  eIndexFile = docRoot"\examples\index"
+  Call CharOut eIndexFile, ExamplesIndex()~makeString
+  Call Stream eIndexFile, "C", "Close"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 13: Start httpd                                                       --
+--------------------------------------------------------------------------------
+
+  Say "Installing Apache as a Windows service..."
+  -- Run as a service (not a detached console window): it starts automatically
+  -- with Windows and needs no visible window kept open. This requires the
+  -- elevation the driver already checked for. -k install registers the
+  -- service; -k start launches it.
+  Address System "cmd /c """ || apacheBin || """ -k install >nul 2>&1"
+  If RC \== 0 Then Do
+    Say "  ERROR: could not register the Apache service (httpd -k install)."
+    Say "  Make sure this console is elevated (Run as administrator)."
+    Return 1
+  End
+  Address System "cmd /c """ || apacheBin || """ -k start >nul 2>&1"
+  If RC \== 0 Then Do
+    Say "  ERROR: the Apache service was registered but did not start"
+    Say "  (httpd -k start). Check" serverRoot"\logs\error.log."
+    Return 1
+  End
+  Call SysSleep 1.5
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 14: Smoke test                                                        --
+--------------------------------------------------------------------------------
+
+  Say "Smoke test (curl http://localhost/)..."
+  out = .Array~new
+  Address System "curl -s --noproxy localhost http://localhost/" -
+    With Output Using (out) Error Using (.Array~new)
+  body = ""
+  Do l Over out
+    body = body || l
+  End
+
+  Say
+  If body~caselessContains("Welcome to RexxHTTP") Then Do
+    Say "============================================================"
+    Say " SUCCESS: a minimal RexxHTTP installation is up and running."
+    Say "============================================================"
+    Say
+    Say " Open it in a browser at:  http://localhost/"
+    Say " or from the command line:  curl http://localhost/"
+    Say
+    Say " The welcome page links to a set of example rexxlets you can"
+    Say " explore. They are small Rexx programs; follow a link to see"
+    Say " each one run."
+    Say
+    Say " Apache runs as a Windows service, so it starts automatically"
+    Say " with Windows and needs no window kept open. To stop or remove"
+    Say " it, run this installer's uninstall."
+    Say
+    Say " The official RexxHTTP documentation is at:"
+    Say "   https://rexx.epbcn.com/rexxhttp/"
+    Say
+    Return 0
+  End
+  Else Do
+    Say "============================================================"
+    Say " WARNING: install finished, but the smoke test did not return"
+    Say " the expected output. http://localhost/ returned:"
+    Say "   " || body~strip~left(200)
+    Say " Check" serverRoot"\logs\error.log and the config fragment."
+    Say "============================================================"
+    Return 1
+  End
+
+/******************************************************************************/
+/* Uninstall: remove what the installer put here. By default this is          */
+/* symmetric with the clean-target install -- it deletes the whole server     */
+/* root, which the install created, returning the machine to its pre-install   */
+/* state. With keepApache it retires ONLY RexxHTTP: the Include line we added  */
+/* to httpd.conf, the fragment, the cgi-bin sources and the index rexxlet,     */
+/* leaving the Apache tree otherwise intact (the "coexist" path).             */
+/******************************************************************************/
+Uninstall: Procedure
+  Use Strict Arg assumeYes, keepApache, serverRoot, apacheBin, -
+                 cgiBinDir, confFile, extraConf, indexFile, sources
+
+  Say
+  Say "RexxHTTP Uninstaller for Windows"
+  Say "================================="
+  Say
+  Say "Server root:" serverRoot
+  Say
+
+  If \SysFileExists(serverRoot) Then Do
+    Say serverRoot "does not exist. Nothing to uninstall."
+    Say "(If you installed into a different root, pass it with --root.)"
+    Return 0
+  End
+
+  Say "About to remove:"
+  If keepApache Then Do
+    Say "  - the RexxHTTP Include line from" confFile
+    Say "  - the config fragment" extraConf
+    Say "  - the RexxHTTP sources from" cgiBinDir
+    Say "  - the smoke-test rexxlet" indexFile
+    Say "  - (Apache is kept: --keep-apache)"
+  End
+  Else
+    Say "  - the entire server root" serverRoot "(Apache and all)"
+  Say
+  If \assumeYes Then
+    If \Ask("Proceed?") Then Do
+      Say "Aborted. Nothing was changed."
+      Return 1
+    End
+
+  -- Stop and de-register the Apache service before touching its files.
+  -- Order matters: stop, then uninstall the service, so we never leave a
+  -- registered service pointing at binaries we are about to delete. Failures
+  -- are ignored (the service may not be present, e.g. a partial install).
+  Say
+  Say "Stopping and removing the Apache service..."
+  Address System "cmd /c """ || apacheBin || """ -k stop >nul 2>&1"
+  Call SysSleep 1
+  Address System "cmd /c """ || apacheBin || """ -k uninstall >nul 2>&1"
+  Call SysSleep 0.5
+  -- Safety net: kill any stray detached httpd (e.g. from an older install
+  -- that ran it as a console window rather than a service).
+  Address System "cmd /c taskkill /f /im httpd.exe >nul 2>&1"
+  Call SysSleep 0.5
+  Say "  OK."
+
+  If \keepApache Then Do
+    -- Symmetric uninstall: the install created the whole tree, so remove it.
+    Say "Removing the server root" serverRoot"..."
+    Address System "cmd /c rmdir /s /q """ || serverRoot || """ 2>nul"
+    If SysFileExists(serverRoot) Then Do
+      Say "  WARNING: could not fully remove" serverRoot"."
+      Say "  A file may still be locked (is httpd still running?). Remove it"
+      Say "  by hand once nothing holds it open."
+      Return 1
+    End
+    Say "  OK."
+    Say
+    Say "============================================================"
+    Say " RexxHTTP and Apache removed. The server root is gone and the"
+    Say " machine is back to its pre-install state."
+    Say "============================================================"
+    Return 0
+  End
+
+  -- Coexist path: surgical retirement, leaving the Apache tree in place.
+
+  -- 1. Strip the Include line (and the comment we wrote above it) from
+  --    httpd.conf, rewriting the file without those two lines and nothing else.
+  Say "Removing the RexxHTTP Include from" confFile"..."
+  Call StripInclude confFile
+  Say "  OK."
+
+  -- 2. Delete the fragment.
+  Say "Removing the config fragment" extraConf"..."
+  Address System "cmd /c del /q """ || extraConf || """ >nul 2>&1"
+  Say "  OK."
+
+  -- 3. Delete the deployed sources from cgi-bin.
+  Say "Removing sources from" cgiBinDir"..."
+  Do src Over sources~makeArray(" ")
+    Address System "cmd /c del /q """ || cgiBinDir"\"src || """ >nul 2>&1"
+  End
+  Say "  OK."
+
+  -- 4. Delete the smoke-test rexxlet.
+  Say "Removing smoke-test rexxlet" indexFile"..."
+  Address System "cmd /c del /q """ || indexFile || """ >nul 2>&1"
+  Say "  OK."
+
+  -- 4b. Delete the bundled example rexxlets.
+  examplesDir = docRoot"\examples"
+  Say "Removing example rexxlets" examplesDir"..."
+  Address System "cmd /c rmdir /s /q """ || examplesDir || """ >nul 2>&1"
+  Say "  OK."
+
+  -- Restart Apache so it comes back without the RexxHTTP handler.
+  Say "Restarting Apache (without the RexxHTTP config)..."
+  Address System "cmd /c start """" """ || apacheBin || """"
+  Call SysSleep 1
+  Say "  OK."
+
+  Say
+  Say "============================================================"
+  Say " RexxHTTP removed. The Apache tree at" serverRoot
+  Say " is left in place and running."
+  Say "============================================================"
+  Return 0
+
+/******************************************************************************/
+/* StripInclude: rewrite httpd.conf without the two lines the installer       */
+/* appended -- the "# RexxHTTP: ..." comment and the "Include ...rexxhttp"     */
+/* line -- and nothing else. Matching is by content, not by position, so a     */
+/* hand-edited conf is handled too. Idempotent: a conf without them is left    */
+/* unchanged.                                                                  */
+/******************************************************************************/
+StripInclude: Procedure
+  Use Strict Arg conf
+  kept = .Array~new
+  Do While Lines(conf) > 0
+    line = LineIn(conf)
+    low  = Lower(line~strip)
+    -- Drop the comment we wrote and the Include of our fragment.
+    If low~abbrev("# rexxhttp:") Then Iterate
+    If low~abbrev("include"), low~contains("rexxhttp") Then Iterate
+    kept~append(line)
+  End
+  Call Stream conf, "C", "Close"
+
+  Call Stream conf, "C", "Open Write Replace"
+  Do line Over kept
+    Call LineOut conf, line
+  End
+  Call Stream conf, "C", "Close"
+  Return
+
+/******************************************************************************/
+/* HasVCRedist: is the x64 VC++ 14.x runtime present? Registry first (the    */
+/* canonical check installers use), VCRUNTIME140.dll as a fallback.          */
+/******************************************************************************/
+HasVCRedist:
+  key = "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
+  If SysCmd('reg query "'key'" /v Installed >nul 2>&1') == 0 Then Return 1
+  -- Fallback: the runtime DLL itself in System32.
+  win = Value("SystemRoot", , "ENVIRONMENT")
+  If win == "" Then win = "C:\Windows"
+  Return SysFileExists(win"\System32\VCRUNTIME140.dll")
+
+/******************************************************************************/
+/* DiscoverZipUrl: read an Apache Lounge VS series page and return the        */
+/* absolute URL of its Win64 httpd ZIP. Each series page lists one build.     */
+/* Matching is caseless (the page mixes Win64/win64, VS17/vs17).             */
+/******************************************************************************/
+DiscoverZipUrl:
+  Use Strict Arg pageUrl
+  cmd = 'curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"' -
+        '"'pageUrl'"'
+  page = .Array~new
+  Address System cmd With Output Using (page) Error Using (.Array~new)
+  If RC \== 0 Then Return ""
+
+  -- Pull the href that names a Win64 httpd ZIP under /binaries/.
+  href = ""
+  Do line Over page
+    low = Lower(line)
+    If low~contains("/binaries/httpd-"),    -
+       low~contains("win64"),               -
+       low~contains(".zip") Then Do
+      -- Extract the href="...zip" token on this line.
+      p = low~pos('href="')
+      If p > 0 Then Do
+        rest = line~substr(p + 6)
+        q = rest~pos('"')
+        If q > 0 Then Do
+          href = rest~left(q - 1)
+          Leave
+        End
+      End
+    End
+  End
+
+  If href == "" Then Return ""
+  -- Make it absolute against the site root if it came back path-relative.
+  If href~caselessAbbrev("http") Then Return href
+  Return "https://www.apachelounge.com" || href
+
+/******************************************************************************/
+/* RewriteServerRoot: Apache Lounge bakes its own build path (e.g.            */
+/* C:/Apache24-64) into httpd.conf -- not only in ServerRoot but as absolute  */
+/* paths in DocumentRoot, <Directory> and ScriptAlias. Rewrite ServerRoot and */
+/* replace every occurrence of the baked build-root with our chosen root, so  */
+/* nothing points at a directory that does not exist on this machine.         */
+/******************************************************************************/
+RewriteServerRoot:
+  Use Strict Arg conf, root
+  fwd = root~changeStr("\", "/")
+
+  -- Derive the factory build-root from DocumentRoot (".../htdocs" -> "...").
+  baked = ""
+  Do While Lines(conf) > 0
+    line = LineIn(conf)
+    If line~strip~caselessAbbrev("DocumentRoot") Then Do
+      Parse Var line . '"' path '"' .
+      lp = path~caselessLastPos("/htdocs")
+      If lp > 0 Then baked = path~left(lp - 1)
+      Leave
+    End
+  End
+  Call Stream conf, "C", "Close"
+
+  -- Rewrite: ServerRoot line explicitly, plus any baked build-root anywhere.
+  lines = .array~new
+  Do While Lines(conf) > 0
+    line = LineIn(conf)
+    If line~strip~caselessAbbrev("ServerRoot") Then
+      line = 'ServerRoot "'fwd'"'
+    Else If baked \== "", baked \== fwd Then
+      line = line~changeStr(baked, fwd)
+    lines~append(line)
+  End
+  Call Stream conf, "C", "Close"
+
+  Call Stream conf, "C", "Open Write Replace"
+  Do line Over lines
+    Call LineOut conf, line
+  End
+  Call Stream conf, "C", "Close"
+  Return
+
+/******************************************************************************/
+/* Resources: the files this installer generates.                            */
+/******************************************************************************/
+
+-- The Include fragment. It enables the two modules (they ship commented out
+-- in httpd.conf, so we LoadModule them here rather than editing that file),
+-- declares the handler pointing straight at RexxHTTP.rex (no wrapper on
+-- Windows), and whitelists a single rexxlet named "index" in the document
+-- root with DirectoryIndex. ${SRVROOT} resolves to the rewritten ServerRoot.
+::Resource RexxHTTPConf
+# RexxHTTP drop-in configuration (Windows / Apache Lounge).
+# Included from httpd.conf by install\InstallWindows.rex.
+
+LoadModule cgi_module modules/mod_cgi.so
+LoadModule actions_module modules/mod_actions.so
+
+# Give Apache a name so it stops emitting AH00558 ("Could not reliably
+# determine the server's fully qualified domain name") at start/stop.
+ServerName localhost
+
+# On Windows Apache runs RexxHTTP.rex directly via its #!rexx shebang;
+# the handler points straight at the processor (no wrapper).
+Action RexxHTTP /cgi-bin/RexxHTTP.rex
+
+<Directory "C:/Apache24/htdocs">
+    DirectoryIndex index
+    <Files "index">
+        SetHandler RexxHTTP
+    </Files>
+</Directory>
+::END
+
+::Requires "InstallHelpers.cls"

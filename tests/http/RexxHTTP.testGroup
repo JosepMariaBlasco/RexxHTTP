@@ -1,7 +1,7 @@
 #!/usr/bin/env rexx
 /******************************************************************************/
 /*                                                                            */
-/* RexxHTTP.testGroup - Integration tests for the RexxHTTP servlet processor  */
+/* RexxHTTP.testGroup - Integration tests for the RexxHTTP rexxlet processor  */
 /* ========================================================================   */
 /*                                                                            */
 /* This file is part of the RexxHTTP package                                  */
@@ -13,10 +13,10 @@
 /*                                                                            */
 /* These tests exercise the RexxHTTP pipeline end-to-end via Apache + curl:   */
 /* a request goes through Apache to the wrapper, which Calls RexxHTTP.rex,     */
-/* which runs the servlet; the generated response is then verified.           */
+/* which runs the rexxlet; the generated response is then verified.           */
 /*                                                                            */
 /* They require a running Apache with the RexxHTTP pipeline configured and     */
-/* the fixtures from fixtures/ deployed as servlets. Run via:                  */
+/* the fixtures from fixtures/ deployed as rexxlets. Run via:                  */
 /*   rexx tests/http/RunHTTPTests.rex                                          */
 /*                                                                            */
 /* Version history:                                                           */
@@ -42,7 +42,7 @@ Else
 
 /******************************************************************************/
 /* Class-level configuration: base URL and the path under which the fixture   */
-/* servlets are served. Both are overridable from the environment so the      */
+/* rexxlets are served. Both are overridable from the environment so the      */
 /* runner can point the suite at whatever deployment it set up. Defaults       */
 /* match the v4 montage (fixtures deployed under /test/).                      */
 /******************************************************************************/
@@ -60,7 +60,7 @@ Else
   self~fixturePath = fp
 
 /******************************************************************************/
-/* Helper: build the full URL for a fixture servlet (plus optional query).    */
+/* Helper: build the full URL for a fixture rexxlet (plus optional query).    */
 /******************************************************************************/
 
 ::Method url
@@ -95,7 +95,7 @@ Else
     "hola body has no CR (LF-only body convention)")
 
 /******************************************************************************/
-/* Content type override: a servlet may set text/html.                        */
+/* Content type override: a rexxlet may set text/html.                        */
 /******************************************************************************/
 
 ::Method test_htmltype_content_type
@@ -120,7 +120,7 @@ Else
 ::Method test_get_arg_duplicate_rejected
   -- Strict policy (REXXHTTP_ARGPOLICY, the 1.0 default): a repeated name
   -- (caseless) is a malformed query string and is rejected with 400
-  -- before the servlet runs.
+  -- before the rexxlet runs.
   r = self~httpGet(self~url("multi?a=1&b=2&a=3"))
   self~assertEquals("400", r~entry("status"), -
     "GET args: duplicate name rejected with 400 under strict policy")
@@ -176,7 +176,7 @@ Else
     "POST: request~method reports POST")
 
 ::Method test_post_unconsumed_body_completes
-  -- Regression test for the stdin drain: a POST with a body to a servlet
+  -- Regression test for the stdin drain: a POST with a body to a rexxlet
   -- that never reads its args must still return a complete response. hola
   -- ignores the body entirely.
   r = self~httpPost(self~url("hola"), "ignored=payload")
@@ -315,7 +315,7 @@ Else
 
 ::Method test_badck_renders_error_page
   -- An inconsistent cookie (SameSite=None without Secure) now raises inside
-  -- the servlet, at addcookie time, so RexxHTTP's own error page renders
+  -- the rexxlet, at addcookie time, so RexxHTTP's own error page renders
   -- rather than Apache's bare 500.
   r = self~httpGet(self~url("badck"))
   self~assertContains(r~entry("body"), "Internal server error", -
@@ -328,7 +328,7 @@ Else
 
 ::Method test_badck_traceback_in_addcookie
   -- The traceback must show the failure surfacing at addcookie, confirming
-  -- the validation now happens inside the servlet, not at commit.
+  -- the validation now happens inside the rexxlet, not at commit.
   r = self~httpGet(self~url("badck"))
   self~assertContains(r~entry("body"), "addcookie", -
     "badck traceback surfaces through addcookie")
@@ -384,7 +384,7 @@ Else
     "partial flush: response is 200")
 
 /******************************************************************************/
-/* Error page (runtime error inside a servlet): boom.                         */
+/* Error page (runtime error inside a rexxlet): boom.                         */
 /******************************************************************************/
 
 ::Method test_boom_error_page
@@ -394,7 +394,7 @@ Else
 
 ::Method test_boom_sanitised_path
   -- The error page trims DOCUMENT_ROOT from the program path (v4): the
-  -- servlet shows as /test/boom, not the full filesystem path.
+  -- rexxlet shows as /test/boom, not the full filesystem path.
   r = self~httpGet(self~url("boom"))
   self~assertContains(r~entry("body"), "/test/boom", -
     "boom error page shows the DOCUMENT_ROOT-relative path")
@@ -402,7 +402,7 @@ Else
 /******************************************************************************/
 /* Argument policy (REXXHTTP_ARGPOLICY). strict is the 1.0 default and only   */
 /* recognised value. Malformed query strings are rejected with 400 before the */
-/* servlet runs; an unknown policy value is a 500 config error. The qs fixture */
+/* rexxlet runs; an unknown policy value is a 500 config error. The qs fixture */
 /* runs under the default (no SetEnv); polstrict/polbad carry a SetEnv block.  */
 /******************************************************************************/
 
@@ -478,11 +478,11 @@ Else
 
 ::Method test_policy_setenv_strict_honoured
   -- polstrict carries SetEnv REXXHTTP_ARGPOLICY Strict (caseless). The
-  -- value must reach the servlet through the Action sub-request, so a
+  -- value must reach the rexxlet through the Action sub-request, so a
   -- duplicate is still rejected.
   r = self~httpGet(self~url("polstrict?a=1&a=2"))
   self~assertEquals("400", r~entry("status"), -
-    "SetEnv strict reaches the servlet (via REDIRECT_) and is honoured")
+    "SetEnv strict reaches the rexxlet (via REDIRECT_) and is honoured")
 
 ::Method test_policy_setenv_bad_is_500
   -- polbad carries SetEnv REXXHTTP_ARGPOLICY disparate: an unknown value
@@ -498,13 +498,13 @@ Else
     "strict: a duplicate in a POST body is also rejected with 400")
 
 /******************************************************************************/
-/* 404: a direct call to the processor, and a nonexistent servlet.            */
+/* 404: a direct call to the processor, and a nonexistent rexxlet.            */
 /******************************************************************************/
 
 /******************************************************************************/
 /* Note on the direct-call 404                                                */
 /* --------------------------                                                 */
-/* RexxHTTP.rex guards against being run as a servlet itself (Direct() -> a   */
+/* RexxHTTP.rex guards against being run as a rexxlet itself (Direct() -> a   */
 /* 404). That guard is genuine, but it is not exercised here: in this montage */
 /* a request to /RexxHTTP/RexxHTTP.rex is intercepted by the ScriptAlias and  */
 /* the kernel tries to exec the .rex directly, which fails on the CRLF        */
@@ -782,7 +782,7 @@ Else
 
 /******************************************************************************/
 /* Encoding family: the four encoders (Response) and two decoders (Request),  */
-/* exercised through the instance accessor — the idiomatic servlet path,      */
+/* exercised through the instance accessor — the idiomatic rexxlet path,      */
 /* which delegates to the class method. The enc fixture runs each on a string */
 /* chosen to bite: reserved chars, space, tilde, quotes. encodeURI must keep  */
 /* the reserved chars a formed URL needs; encodeURIComponent must escape them; */

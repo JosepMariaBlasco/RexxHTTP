@@ -1,0 +1,562 @@
+#!/usr/bin/env rexx
+/******************************************************************************/
+/*                                                                            */
+/* Mac.install - Installer for RexxHTTP on macOS (Homebrew)                   */
+/* ========================================================                   */
+/*                                                                            */
+/* This file is part of the RexxHTTP package                                  */
+/* [See https://rexx.epbcn.com/rexxhttp/]                                     */
+/*                                                                            */
+/* Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>  */
+/*                                                                            */
+/* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
+/*                                                                            */
+/* Installs RexxHTTP on a CLEAN macOS machine, following the recipe of the    */
+/* manual's Installation chapter. It installs the Homebrew httpd formula,     */
+/* deploys the six source files to Homebrew's cgi-bin, enables the RexxHTTP   */
+/* handler (and, defensively, the cgid/actions modules) through an Include    */
+/* fragment, plants a minimal index rexxlet, starts httpd and smoke-tests it. */
+/*                                                                            */
+/* macOS specifics handled here (verified against a real install log):        */
+/*   - Paths come from `brew --prefix` (/opt/homebrew on Apple Silicon,       */
+/*     /usr/local on Intel); conf, cgi-bin and docroot derive from it.        */
+/*   - Homebrew's httpd listens on port 8080, not 80, so it runs without root.*/
+/*     The smoke test and the success message use :8080 accordingly.          */
+/*   - The cgid/actions modules already ship enabled in the current formula,  */
+/*     so the fragment loads them only inside <IfModule> guards, to avoid a   */
+/*     "module already loaded" error while still covering a build that didn't.*/
+/*   - As on Linux, there IS a wrapper, and it needs the execute bit; the     */
+/*     package is built on Windows and arrives without it.                    */
+/*                                                                            */
+/* Prerequisites the installer checks but does NOT install:                   */
+/*   - ooRexx 5.3.0 or later (out of scope; from the ooRexx project).         */
+/*   - Homebrew itself. If absent, the installer stops with the link rather   */
+/*     than run Homebrew's remote install script unattended.                  */
+/*   - curl (ships with macOS). Used for the smoke test.                      */
+/*                                                                            */
+/* This first version targets the CLEAN-MACHINE case. If the Homebrew httpd   */
+/* formula is already installed, it STOPS and does nothing, rather than       */
+/* disturb a server the user set up for something else.                       */
+/*                                                                            */
+/* Version history:                                                           */
+/*                                                                            */
+/* Date     Version Details                                                   */
+/* -------- ------- --------------------------------------------------------- */
+/* 20260630    1.0  First version.                                            */
+/*                                                                            */
+/******************************************************************************/
+
+--------------------------------------------------------------------------------
+-- Platform guard                                                             --
+--------------------------------------------------------------------------------
+
+  -- The exact string .RexxInfo~platform returns on macOS needs confirming on a
+  -- real Mac (it is NOT "WINDOWS"-style guessable; on Windows it is
+  -- "WindowsNT", not "WINDOWS"). Rather than gamble on the spelling, reject the
+  -- platforms we DO know are not macOS, and let anything else through: the
+  -- Homebrew check in step 3 is the real gate (no brew, no install).
+  plat = .RexxInfo~platform
+  If plat == "LINUX" Then Do
+    Say "ERROR: this is Linux. Use InstallLinux.rex instead."
+    Return 1
+  End
+  If plat~caselessContains("WINDOWS") Then Do
+    Say "ERROR: this is Windows. Use InstallWindows.rex instead."
+    Return 1
+  End
+
+--------------------------------------------------------------------------------
+-- Locate the sources (src/ is a sibling of this install/ directory)          --
+--------------------------------------------------------------------------------
+
+  sep = .File~separator
+  srcDir = .File~new(.Context~package~name)~parentFile~parent || sep"src"
+
+  -- The six files that make up a Unix installation: the five sources plus
+  -- the LF wrapper Apache execs (which Calls RexxHTTP.rex beside it).
+  sources = "HTTP.Request.cls HTTP.Response.cls HTTP.OutputStream.cls" -
+            "HTTP.Cookie.cls RexxHTTP.rex RexxHTTP_wrapper"
+
+--------------------------------------------------------------------------------
+-- Argument parsing                                                           --
+--------------------------------------------------------------------------------
+
+  Use Strict Arg opts
+  assumeYes  = opts~assumeYes
+  uninstall  = (opts~mode == "uninstall")
+  keepApache = opts~keepApache
+
+  If uninstall Then
+    Return Uninstall(assumeYes, keepApache, srcDir, sep, sources)
+
+  Say
+  Say "RexxHTTP Installer for macOS (Homebrew)"
+  Say "========================================"
+  Say
+  Say "Sources directory:" srcDir
+  Say
+
+--------------------------------------------------------------------------------
+-- Step 1: Require curl                                                        --
+--------------------------------------------------------------------------------
+
+  Say "Checking for curl..."
+  If SysCmd("curl --version >/dev/null 2>&1") \== 0 Then Do
+    Say "  ERROR: curl not found. It ships with macOS; this installer needs it"
+    Say "  for the smoke test. Make sure it is on PATH and try again."
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 2: Check ooRexx (installing it is out of scope)                        --
+--------------------------------------------------------------------------------
+
+  Say "Checking ooRexx..."
+  If SysCmd("rexx -v >/dev/null 2>&1") \== 0 Then Do
+    Say "  ERROR: ooRexx is not installed or not in PATH."
+    Say "  RexxHTTP needs ooRexx 5.3.0 or later, from the Open Object Rexx"
+    Say "  project: https://sourceforge.net/projects/oorexx/"
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 3: Require Homebrew (detect and advise; do not install it)            --
+--------------------------------------------------------------------------------
+
+  Say "Checking for Homebrew..."
+  If SysCmd("brew --version >/dev/null 2>&1") \== 0 Then Do
+    Say "  ERROR: Homebrew (brew) is not installed or not in PATH."
+    Say "  This installer uses Homebrew to install Apache. Install Homebrew"
+    Say "  first, from https://brew.sh/, then re-run this installer."
+    Return 1
+  End
+  Say "  OK."
+
+  -- All macOS paths derive from the Homebrew prefix.
+  prefix = CaptureLine("brew --prefix")
+  If prefix == "" Then Do
+    Say "  ERROR: could not read 'brew --prefix'."
+    Return 1
+  End
+  cgiBinDir = prefix"/var/www/cgi-bin"
+  docRoot   = prefix"/var/www"
+  confFile  = prefix"/etc/httpd/httpd.conf"
+  extraConf = prefix"/etc/httpd/extra/rexxhttp.conf"
+  indexFile = docRoot"/index"
+
+--------------------------------------------------------------------------------
+-- Step 4: Stop if the httpd formula is already installed (clean-machine)      --
+--------------------------------------------------------------------------------
+
+  Say "Checking that Homebrew httpd is NOT already installed..."
+  If SysCmd("brew list httpd >/dev/null 2>&1") == 0 Then Do
+    Say
+    Say "  STOP: the Homebrew httpd formula is already installed."
+    Say "  This first version of the installer only operates on a clean"
+    Say "  machine: it will not touch an Apache that is already here, to avoid"
+    Say "  disturbing a setup made for something else. Nothing was changed."
+    Say "  To install RexxHTTP onto this existing Apache, follow the recipe in"
+    Say "  the manual's Installation chapter by hand."
+    Return 1
+  End
+
+  -- Beyond the Homebrew httpd formula, refuse if anything else already holds
+  -- port 8080 -- the port this installer runs Apache on (Homebrew serves
+  -- unprivileged there). lsof filters by port and LISTEN state itself, so a
+  -- non-empty result means 8080 is taken. If lsof is missing or silent we do
+  -- not block on a guess; the formula check above is the real gate.
+  If CmdOutputHas("lsof -nP -iTCP:8080 -sTCP:LISTEN 2>/dev/null", "LISTEN") Then Do
+    Say
+    Say "  STOP: something is already listening on TCP port 8080."
+    Say "  That is the port this installer runs Apache on. Free it (or use a"
+    Say "  machine where it is free) and re-run. Nothing was changed."
+    Return 1
+  End
+
+  Say "  OK (clean machine)."
+
+--------------------------------------------------------------------------------
+-- Step 5: Confirm before making changes                                      --
+--------------------------------------------------------------------------------
+
+  Say
+  Say "About to install, under the Homebrew prefix" prefix":"
+  Say "  - Apache (brew install httpd), listening on port 8080"
+  Say "  - RexxHTTP sources -> " || cgiBinDir
+  Say "  - config fragment  -> " || extraConf
+  Say "  - smoke-test rexxlet -> " || indexFile
+  Say
+  If \assumeYes Then
+    If \Ask("Proceed?") Then Do
+      Say "Aborted. Nothing was changed."
+      Return 1
+    End
+
+--------------------------------------------------------------------------------
+-- Step 6: Install Apache                                                      --
+--------------------------------------------------------------------------------
+
+  Say
+  Say "Installing Apache (brew install httpd)..."
+  If SysCmd("brew install httpd 2>&1") \== 0 Then Do
+    Say "  ERROR: 'brew install httpd' failed."
+    Return 1
+  End
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 7: Deploy the six sources to cgi-bin                                  --
+--------------------------------------------------------------------------------
+
+  Say "Deploying sources to" cgiBinDir"..."
+  Address System "mkdir -p" '"'cgiBinDir'"'
+  Do src Over sources~makeArray(" ")
+    Address System "cp" '"'srcDir || sep || src'"' '"'cgiBinDir'"'
+    If RC \== 0 Then Do
+      Say "  ERROR: failed to copy" src
+      Return 1
+    End
+  End
+  -- As on Linux, the wrapper must be executable; it arrives without the bit.
+  Address System "chmod +x" '"'cgiBinDir'/RexxHTTP_wrapper"'
+
+  -- Apache runs CGIs with a minimal PATH that need not contain rexx. On macOS
+  -- a self-built ooRexx typically lives outside that PATH (e.g. under
+  -- /Users/Shared/...), so the wrapper's "#!/usr/bin/env rexx" shebang fails
+  -- with "env: rexx: No such file or directory". Pin the shebang to the
+  -- absolute rexx we run under, rewriting only the deployed copy.
+  Call PinShebang cgiBinDir"/RexxHTTP_wrapper"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 8: Write the RexxHTTP Include fragment and reference it              --
+--------------------------------------------------------------------------------
+
+  Say "Writing config fragment" extraConf"..."
+  frag = .Resources~RexxHTTPConf~makeString("L", "0A"x)
+  frag = frag~changeStr("%docRoot%", docRoot)
+  Call CharOut extraConf, frag
+  Call Stream extraConf, "C", "Close"
+
+  -- Append a single Include to httpd.conf (additive, reversible). We use the
+  -- ABSOLUTE path to the fragment: Homebrew's ServerRoot is its opt/httpd
+  -- directory (a symlink into the Cellar), NOT etc/httpd, so a relative
+  -- "Include extra/rexxhttp.conf" resolves against opt/httpd/extra and fails
+  -- with "No such file or directory". The absolute path sidesteps that.
+  Say "Adding Include to httpd.conf..."
+  Call LineOut confFile, ""
+  Call LineOut confFile, "# RexxHTTP: handler and (guarded) module loads."
+  Call LineOut confFile, "Include" extraConf
+  Call Stream confFile, "C", "Close"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 9: Plant the smoke-test index rexxlet                                 --
+--------------------------------------------------------------------------------
+
+  Say "Planting smoke-test rexxlet" indexFile"..."
+  index = SmokeTest()~makeString
+  Call CharOut indexFile, index
+  Call Stream indexFile, "C", "Close"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 9b: Deploy the bundled example rexxlets                               --
+--------------------------------------------------------------------------------
+-- The welcome page planted above links to these. examples/ is a sibling of
+-- src/ in the distribution; each is a rexxlet at examples/<name>/index copied
+-- to docRoot/examples/<name>/index. The <Files "index"> handler in the conf
+-- fragment matches by basename across the whole document tree, so these run
+-- as rexxlets with no per-directory configuration of their own.
+
+  examplesSrc = .File~new(.Context~package~name)~parentFile~parent || sep"examples"
+  Say "Deploying example rexxlets to" docRoot"/examples..."
+  Do name Over ExampleDirs()~makeArray(" ")
+    Address System "mkdir -p" '"'docRoot"/examples/"name'"'
+    Address System "cp" '"'examplesSrc || sep || name || sep"index"'"' -
+                        '"'docRoot"/examples/"name"/index"'"'
+    If RC \== 0 Then Do
+      Say "  ERROR: failed to copy example" name
+      Return 1
+    End
+  End
+  -- Plant an index at examples/ itself, so /examples/ returns this listing
+  -- instead of Apache's default directory index.
+  eIndexFile = docRoot"/examples/index"
+  Call CharOut eIndexFile, ExamplesIndex()~makeString
+  Call Stream eIndexFile, "C", "Close"
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 10: Start Apache                                                      --
+--------------------------------------------------------------------------------
+
+  Say "Starting Apache (brew services start httpd)..."
+  Call SysCmd "brew services start httpd 2>&1"
+  Call SysSleep 1.5
+  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 11: Smoke test (Homebrew listens on 8080)                            --
+--------------------------------------------------------------------------------
+
+  Say "Smoke test (curl http://localhost:8080/)..."
+  out = .Array~new
+  Address System "curl -s --noproxy localhost http://localhost:8080/" -
+    With Output Using (out) Error Using (.Array~new)
+  body = ""
+  Do l Over out
+    body = body || l
+  End
+
+  Say
+  If body~caselessContains("Welcome to RexxHTTP") Then Do
+    Say "============================================================"
+    Say " SUCCESS: a minimal RexxHTTP installation is up and running."
+    Say "============================================================"
+    Say
+    Say " Open it in a browser at:  http://localhost:8080/"
+    Say " or from the command line:  curl http://localhost:8080/"
+    Say
+    Say " The welcome page links to a set of example rexxlets you can"
+    Say " explore. They are small Rexx programs; follow a link to see"
+    Say " each one run."
+    Say
+    Say " The official RexxHTTP documentation is at:"
+    Say "   https://rexx.epbcn.com/rexxhttp/"
+    Say
+    Return 0
+  End
+  Else Do
+    Say "============================================================"
+    Say " WARNING: install finished, but the smoke test did not return"
+    Say " the expected output. http://localhost:8080/ returned:"
+    Say "   " || body~strip~left(200)
+    Say " Check" prefix"/var/log/httpd/error_log and the config fragment."
+    Say "============================================================"
+    Return 1
+  End
+
+/******************************************************************************/
+/* Uninstall: remove what the installer put here. By default this is          */
+/* symmetric with the clean-machine install -- it also runs                   */
+/* `brew uninstall httpd`, returning the machine to its pre-install state.     */
+/* With keepApache it retires ONLY RexxHTTP (the Include line, the fragment,   */
+/* the cgi-bin sources, the index rexxlet) and leaves the httpd formula        */
+/* installed and running: the "coexist" path.                                  */
+/*                                                                            */
+/* Self-contained: it does its own brew check and prefix read, so it does not  */
+/* depend on the install flow (which would otherwise stop on an httpd that is  */
+/* already present -- exactly the state an uninstall needs).                   */
+/******************************************************************************/
+Uninstall: Procedure
+  Use Strict Arg assumeYes, keepApache, srcDir, sep, sources
+
+  Say
+  Say "RexxHTTP Uninstaller for macOS (Homebrew)"
+  Say "=========================================="
+  Say
+
+  If SysCmd("brew --version >/dev/null 2>&1") \== 0 Then Do
+    Say "ERROR: Homebrew (brew) is not installed or not in PATH."
+    Say "Nothing to uninstall."
+    Return 1
+  End
+
+  If SysCmd("brew list httpd >/dev/null 2>&1") \== 0 Then Do
+    Say "The Homebrew httpd formula is not installed. Nothing to uninstall."
+    Return 0
+  End
+
+  prefix = CaptureLine("brew --prefix")
+  If prefix == "" Then Do
+    Say "ERROR: could not read 'brew --prefix'."
+    Return 1
+  End
+  cgiBinDir = prefix"/var/www/cgi-bin"
+  docRoot   = prefix"/var/www"
+  confFile  = prefix"/etc/httpd/httpd.conf"
+  extraConf = prefix"/etc/httpd/extra/rexxhttp.conf"
+  indexFile = docRoot"/index"
+
+  Say "About to remove, under the Homebrew prefix" prefix":"
+  Say "  - the RexxHTTP Include line from" confFile
+  Say "  - the config fragment" extraConf
+  Say "  - the RexxHTTP sources from" cgiBinDir
+  Say "  - the smoke-test rexxlet" indexFile
+  If \keepApache Then
+    Say "  - Apache itself (brew uninstall httpd), to undo the install"
+  Else
+    Say "  - (Apache is kept: --keep-apache)"
+  Say
+  If \assumeYes Then
+    If \Ask("Proceed?") Then Do
+      Say "Aborted. Nothing was changed."
+      Return 1
+    End
+
+  -- Stop httpd before touching its files (ignore failure: it may be down).
+  Say
+  Say "Stopping Apache (brew services stop httpd)..."
+  Call SysCmd "brew services stop httpd >/dev/null 2>&1"
+  Call SysSleep 1
+  Say "  OK."
+
+  -- 1. Strip the Include line (and our comment above it) from httpd.conf.
+  Say "Removing the RexxHTTP Include from" confFile"..."
+  Call StripInclude confFile
+  Say "  OK."
+
+  -- 2. Delete the fragment.
+  Say "Removing the config fragment" extraConf"..."
+  Address System "rm -f" '"'extraConf'"'
+  Say "  OK."
+
+  -- 3. Delete the deployed sources from cgi-bin.
+  Say "Removing sources from" cgiBinDir"..."
+  Do src Over sources~makeArray(" ")
+    Address System "rm -f" '"'cgiBinDir"/"src'"'
+  End
+  Say "  OK."
+
+  -- 4. Delete the smoke-test rexxlet.
+  Say "Removing smoke-test rexxlet" indexFile"..."
+  Address System "rm -f" '"'indexFile'"'
+  Say "  OK."
+
+  -- 4b. Delete the bundled example rexxlets.
+  Say "Removing example rexxlets" docRoot"/examples..."
+  Address System "rm -rf" '"'docRoot"/examples"'"'
+  Say "  OK."
+
+  If keepApache Then Do
+    -- Coexist path: restart httpd so it forgets the handler, and stop here.
+    Say "Restarting Apache (without the RexxHTTP config)..."
+    Call SysCmd "brew services start httpd >/dev/null 2>&1"
+    Call SysSleep 1
+    Say "  OK."
+    Say
+    Say "============================================================"
+    Say " RexxHTTP removed. The Homebrew httpd formula is still"
+    Say " installed and running."
+    Say "============================================================"
+    Return 0
+  End
+
+  -- Symmetric uninstall: remove the httpd formula, as the install added it.
+  Say "Removing Apache (brew uninstall httpd)..."
+  If SysCmd("brew uninstall httpd 2>&1") \== 0 Then Do
+    Say "  WARNING: 'brew uninstall httpd' reported a problem. The RexxHTTP"
+    Say "  files were removed; remove the formula by hand if it remains."
+    Return 1
+  End
+  Say "  OK."
+
+  Say
+  Say "============================================================"
+  Say " RexxHTTP and the Homebrew httpd formula removed. The machine"
+  Say " is back to its pre-install state."
+  Say "============================================================"
+  Return 0
+
+/******************************************************************************/
+/* StripInclude: rewrite httpd.conf without the two lines the installer       */
+/* appended -- the "# RexxHTTP: ..." comment and the "Include ...rexxhttp"     */
+/* line -- and nothing else. Matching is by content, not position, so a        */
+/* hand-edited conf is handled too. Idempotent.                                */
+/******************************************************************************/
+StripInclude: Procedure
+  Use Strict Arg conf
+  kept = .Array~new
+  Do While Lines(conf) > 0
+    line = LineIn(conf)
+    low  = Lower(line~strip)
+    If low~abbrev("# rexxhttp:") Then Iterate
+    If low~abbrev("include"), low~contains("rexxhttp") Then Iterate
+    kept~append(line)
+  End
+  Call Stream conf, "C", "Close"
+
+  Call Stream conf, "C", "Open Write Replace"
+  Do line Over kept
+    Call LineOut conf, line
+  End
+  Call Stream conf, "C", "Close"
+  Return
+
+/******************************************************************************/
+/* CaptureLine: run a command, return its first line of stdout (stripped).   */
+/******************************************************************************/
+CaptureLine:
+  Use Strict Arg command
+  out = .Array~new
+  Address System command With Output Using (out) Error Using (.Array~new)
+  If out~items > 0 Then Return out[1]~strip
+  Return ""
+
+/******************************************************************************/
+/* PinShebang: rewrite the deployed wrapper's first line from                 */
+/* "#!/usr/bin/env rexx" to "#!<absolute rexx>", so it does not depend on     */
+/* Apache's PATH. Resolves rexx with SysSearchPath (the same rexx running     */
+/* this installer). On Homebrew the cgi-bin is user-owned, so no sudo is      */
+/* needed. If rexx cannot be resolved, leaves the wrapper untouched.          */
+/******************************************************************************/
+PinShebang: Procedure
+  Use Strict Arg wrapper
+  rexxPath = SysSearchPath("PATH", "rexx")
+  If rexxPath == "" Then Return          -- cannot resolve; leave env shebang
+
+  body = .Array~new
+  Do While Lines(wrapper) > 0
+    body~append(LineIn(wrapper))
+  End
+  Call Stream wrapper, "C", "Close"
+  If body~items == 0 Then Return
+  If body[1]~strip == "#!/usr/bin/env rexx" Then
+    body[1] = "#!"rexxPath
+
+  Call Stream wrapper, "C", "Open Write Replace"
+  Do line Over body
+    Call LineOut wrapper, line
+  End
+  Call Stream wrapper, "C", "Close"
+  Address System "chmod +x" '"'wrapper'"'
+  Return
+
+/******************************************************************************/
+/* Resources: the files this installer generates.                            */
+/******************************************************************************/
+
+-- The Include fragment. The cgid/actions modules already ship enabled in the
+-- current Homebrew formula, so they are loaded only inside <IfModule> guards:
+-- if already present, the guard is false and nothing happens; if a build ever
+-- shipped them off, the guard loads them. The handler points at the wrapper
+-- (Unix), and a single "index" rexxlet is whitelisted in the document root.
+::Resource RexxHTTPConf
+# RexxHTTP drop-in configuration (macOS / Homebrew).
+# Included from httpd.conf by install/InstallMac.rex.
+
+<IfModule !cgid_module>
+    LoadModule cgid_module lib/httpd/modules/mod_cgid.so
+</IfModule>
+<IfModule !actions_module>
+    LoadModule actions_module lib/httpd/modules/mod_actions.so
+</IfModule>
+
+# Give Apache a name so it stops emitting AH00558 ("Could not reliably
+# determine the server's fully qualified domain name") at start/stop.
+ServerName localhost
+
+Action RexxHTTP /cgi-bin/RexxHTTP_wrapper
+
+<Directory "%docRoot%">
+    DirectoryIndex index
+    <Files "index">
+        SetHandler RexxHTTP
+    </Files>
+</Directory>
+::END
+
+::Requires "InstallHelpers.cls"

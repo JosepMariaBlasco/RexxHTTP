@@ -11,7 +11,7 @@
 /* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
 /*                                                                            */
 /* Provides HTTP helpers (curl-backed) plus body/header assertions for the    */
-/* RexxHTTP servlet-processor integration tests. Modelled on the Rexx Parser  */
+/* RexxHTTP rexxlet-processor integration tests. Modelled on the Rexx Parser  */
 /* CGITestCase, extended to capture response headers (Set-Cookie, lazy        */
 /* headers, Content-Type), to issue POST requests, and to carry a cookie jar  */
 /* for round-trip tests.                                                      */

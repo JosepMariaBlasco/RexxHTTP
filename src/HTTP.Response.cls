@@ -99,7 +99,7 @@
   domain = Cookie~domain
 
   -- Force validation/serialisation now, while we are still inside the
-  -- servlet, so an inconsistent cookie raises here (and RexxHTTP's error
+  -- rexxlet, so an inconsistent cookie raises here (and RexxHTTP's error
   -- page can render) instead of at commit time, past the point of no
   -- return. makestring memoises its result, so commit will not recompute.
   Cookie~makestring
@@ -200,7 +200,7 @@
 -- A short table covering the codes our apps actually use. A code that is not
 -- in the table falls back to a generic reason for its family (3xx Redirect,
 -- 4xx Client Error, 5xx Server Error), so an unusual code is never rejected;
--- it just gets a decent phrase. The servlet model allows arbitrary status.
+-- it just gets a decent phrase. The rexxlet model allows arbitrary status.
 --
 
 ::Method statusReason
@@ -343,7 +343,7 @@
 -- has not been flushed, and writes a sober HTML5 error page. detail, if
 -- given, is shown (HTML-escaped) as a diagnostic line.
 --
--- Servlet semantics: if the response is already committed, the headers have
+-- Rexxlet semantics: if the response is already committed, the headers have
 -- already gone to the client and the status cannot be changed, so this
 -- raises (the ooRexx equivalent of IllegalStateException). Otherwise it
 -- returns 0, so the one-line idiom "Exit .response~error(404)" works.
@@ -359,7 +359,7 @@
 
   reason = self~statusReason(status)
 
-  -- Discard whatever the servlet had written so far
+  -- Discard whatever the rexxlet had written so far
   output~reset
 
   -- Status and content type as headers; the normal commit emits them

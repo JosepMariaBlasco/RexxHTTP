@@ -115,7 +115,7 @@
 --------------------------------------------------------------------------------
 -- VALIDATE                                                                    --
 --   Force eager parsing of the request arguments and apply the configured     --
---   argument policy. Called by the processor BEFORE the servlet runs, so a    --
+--   argument policy. Called by the processor BEFORE the rexxlet runs, so a    --
 --   policy violation can be reported (400/500) without ceding control.        --
 --   Returns "" if the request is acceptable, or a "code:detail" string:       --
 --     novalue:<token>    a parameter without "="                              --
@@ -154,7 +154,7 @@
   -- Read the POST body eagerly (see ref-decisiones, v6): the old lazy
   -- parsing existed only because mod_rexx's wwwGetArgs committed the
   -- response. With mod_rexx gone, reading stdin does not commit stdout,
-  -- so we read and validate up front, before the servlet runs.
+  -- so we read and validate up front, before the rexxlet runs.
   If self~method == "POST" Then post_string = CharIn(,,self~content_length)
 
   args = .stem~new
@@ -190,7 +190,7 @@
     -- each pair are percent-encoded and "+" means space. Decoding only
     -- the value was a parity bug: arg("user name") could not find a
     -- field sent as user+name. Validate the DECODED name, since that is
-    -- what the servlet sees and keys on.
+    -- what the rexxlet sees and keys on.
     name = self~decodeForm(name)
     If name == "" Then Do
       arg_violation = "noname:"token         -- "=value", empty name
@@ -209,7 +209,7 @@
     End
 
     i = i + 1
-    args[i,"NAME"]  = name                    -- decoded name (v11), as the servlet sees it
+    args[i,"NAME"]  = name                    -- decoded name (v11), as the rexxlet sees it
     args[i,"VALUE"] = self~decodeForm(value)
     args[key]       = i                        -- search key is uppercased
     nargs           = i
@@ -435,7 +435,7 @@
 
 --------------------------------------------------------------------------------
 -- FILENAME                                                                   --
---   NOTE: This returns the full path and filename to the servlet or rsp file.--
+--   NOTE: This returns the full path and filename to the rexxlet or rsp file.--
 --------------------------------------------------------------------------------
 
 ::Method filename
@@ -461,7 +461,7 @@
 
 --------------------------------------------------------------------------------
 -- PATH_TRANSLATED                                                            --
---   NOTE: This returns the full path and filename to the servlet or rsp file.--
+--   NOTE: This returns the full path and filename to the rexxlet or rsp file.--
 --------------------------------------------------------------------------------
 
 ::Method path_translated

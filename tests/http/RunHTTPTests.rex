@@ -13,10 +13,10 @@
 /*                                                                            */
 /* Checks prerequisites (ooRexx, Apache, modules), deploys the five RexxHTTP  */
 /* sources plus a one-line wrapper, configures and starts Apache, deploys the */
-/* fixture servlets with their whitelist, runs the HTTP test suite, then      */
+/* fixture rexxlets with their whitelist, runs the HTTP test suite, then      */
 /* stops Apache and cleans up whatever it created.                            */
 /*                                                                            */
-/* This script targets Linux (including WSL): it uses apt-get and Apache      */
+/* This script targets rexxlet (including WSL): it uses apt-get and Apache    */
 /* paths specific to Debian/Ubuntu.                                           */
 /*                                                                            */
 /* Montage note: the Action points at a one-line LF wrapper that Calls        */
@@ -46,7 +46,7 @@
   sep = .File~separator
 
   If .RexxInfo~platform \== "LINUX" Then Do
-    Say "ERROR: RunHTTPTests.rex requires Linux (including WSL)."
+    Say "ERROR: RunHTTPTests.rex requires rexxlet (including WSL)."
     Say "Current platform:" .RexxInfo~platform
     Return 1
   End
@@ -87,7 +87,7 @@
   sources = "HTTP.Request.cls HTTP.Response.cls HTTP.OutputStream.cls" -
             "HTTP.Cookie.cls RexxHTTP.rex"
 
-  -- The fixture servlets, in whitelist order.
+  -- The fixture rexxlets, in whitelist order.
   fixtures = "hola multi qs check setck readck setckopts badck" -
              "late partial boom htmltype polstrict polbad badnm arrout" -
              "commitfail flushcrash addckfail" -
@@ -224,7 +224,7 @@
     Address System "sudo cp" '"'fixturesDir || sep || fx'"' testDir
   End
 
-  -- Whitelist .htaccess: only the listed files are servlets; the rest are
+  -- Whitelist .htaccess: only the listed files are rexxlets; the rest are
   -- served statically.
   tmpHt = "/tmp/rexxhttp-htaccess.tmp"
   Call Stream tmpHt, "C", "Open Write Replace"

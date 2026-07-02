@@ -22,7 +22,7 @@ End
 Say '<!DOCTYPE html>'
 Say '<html lang="en">'
 Say '  <head>'
-Say "    <title>A simple cookie servlet</title>"
+Say "    <title>A simple cookie rexxlet</title>"
 Say '  </head>'
 Say '  <body>'
 

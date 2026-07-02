@@ -6,7 +6,7 @@ Say .resources~HTML
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>A 'Hello world!' HTML servlet</title>
+    <title>A 'Hello world!' HTML rexxlet</title>
   </head>
   <body>
     <p>
