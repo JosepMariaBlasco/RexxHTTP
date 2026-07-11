@@ -1,0 +1,263 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<chapter id="concepts"><title>Basic Concepts</title>
+<indexterm><primary>concepts</primary></indexterm>
+
+<para>This chapter introduces, from the ground up, the handful of ideas the rest
+of the book takes for granted: what the web is, how a browser and a server talk
+to each other over HTTP, and how CGI lets a program build a page on demand. It
+assumes no prior experience with any of this. A reader already at home with the
+web, HTTP and CGI can skip straight to
+<xref linkend="introduction" xrefstyle="select:title"/>.</para>
+
+<sect1 id="concepts-web"><title>The Web Is a Web</title>
+
+<para>The web is, before anything else, a <emphasis role="italic">web</emphasis>:
+an enormous collection of resources, tied to one another by links. A resource<indexterm><primary>web</primary></indexterm><indexterm><primary>resource</primary></indexterm>
+can be a page of text, but it can just as easily be a picture, a piece of
+music, a video, or a file of any other kind. What makes all of these into a
+<emphasis role="italic">web</emphasis>, rather than a mere pile, is that they
+point at each other.</para>
+
+<para>A pointer from one resource to another is called a
+<emphasis role="bold">hyperlink</emphasis>, or just a link. When you are<indexterm><primary>hyperlink</primary></indexterm><indexterm><primary>link</primary><see>hyperlink</see></indexterm><indexterm><primary>browsing</primary></indexterm>
+reading a page and a word or a picture takes you
+somewhere else when you act on it, you have followed a link. Doing this over
+and over &mdash; jumping from one resource to the next, and from that one to
+another &mdash; is what we call <emphasis role="bold">browsing</emphasis> the
+web, or navigating it. Browsing is nothing more than following links, one after
+another, to wherever you want to go.</para>
+
+</sect1>
+
+<sect1 id="concepts-names"><title>Resources Need Identifiers</title>
+
+<para>To be able to follow links, we need a way to identify what they point at.
+So every resource has an identifier, and since a link has to keep working over
+time and for everyone who follows it, that identifier must always designate the
+same resource.</para>
+
+<para>Such an identifier is called a <emphasis role="bold">URI</emphasis>,
+short for <emphasis role="italic">Uniform Resource Identifier</emphasis>. The<indexterm><primary>URI</primary></indexterm><indexterm><primary>Uniform Resource Identifier</primary><see>URI</see></indexterm>
+<emphasis role="italic">Uniform</emphasis> part means that every identifier
+follows one agreed-upon syntax &mdash; a kind of syntactic protocol &mdash; so
+that the same form serves to name a resource of any kind. Something like
+<literal>http://example.com/photos/sunset.jpg</literal> is a URI. It is the
+identifier of one particular resource, and any link that points at that
+resource carries this identifier inside it. A link, then, is really just a URI
+tucked into a resource, ready to be followed.</para>
+
+<para>Two related initials turn up alongside URI and are worth placing here.
+A <emphasis role="bold">URL</emphasis>, a <emphasis role="italic">Uniform<indexterm><primary>URL</primary></indexterm><indexterm><primary>Uniform Resource Locator</primary><see>URL</see></indexterm>
+Resource Locator</emphasis>, is a URI that identifies a resource by saying where
+to find it &mdash; the sunset above is a URL, because it names a host and a path to
+reach. A <emphasis role="bold">URN</emphasis>, a <emphasis role="italic">Uniform<indexterm><primary>URN</primary></indexterm><indexterm><primary>Uniform Resource Name</primary><see>URN</see></indexterm>
+Resource Name</emphasis>, identifies a resource by name alone, saying nothing about
+where it lives. Both are URIs; the everyday web address is the URL kind, and it is
+the only one this book has any use for. The distinction is worth recognising, not
+worth dwelling on.</para>
+
+<para>A URI <emphasis role="italic">names</emphasis> a resource, but the
+resource itself has to reside somewhere. It resides on a
+<emphasis role="bold">server</emphasis>: a program, running on some computer on<indexterm><primary>server</primary></indexterm>
+the network, that holds resources and hands them out when they are asked for.
+(We will say <emphasis role="italic">resides on</emphasis> and
+<emphasis role="italic">is held</emphasis> for now, as if each resource were
+simply a file sitting on that computer. This is the right picture to start
+with, and we will refine it before the end of this chapter.)</para>
+
+</sect1>
+
+<sect1 id="concepts-browser"><title>The Browser and the Protocol</title>
+
+<para>The resources you want to look at are almost never on your own computer;
+they are out on servers, scattered across the network. Something has to fetch
+them for you and show them to you. That something is a
+<emphasis role="bold">browser</emphasis>. When you ask for a URI, the browser<indexterm><primary>browser</primary></indexterm>
+finds the server named in it, asks that server for the resource, receives it,
+and presents it to you &mdash; as a page, say, with its pictures in place.</para>
+
+<para>For the browser and the server to understand each other, they have to
+speak a common language: a fixed set of rules for <emphasis role="italic">I
+would like this resource, please</emphasis> and <emphasis role="italic">here it
+is</emphasis>. Such a set of rules is called a
+<emphasis role="bold">protocol</emphasis>, and the one the web is built on is<indexterm><primary>protocol</primary></indexterm><indexterm><primary>HTTP</primary></indexterm><indexterm><primary>HyperText Transfer Protocol</primary><see>HTTP</see></indexterm>
+<emphasis role="bold">HTTP</emphasis>, the <emphasis role="italic">HyperText
+Transfer Protocol</emphasis>. Every time you follow a link, your browser is
+using HTTP to ask some server for a resource, and the server is using HTTP to
+answer.</para>
+
+<para>What comes back is often a page, and a page is usually written in
+<emphasis role="bold">HTML</emphasis>, which lays out its structure &mdash; this<indexterm><primary>HTML</primary></indexterm><indexterm><primary>CSS</primary></indexterm><indexterm><primary>JavaScript</primary></indexterm>
+is a heading, this is a paragraph, this is a link. The way the page looks
+&mdash; its colours, its spacing, its fonts &mdash; is chosen separately, using
+<emphasis role="bold">CSS</emphasis>. And anything the page
+<emphasis role="italic">does</emphasis> on its own &mdash; reacting to you,
+changing as you go &mdash; is programmed in
+<emphasis role="bold">JavaScript</emphasis>. Alongside these pages travel all
+the other resources too: plain text files, images, sound, and the rest.</para>
+
+</sect1>
+
+<sect1 id="concepts-origin"><title>Where the Resource Comes From</title>
+
+<para>The earliest servers were <emphasis role="italic">pure</emphasis> servers
+in a very literal sense. A resource was a file, sitting on the server's disk,<indexterm><primary>server</primary><secondary>pure</secondary></indexterm>
+and when a browser asked for it, the server found that file and sent it back
+exactly as it was stored. Ask for <literal>/photos/sunset.jpg</literal>, and you
+get the bytes of <literal>sunset.jpg</literal>. This is still the basic model of
+the web, and it is worth holding on to: at bottom, a server answers a request by
+handing back a resource.</para>
+
+<para>But before long this ran into a wall. Some pages simply cannot be prepared
+in advance, because what they should say depends on something not known until
+the request arrives &mdash; on who is asking, or on the time of day, or on the
+contents of a database that changes every minute. There are far too many
+possible versions to store them all as files, and they will not sit still.</para>
+
+<para>And even when a page <emphasis role="italic">could</emphasis> in principle
+be stored, storing it can be its own trap. Imagine a site of forty thousand
+pages that all share a common look: the same header, the same footer, the same
+colours and logo. The day the company changes its branding, every one of those
+forty thousand files would have to be edited to match. Done by hand, this is
+hopeless; done badly, the site ends up half in the old style and half in the
+new, which is worse than either. The header, the footer, the styling &mdash;
+anything shared across many pages &mdash; really wants to live in
+<emphasis role="italic">one</emphasis> place, and be applied to every page as it
+goes out.</para>
+
+<para>Both of these push in the same direction. What is needed is a way to
+<emphasis role="bold">produce the resource on demand</emphasis>: not to fetch a<indexterm><primary>dynamic content</primary></indexterm>
+file that was prepared in advance, but to <emphasis role="italic">run a
+program</emphasis> that builds the answer at the very moment it is asked
+for.</para>
+
+<para>Several technologies grew up to do exactly this, and one of the oldest and
+most thoroughly proven is <emphasis role="bold">CGI</emphasis>.</para>
+
+</sect1>
+
+<sect1 id="concepts-cgi"><title>CGI, Up Close</title>
+
+<para>CGI &mdash; the <emphasis role="italic">Common Gateway Interface</emphasis>
+&mdash; is itself a <emphasis role="bold">protocol</emphasis>, in exactly the<indexterm><primary>CGI</primary></indexterm><indexterm><primary>Common Gateway Interface</primary><see>CGI</see></indexterm>
+sense we met earlier: an agreed-upon set of rules, this time between a web
+server and a program. The agreement says: <emphasis role="italic">when a request
+arrives for a certain URI, do not look for a file; instead, run this program,
+and let whatever the program produces be the answer.</emphasis> The program is
+no longer a passive file waiting to be sent. It runs, fresh, on every request,
+and its job is to <emphasis role="italic">build</emphasis> the resource.</para>
+
+<para>For this to work, two things have to happen. The server has to tell the
+program everything it needs to know about the request, and the program has to
+hand back a complete answer. CGI settles both, and it settles them using the
+plainest tools a program already has.</para>
+
+<para>First, the request <emphasis role="italic">in</emphasis>. When the server
+runs the program, it places the details of the request into the program's
+<emphasis role="bold">environment variables</emphasis> &mdash; the same ordinary<indexterm><primary>environment variables</primary></indexterm><indexterm><primary>standard input</primary></indexterm>
+variables any program can read from the system it runs in. Which URI was asked
+for, what kind of request it was, who is asking, what browser they are using,
+and dozens of other facts: each one is set as an environment variable with an
+agreed-upon name, ready for the program to read. If the request carries a body
+of data with it &mdash; as it does when someone submits a form &mdash; that body
+is fed to the program through its <emphasis role="bold">standard input</emphasis>,
+the very same input stream a program would read if it were reading from the
+keyboard.</para>
+
+<para>Then, the answer <emphasis role="italic">out</emphasis>. Here CGI is
+wonderfully blunt: whatever the program writes to its
+<emphasis role="bold">standard output</emphasis> &mdash; the same place a program<indexterm><primary>standard output</primary></indexterm>
+prints to when it prints to the screen &mdash; <emphasis role="italic">becomes
+the response</emphasis>. The server takes that output and sends it back to the
+browser as the answer to the request.</para>
+
+<para>But the answer cannot be only the content. The browser, remember, needs to
+know what <emphasis role="italic">kind</emphasis> of thing it is receiving: is
+this an HTML page, a plain text file, a picture? So CGI asks the program to say
+so first. Before writing a single byte of the actual content, the program writes
+a short <emphasis role="bold">header</emphasis> announcing the content's type<indexterm><primary>header</primary></indexterm><indexterm><primary>content type</primary></indexterm>
+&mdash; for an HTML page, a line that amounts to <emphasis role="italic">this is
+HTML</emphasis> &mdash; then a blank line, and only then the content itself.</para>
+
+<para>The smallest complete answer a CGI program can give looks like this:</para>
+
+<programlisting>Content-Type: text/html
+
+Hello, world!</programlisting>
+
+<para>One header line, naming the type of what follows; a blank line, marking
+the end of the headers; and then the content. The header comes first because the
+browser needs to be told what is coming before it arrives.</para>
+
+<para>So the whole shape of a CGI program is this. It starts up. It reads the
+request out of its environment variables, and out of its standard input if there
+is a body. It works out what the answer should be. It writes a header saying
+what kind of answer it is. It writes the answer. It stops. And on the next
+request, it all happens again, from the beginning.</para>
+
+<para>CGI is <emphasis role="bold">language-neutral</emphasis>. Nothing in the
+protocol mentions any particular programming language. Environment variables,<indexterm><primary>CGI</primary><secondary>language-neutral</secondary></indexterm>
+standard input, standard output, and the ability to write a few lines of text
+are things that <emphasis role="italic">every</emphasis> programming language
+has. So a CGI program can be written in anything at all &mdash; and that is a
+large part of why CGI has lasted: it asks almost nothing of the language it is
+written in.</para>
+
+<para>It should be noted that CGI is not a very fast protocol. A brand-new
+program is started for every single request, and starting a program has a cost.
+For a site under tremendous load this cost adds up, and other technologies exist
+that avoid it. But for the great majority of sites &mdash; a small business, a
+personal site, an internal tool, anything that is not straining under millions
+of requests an hour &mdash; CGI is <emphasis role="italic">more than
+enough</emphasis>, and its simplicity is worth far more than the speed it gives
+up. It is easy to understand, easy to write, and it works the same way
+everywhere.</para>
+
+</sect1>
+
+<sect1 id="concepts-going"><title>Where This Is Going</title>
+
+<para>Simple as it is, CGI still leaves a fair amount on your plate. You have to
+reach into the environment variables and pull out the ones you care about, by
+their exact agreed-upon names. You have to read and make sense of the body on
+standard input. You have to remember to write the header before the content, in
+the right form, with the blank line in the right place. None of it is hard, but
+all of it is bookkeeping &mdash; the same bookkeeping, on every program you write
+&mdash; and none of it is the actual work you sat down to do.</para>
+
+<para>This is exactly where RexxHTTP comes in. RexxHTTP takes all of this<indexterm><primary>RexxHTTP</primary></indexterm>
+machinery &mdash; the environment variables, the standard input, the headers,
+the careful order of things &mdash; and handles it for you, so that what you
+write is the part that matters: the program that decides what the answer should
+be. The rest of this book is about writing that program.</para>
+
+</sect1>
+
+</chapter>

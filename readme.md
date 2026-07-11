@@ -43,9 +43,24 @@ Download
 Requirements
 ------------
 
-- [ooRexx](https://www.oorexx.org/) 5.3.0 or later.
-- [Apache](https://httpd.apache.org/) 2.4 or later, with `cgid` and
-  `actions` enabled.
+- [ooRexx](https://www.oorexx.org/) 5.2.0 or later.
+- [Apache](https://httpd.apache.org/) 2.4 or later,
+  with `cgid` and `actions` enabled.
+- (Optional) [Pandoc](https://pandoc.org/), to
+  [render Markdown documents](md/) nicely.
+  Under Windows, Pandoc should be installed for all users.
+
+Installation
+------------
+
+- Automated install, for clean machines: unzip
+  [the distribution package](rexxhttp-latest.zip)
+  in a directory of your choice, and open a console
+  terminal in the `install/` subdirectory (under Windows,
+  you have to open the console as an administrator;
+  under Linux, you will need the `sudo` password),
+  then type `install`.
+- Manual installation: please refer to [the manual](rexxhttp.pdf).
 
 Trying it in an AI assistant
 ----------------------------
@@ -69,11 +84,7 @@ against the code.
 Documentation
 -------------
 
-The manual is in [manual/](manual/). It is written using the
-[RexxPub publishing framework](https://rexx.epbcn.com/rexx-parser/doc/rexxpub/):
-a single Markdown file is rendered as a web page, and this
-same web page produces a print-quality
-manual when printed using the print menu of your browser.
+The manual is in [rexxhttp.pdf](rexxhttp.pdf).
 
 Examples
 --------
@@ -84,17 +95,23 @@ code included).
 Repository layout
 -----------------
 
-- [`src/`](src/) — the processor and its classes (`RexxHTTP.rex`,
-  `HTTP.Request.cls`, `HTTP.Response.cls`, `HTTP.OutputStream.cls`,
-  `HTTP.Cookie.cls`).
-- [`manual/`](manual/) — the manual.
+- `apps/` — An [example page factory](apps/page.cls) used in this site.
+- `css/` — CSS style sheets.
 - [`examples/`](examples/) — the examples.
+- `install/` — Installation files.
+- [`md/`](md/) — The Pandoc-aware Markdown processor.
+- [`src/`](src/) — the processor and its classes
+  ([`RexxHTTP.rex`](src/RexxHTTP.rex),
+  [`HTTP.Request.cls`](src/HTTP.Request.cls),
+  [`HTTP.Response.cls`](src/HTTP.Response.cls),
+  [`HTTP.OutputStream.cls`](src/HTTP.OutputStream.cls),
+  [`HTTP.Cookie.cls`](src/HTTP.Cookie.cls)).
 - [`tests/`](tests/) — the RexxHTTP test suite and a copy of the ooRexx test framework.
 
 Some sites that use RexxHTTP
 ----------------------------
 
-+ [This site](https://rexx.epbcn.com) (<https://rexx.epbcn.com>).
++ [This site](./)
 + [Espacio psicoanalítico de Barcelona](https://www.epbcn.com) (<https://www.epbcn.com>).
 + [La cuadrícula de Cerdà](https://eixample.epbcn.com) (<https://eixample.epbcn.com>).
 + [Blog de Josep Maria Blasco](https://blog.jmblasco.com) (<https://blog.jmblasco.com>).

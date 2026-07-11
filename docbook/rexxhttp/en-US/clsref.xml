@@ -1,0 +1,2542 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<chapter id="clsref"><title>Class Reference</title>
+<indexterm><primary>class reference</primary></indexterm>
+
+<section id="cls-cookie"><title>The <classname>HTTP.Cookie</classname> Class</title>
+<indexterm><primary>HTTP.Cookie</primary></indexterm>
+
+<para>An <classname>HTTP.Cookie</classname> instance represents one cookie the
+response will set: one instance, one <literal>Set-Cookie</literal> header. The
+rexxlet creates the cookie, sets its attributes, and hands it to
+<computeroutput>.response~addcookie</computeroutput>:</para>
+
+<programlisting language="rexx">c = .HTTP.Cookie~new("session", "abc123")
+c~max_age  = 86400
+c~samesite = "Lax"
+c~httponly = 1
+.response~addcookie(c)</programlisting>
+
+<para>This is a response-side class only. Cookies arriving
+<emphasis role="italic">with</emphasis> the request are not
+<classname>HTTP.Cookie</classname> instances; they reach the rexxlet as plain
+name/value pairs through <computeroutput>.request~cookie</computeroutput> (see
+the <classname>HTTP.Request</classname> reference).</para>
+
+<para><classname>HTTP.Cookie</classname> is a modern, RFC 6265 cookie: lifetime
+is expressed with <literal>Max-Age</literal> (the class does not emit
+<literal>Expires</literal>, which survives only for user agents long gone
+&mdash; when both are present, <literal>Max-Age</literal> wins anyway), and the
+<literal>SameSite</literal>, <literal>Secure</literal> and
+<literal>HttpOnly</literal> attributes and the <literal>__Host-</literal> and
+<literal>__Secure-</literal> name prefixes are supported.</para>
+
+<para>The class validates eagerly, so that an invalid cookie fails in the
+rexxlet, never as a <literal>Set-Cookie</literal> line the browser silently
+discards. An invalid <emphasis role="italic">name</emphasis> is rejected at
+creation. Rules that involve <emphasis role="italic">several</emphasis>
+attributes are checked when the cookie is serialised &mdash; in practice, at
+<methodname>addcookie</methodname> &mdash; so that attributes may be set in any
+order.</para>
+
+
+<section id="cls-cookie-consistency"><title>Consistency Rules</title>
+
+<para>A cookie must satisfy all of these to serialise:</para>
+
+<itemizedlist>
+<listitem><para><literal>SameSite=None</literal> requires
+<literal>Secure</literal>.</para></listitem>
+<listitem><para>A name with the <literal>__Secure-</literal> prefix requires
+<literal>Secure</literal>.</para></listitem>
+<listitem><para>A name with the <literal>__Host-</literal> prefix requires
+<literal>Secure</literal>, <literal>Path=/</literal>, and no
+<literal>Domain</literal>.</para></listitem>
+</itemizedlist>
+
+<para>Prefix matching is case-insensitive, mirroring what user agents do:
+<literal>__host-</literal> is <literal>__Host-</literal>.</para>
+
+</section>
+
+<section id="cls-cookie-new"><title><methodname>new</methodname></title>
+<indexterm><primary>new method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>new method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_class_new.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Creates a cookie named <replaceable>name</replaceable> with the given
+<replaceable>value</replaceable> (default: the null string &mdash; a cookie with
+a name and an empty value). The name is validated at once: it must be a token
+&mdash; no control characters, spaces, or separators &mdash; or creation raises.
+Everything else defaults to the quietest setting; set the attributes needed
+afterwards.</para>
+
+</section>
+
+<section id="cls-cookie-domain"><title><methodname>domain</methodname></title>
+<indexterm><primary>domain method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>domain method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_domain.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The <literal>Domain</literal> attribute, emitted as given. The default, the
+null string, omits the attribute. A <literal>__Host-</literal> cookie must not
+set one.</para>
+
+</section>
+
+<section id="cls-cookie-domain-set"><title><methodname>domain=</methodname></title>
+<indexterm><primary>domain= method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>domain= method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_domainset.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Sets the <literal>Domain</literal> attribute; see
+<xref linkend="cls-cookie-domain" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-cookie-httponly"><title><methodname>httponly</methodname></title>
+<indexterm><primary>httponly method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>httponly method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_httponly.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The <literal>HttpOnly</literal> attribute: <literal>1</literal> emits it,
+<literal>0</literal> &mdash; the default &mdash; does not.</para>
+
+</section>
+
+<section id="cls-cookie-httponly-set"><title><methodname>httponly=</methodname></title>
+<indexterm><primary>httponly= method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>httponly= method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_httponlyset.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Sets the <literal>HttpOnly</literal> attribute; see
+<xref linkend="cls-cookie-httponly" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-cookie-makestring"><title><methodname>makestring</methodname></title>
+<indexterm><primary>makestring method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>makestring method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_makestring.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Returns the value of the <literal>Set-Cookie</literal> header this cookie
+will produce &mdash; exactly what <methodname>addcookie</methodname> will
+schedule and <methodname>commit</methodname> will emit. The consistency rules
+are enforced here, so a cookie that violates them raises at this point rather
+than going out malformed.</para>
+
+<programlisting>id=v; Max-Age=3600; Domain=example.org; Path=/; SameSite=Lax; Secure; HttpOnly</programlisting>
+
+<para>Rexxlets rarely need <methodname>makestring</methodname> &mdash;
+<methodname>addcookie</methodname> drives it &mdash; but it is convenient for
+logging or testing what a cookie will look like on the wire.</para>
+
+</section>
+
+<section id="cls-cookie-max-age"><title><methodname>max_age</methodname></title>
+<indexterm><primary>max_age method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>max_age method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_max_age.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The cookie's lifetime, a whole number of seconds. A negative value &mdash;
+the default is &minus;1 &mdash; makes it a session cookie: the attribute is
+omitted. Zero instructs the user agent to delete the cookie, which is also how
+a cookie is <emphasis role="italic">deliberately</emphasis> deleted &mdash; set
+<literal>Max-Age</literal> to zero on a cookie with the same name (and the same
+<literal>Path</literal> and <literal>Domain</literal>, if the original had
+them):</para>
+
+<programlisting language="rexx">gone = .HTTP.Cookie~new("session", "")
+gone~max_age = 0
+.response~addcookie(gone)</programlisting>
+
+</section>
+
+<section id="cls-cookie-max-age-set"><title><methodname>max_age=</methodname></title>
+<indexterm><primary>max_age= method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>max_age= method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_max_ageset.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Sets the cookie's lifetime; see
+<xref linkend="cls-cookie-max-age" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-cookie-name"><title><methodname>name</methodname></title>
+<indexterm><primary>name method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>name method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_name.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Returns the cookie's name. There is no <methodname>name=</methodname>: a
+cookie's name is fixed at creation.</para>
+
+</section>
+
+<section id="cls-cookie-path"><title><methodname>path</methodname></title>
+<indexterm><primary>path method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>path method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_path.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The <literal>Path</literal> attribute, emitted as given. The default, the
+null string, omits the attribute. A <literal>__Host-</literal> cookie must have
+<literal>Path=/</literal>.</para>
+
+</section>
+
+<section id="cls-cookie-path-set"><title><methodname>path=</methodname></title>
+<indexterm><primary>path= method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>path= method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_pathset.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Sets the <literal>Path</literal> attribute; see
+<xref linkend="cls-cookie-path" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-cookie-samesite"><title><methodname>samesite</methodname></title>
+<indexterm><primary>samesite method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>samesite method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_samesite.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The <literal>SameSite</literal> attribute: <literal>Strict</literal>,
+<literal>Lax</literal> or <literal>None</literal>, accepted case-insensitively
+and stored in canonical spelling (the getter returns <literal>Strict</literal>,
+<literal>Lax</literal> or <literal>None</literal> regardless of how it was
+assigned). The null string &mdash; the default &mdash; omits the attribute;
+assigning it clears a previously set value. <literal>SameSite=None</literal>
+requires <literal>Secure</literal>; the rule is checked at serialisation, not
+here, so the two may be assigned in either order.</para>
+
+</section>
+
+<section id="cls-cookie-samesite-set"><title><methodname>samesite=</methodname></title>
+<indexterm><primary>samesite= method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>samesite= method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_samesiteset.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Sets the <literal>SameSite</literal> attribute; see
+<xref linkend="cls-cookie-samesite" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-cookie-secure"><title><methodname>secure</methodname></title>
+<indexterm><primary>secure method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>secure method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_secure.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The <literal>Secure</literal> attribute: <literal>1</literal> emits it,
+<literal>0</literal> &mdash; the default &mdash; does not. Required by
+<literal>SameSite=None</literal> and by the <literal>__Secure-</literal> and
+<literal>__Host-</literal> name prefixes.</para>
+
+</section>
+
+<section id="cls-cookie-secure-set"><title><methodname>secure=</methodname></title>
+<indexterm><primary>secure= method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>secure= method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_secureset.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Sets the <literal>Secure</literal> attribute; see
+<xref linkend="cls-cookie-secure" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-cookie-value"><title><methodname>value</methodname></title>
+<indexterm><primary>value method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>value method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_value.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The cookie's value. As at creation, the new value is taken as given
+&mdash; encoding reserved characters is the caller's business.</para>
+
+</section>
+
+<section id="cls-cookie-value-set"><title><methodname>value=</methodname></title>
+<indexterm><primary>value= method</primary>
+<secondary>of HTTP.Cookie class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>value= method</secondary>
+<tertiary>of HTTP.Cookie class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/cookie_valueset.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Sets the cookie's value; see
+<xref linkend="cls-cookie-value" xrefstyle="select:title"/>.</para>
+
+</section>
+
+</section>
+
+<section id="cls-outputstream"><title>The <classname>HTTP.OutputStream</classname> Class</title>
+<indexterm><primary>HTTP.OutputStream</primary></indexterm>
+<!-- Verified against src/HTTP.OutputStream.cls (v9) + isolated runs + suite. -->
+
+<para>An <classname>HTTP.OutputStream</classname> collects the response body. The
+rexxlet does not create it: the response object does, and
+<computeroutput>.response~output</computeroutput> returns it. During rexxlet
+execution the default output stream (<literal>.output</literal>) is redirected to
+it, so the three statements below write to the same place:</para>
+
+<programlisting language="rexx">Say "one"                        -- the usual way
+.output~say("two")               -- explicitly, via the default stream
+.response~output~say("three")    -- explicitly, via the response</programlisting>
+
+<para>Nothing reaches the client until the stream is flushed; the first flush
+commits the response &mdash; headers out first, then the buffered body. This
+buffering is what makes lazy headers possible, and it is the reason the class
+exists; <xref linkend="reqresp" xrefstyle="select:title"/> tells that
+story. The rexxlet rarely needs to do anything: the processor flushes once after
+the rexxlet returns.</para>
+
+<para>The class is a subclass of <classname>Stream</classname> and honours the
+stream protocol as far as it makes sense for what it is: a
+<emphasis role="italic">write-only</emphasis>,
+<emphasis role="italic">transient</emphasis> stream. It cannot be read (the input
+methods raise NOTREADY) and it cannot be positioned. Lines written to it end in
+LF, the web convention for text bodies.</para>
+
+
+<section id="cls-os-arrayin"><title><methodname>arrayin</methodname></title>
+<indexterm><primary>arrayin method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>arrayin method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_arrayin.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported. The stream is write-only, so calling this method raises the
+NOTREADY condition, with a description naming the stream. If the condition is not
+trapped, the usual &Rexx; semantics apply &mdash; the call is ignored and returns
+a neutral value (the null string, <literal>0</literal>, or <literal>.nil</literal>,
+as appropriate to the method).</para>
+
+</section>
+
+<section id="cls-os-arrayout"><title><methodname>arrayout</methodname></title>
+<indexterm><primary>arrayout method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>arrayout method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_arrayout.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Appends the elements of <replaceable>array</replaceable> &mdash; a
+single-dimensional array, or an object that produces one when sent a
+<computeroutput>request("ARRAY")</computeroutput> message &mdash; to the body.
+With <replaceable>option</replaceable> <literal>"LINES"</literal> (the default;
+<literal>"L"</literal> will do) the elements are joined by LF, with no LF after
+the last one; with <literal>"CHARS"</literal> (<literal>"C"</literal>) they are
+concatenated with no separator.</para>
+
+</section>
+
+<section id="cls-os-charin"><title><methodname>charin</methodname></title>
+<indexterm><primary>charin method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>charin method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_charin.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported. The stream is write-only, so calling this method raises the
+NOTREADY condition, with a description naming the stream. If the condition is not
+trapped, the usual &Rexx; semantics apply &mdash; the call is ignored and returns
+a neutral value (the null string, <literal>0</literal>, or <literal>.nil</literal>,
+as appropriate to the method).</para>
+
+</section>
+
+<section id="cls-os-charout"><title><methodname>charout</methodname></title>
+<indexterm><primary>charout method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>charout method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_charout.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Appends <replaceable>string</replaceable> to the body exactly as given
+&mdash; no line end. The argument must have a string value. Returns
+<literal>0</literal> on success. Called with no argument,
+<methodname>charout</methodname> closes the stream (here: flushes it &mdash; see
+<methodname>close</methodname>). The stream protocol's positioning argument is not
+accepted: this is a transient stream.</para>
+
+<programlisting language="rexx">.response~output~charout("no trailing newline here")</programlisting>
+
+</section>
+
+<section id="cls-os-chars"><title><methodname>chars</methodname></title>
+<indexterm><primary>chars method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>chars method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_chars.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported. The stream is write-only, so calling this method raises the
+NOTREADY condition, with a description naming the stream. If the condition is not
+trapped, the usual &Rexx; semantics apply &mdash; the call is ignored and returns
+a neutral value (the null string, <literal>0</literal>, or <literal>.nil</literal>,
+as appropriate to the method).</para>
+
+</section>
+
+<section id="cls-os-close"><title><methodname>close</methodname></title>
+<indexterm><primary>close method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>close method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_close.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Flushes any pending output. An HTTP output stream has no real notion of
+being closed &mdash; it remains writable afterwards;
+<emphasis role="italic">close</emphasis> is how the stream protocol spells
+<quote>I am done for now</quote>, and here that means a flush.</para>
+
+</section>
+
+<section id="cls-os-command"><title><methodname>command</methodname></title>
+<indexterm><primary>command method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>command method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_command.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The stream-protocol command interface: the verbs <literal>OPEN</literal>,
+<literal>CLOSE</literal>, <literal>FLUSH</literal>, <literal>QUERY</literal>,
+<literal>SEEK</literal> and <literal>POSITION</literal> are accepted and
+dispatched to the corresponding methods.</para>
+
+</section>
+
+<section id="cls-os-description"><title><methodname>description</methodname></title>
+<indexterm><primary>description method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>description method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_description.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Returns the stream's state, followed by a description when there is
+something to describe &mdash; typically only when the underlying stream was not
+ready when the output stream was created.</para>
+
+</section>
+
+<section id="cls-os-flush"><title><methodname>flush</methodname></title>
+<indexterm><primary>flush method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>flush method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_flush.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The workhorse. Commits the response if it is not yet committed &mdash; this
+is where the headers get written, in front of everything &mdash; then writes the
+buffered body to the underlying CGI stream, flushes it, and empties the buffer.
+<computeroutput>.response~flush</computeroutput> does the same thing through the
+response object. Flushing explicitly mid-rexxlet is allowed, and fixes the point
+past which headers can no longer change; what it does
+<emphasis role="italic">not</emphasis> promise is client-visible streaming
+&mdash; see <xref linkend="reqresp" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-os-init"><title><methodname>init</methodname></title>
+<indexterm><primary>init method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>init method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<para>Rexxlets do not construct output streams: the response object creates one,
+wrapped around the real CGI output stream, when <emphasis role="italic">it</emphasis>
+is created. The wrapped stream must be a <classname>Stream</classname> instance
+proper &mdash; in particular, output streams do not nest: an
+<classname>HTTP.OutputStream</classname> will not accept another one as its
+underlying stream.</para>
+
+</section>
+
+<section id="cls-os-linein"><title><methodname>linein</methodname></title>
+<indexterm><primary>linein method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>linein method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_linein.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported. The stream is write-only, so calling this method raises the
+NOTREADY condition, with a description naming the stream. If the condition is not
+trapped, the usual &Rexx; semantics apply &mdash; the call is ignored and returns
+a neutral value (the null string, <literal>0</literal>, or <literal>.nil</literal>,
+as appropriate to the method).</para>
+
+</section>
+
+<section id="cls-os-lineout"><title><methodname>lineout</methodname></title>
+<indexterm><primary>lineout method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>lineout method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_lineout.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Appends <replaceable>line</replaceable>, which must have a string value,
+followed by LF. Returns <literal>0</literal> on success. Called with no argument,
+it closes (flushes) the stream, like <methodname>charout</methodname>. The
+positioning argument is not accepted.</para>
+
+</section>
+
+<section id="cls-os-lines"><title><methodname>lines</methodname></title>
+<indexterm><primary>lines method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>lines method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_lines.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported. The stream is write-only, so calling this method raises the
+NOTREADY condition, with a description naming the stream. If the condition is not
+trapped, the usual &Rexx; semantics apply &mdash; the call is ignored and returns
+a neutral value (the null string, <literal>0</literal>, or <literal>.nil</literal>,
+as appropriate to the method).</para>
+
+</section>
+
+<section id="cls-os-makearray"><title><methodname>makearray</methodname></title>
+<indexterm><primary>makearray method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>makearray method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_makearray.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported. The stream is write-only, so calling this method raises the
+NOTREADY condition, with a description naming the stream. If the condition is not
+trapped, the usual &Rexx; semantics apply &mdash; the call is ignored and returns
+a neutral value (the null string, <literal>0</literal>, or <literal>.nil</literal>,
+as appropriate to the method).</para>
+
+</section>
+
+<section id="cls-os-open"><title><methodname>open</methodname></title>
+<indexterm><primary>open method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>open method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_open.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>An HTTP output stream is always open, unless its underlying stream reported
+a problem when the output stream was created &mdash; in which case it cannot be
+opened at all. The method returns the stream's state and changes nothing.</para>
+
+</section>
+
+<section id="cls-os-position"><title><methodname>position</methodname></title>
+<indexterm><primary>position method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>position method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_position.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported: a transient stream cannot be positioned, so the call raises.
+<methodname>position</methodname> is a synonym for
+<xref linkend="cls-os-seek" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-os-qualify"><title><methodname>qualify</methodname></title>
+<indexterm><primary>qualify method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>qualify method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_qualify.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Returns the stream's name, the fixed label
+<literal>HTTP.OutputStream:1</literal>.</para>
+
+</section>
+
+<section id="cls-os-query"><title><methodname>query</methodname></title>
+<indexterm><primary>query method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>query method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_query.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The stream-protocol query interface, answered as befits a transient stream
+that exists only for the duration of the request: <literal>EXISTS</literal>
+returns the stream's label, <literal>SIZE</literal> the null string,
+<literal>STREAMTYPE</literal> returns <literal>UNKNOWN</literal>,
+<literal>DATETIME</literal> and <literal>TIMESTAMP</literal> return the stream's
+creation time, and the <literal>POSITION</literal>/<literal>SEEK</literal> queries
+return <literal>1</literal>. <literal>HANDLE</literal> is not supported.</para>
+
+</section>
+
+<section id="cls-os-reset"><title><methodname>reset</methodname></title>
+<indexterm><primary>reset method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>reset method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_reset.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Empties the unflushed buffer, discarding whatever body the rexxlet has
+written so far. Because the response is not committed until the first flush, a
+rexxlet that hits an error after writing some output can call
+<methodname>reset</methodname> to throw that partial body away and emit a clean
+error page from scratch &mdash; see <xref linkend="cls-os-flush" xrefstyle="select:title"/>
+for when the commit actually happens.</para>
+
+</section>
+
+<section id="cls-os-say"><title><methodname>say</methodname></title>
+<indexterm><primary>say method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>say method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_say.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para><methodname>lineout</methodname> with a default: called without an argument
+it appends an empty line rather than closing the stream.</para>
+
+</section>
+
+<section id="cls-os-seek"><title><methodname>seek</methodname></title>
+<indexterm><primary>seek method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>seek method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_seek.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported: a transient stream cannot be positioned, so the call raises.
+<methodname>seek</methodname> is a synonym for
+<xref linkend="cls-os-position" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-os-state"><title><methodname>state</methodname></title>
+<indexterm><primary>state method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>state method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_state.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The stream's state &mdash; <literal>READY</literal> in any response
+ever to be sent.</para>
+
+</section>
+
+<section id="cls-os-supplier"><title><methodname>supplier</methodname></title>
+<indexterm><primary>supplier method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>supplier method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_supplier.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Not supported. The stream is write-only, so calling this method raises the
+NOTREADY condition, with a description naming the stream. If the condition is not
+trapped, the usual &Rexx; semantics apply &mdash; the call is ignored and returns
+a neutral value (the null string, <literal>0</literal>, or <literal>.nil</literal>,
+as appropriate to the method).</para>
+
+</section>
+
+<section id="cls-os-underlyingstream"><title><methodname>underlyingstream</methodname></title>
+<indexterm><primary>underlyingstream method</primary>
+<secondary>of HTTP.OutputStream class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>underlyingstream method</secondary>
+<tertiary>of HTTP.OutputStream class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/outputstream_underlyingstream.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Returns the wrapped stream: the real CGI output, connected to the web
+server. This is the response's plumbing &mdash; <methodname>commit</methodname>
+writes the headers through it &mdash; and a rexxlet has no business writing to it
+directly: anything sent there bypasses the buffer and lands in front of content
+the response has not emitted yet, headers included.</para>
+
+</section>
+
+</section>
+
+<section id="cls-request"><title>The <classname>HTTP.Request</classname> Class</title>
+<indexterm><primary>HTTP.Request</primary></indexterm>
+<!-- Verified against src/HTTP.Request.cls (v10) + live fixtures + suite. -->
+
+<para>An <classname>HTTP.Request</classname> instance represents the request
+being served. The rexxlet does not create it: the processor instantiates one per
+incoming request, before the rexxlet runs, and hands it to the rexxlet as its
+first argument; like the response, it is also published in the global
+environment, as <literal>.request</literal> (the two forms are equivalent &mdash;
+see the introduction to <classname>HTTP.Response</classname>).</para>
+
+<para>The request object is read-only, and answers three kinds of questions: what
+came with the request line and the headers (the environment pool, and a set of
+accessors), what arguments the query string or the request body carried
+(<methodname>arg</methodname>), and what cookies the user agent sent
+(<methodname>cookie</methodname>).</para>
+
+<para>By the time the rexxlet runs, the groundwork is done: the processor has
+parsed the arguments &mdash; reading the request body, for a POST &mdash; and
+applied the argument policy, so the arguments a rexxlet sees are always
+well-formed; and creating the request has set the current directory to the
+directory of the rexxlet file, so relative paths in the rexxlet resolve next to
+it.</para>
+
+<section id="cls-req-envpool"><title>The Environment Pool</title>
+<indexterm><primary>environment pool</primary></indexterm>
+
+<para>CGI delivers a request as environment variables, and the request object
+embraces that: any message that does not match one of the methods below answers
+with the value of the environment variable of the same name.</para>
+
+<programlisting language="rexx">agent  = .request~http_user_agent     -- the User-Agent request header
+server = .request~server_name         -- a standard CGI variable
+raw    = .request~http_cookie         -- the raw Cookie header</programlisting>
+
+<para>A variable that is not set answers the null string. The pool is read-only:
+these messages accept no arguments, and there is no assignment form. The message
+name arrives uppercased &mdash; the usual &Rexx; behaviour &mdash; which is just
+what the upper-case names of the CGI world expect.</para>
+
+<para>The lookup understands the deployment it lives in. Under an
+<literal>Action</literal>-based deployment, Apache reaches the processor through
+an internal subrequest, and hands some variables over under a
+<literal>REDIRECT_</literal> prefix. The request object absorbs that detail:</para>
+
+<itemizedlist>
+<listitem><para>A name beginning with <literal>HTTP_</literal> &mdash; a request
+header, in the form Apache passes them &mdash; is looked up as given.</para></listitem>
+<listitem><para>Any other name is looked up as given first, and, only if that
+comes back empty, under a <literal>REDIRECT_</literal> prefix. So the standard CGI
+variables, which arrive unprefixed, are never shadowed, while a value that exists
+only behind the <literal>Action</literal> subrequest's
+<literal>REDIRECT_</literal> is still found.</para></listitem>
+</itemizedlist>
+
+<para>So <computeroutput>.request~remote_addr</computeroutput> simply works, and a
+<computeroutput>SetEnv MYAPP_MODE production</computeroutput> in an
+<filename>.htaccess</filename> is <computeroutput>.request~myapp_mode</computeroutput>
+wherever Apache actually put the value &mdash; prefixed or not. There is no special
+namespace: an operator-defined variable is an ordinary pool name. If the
+prefixed form is ever wanted explicitly, it can always be named:
+<computeroutput>.request~redirect_remote_user</computeroutput>.
+<literal>REXXHTTP_ARGPOLICY</literal>, the argument-policy switch, is read through
+this same pool &mdash; which is why a per-directory
+<computeroutput>SetEnv</computeroutput> is all it takes to configure it (next
+section).</para>
+
+</section>
+
+<section id="cls-req-argpolicy"><title>Arguments, and the Strict Policy</title>
+<indexterm><primary>argument policy</primary></indexterm>
+<indexterm><primary>strict policy</primary></indexterm>
+
+<para>Before the rexxlet runs, the processor parses the request arguments &mdash;
+the query string of a GET, the <literal>application/x-www-form-urlencoded</literal>
+body of a POST &mdash; and applies the <emphasis role="italic">argument policy</emphasis>.
+The policy of the 1.0, <literal>strict</literal>, the default and the only one,
+demands of every parameter that:</para>
+
+<itemizedlist>
+<listitem><para>it has the form
+<replaceable>name</replaceable><literal>=</literal><replaceable>value</replaceable>
+&mdash; an empty value (<literal>k=</literal>) is legitimate, a token without
+<literal>=</literal> is not;</para></listitem>
+<listitem><para>the name is not empty and does not begin with a digit (the &Rexx;
+symbol convention &mdash; and a numeric name would be unreachable through
+<methodname>arg</methodname> anyway, since positions take precedence there);</para></listitem>
+<listitem><para>the name is unique, compared caselessly: <literal>X</literal> and
+<literal>x</literal> are the same name.</para></listitem>
+</itemizedlist>
+
+<para>These rules are applied to the <emphasis role="italic">decoded</emphasis>
+name &mdash; the one the rexxlet will see and key on. Two spellings that decode to
+one name (say <literal>user+name</literal> and <literal>user%20name</literal>) are
+therefore a single name, and a request carrying both is rejected as a
+duplicate.</para>
+
+<para>A request that breaks one of these rules is answered with
+<literal>400 Bad Request</literal>, stating the reason, and the rexxlet never
+runs. Stray <literal>&amp;</literal>s &mdash; doubled, or trailing &mdash; are
+ignored, not rejected. The policy is configured per directory or per rexxlet with
+<computeroutput>SetEnv REXXHTTP_ARGPOLICY</computeroutput> in the Apache
+configuration; the value is caseless, <literal>strict</literal> is the only value
+the 1.0 recognises, and an unknown value is answered with a <literal>500</literal>
+configuration error &mdash; an operator mistake, not a client one.</para>
+
+<para>The payoff is what the rexxlet gets to assume: every argument it sees has a
+name and a value, and a name names exactly one argument.</para>
+
+<para>Argument names and values alike are delivered decoded &mdash;
+percent-escapes, and the <literal>+</literal>-for-space convention of form
+encoding, applied to both sides of each pair as
+<literal>application/x-www-form-urlencoded</literal> prescribes. So a field named
+<literal>user name</literal>, which a form sends as <literal>user+name</literal>
+(or <literal>user%20name</literal>), is reached as
+<computeroutput>arg("user name")</computeroutput>.</para>
+
+</section>
+
+<section id="cls-req-class-decodeform"><title><methodname>decodeForm</methodname> (Class Method)</title>
+<indexterm><primary>decodeForm method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>decodeForm method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_class_decodeform.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The class-method face of <xref linkend="cls-req-decodeform" xrefstyle="select:title"/>: decodes one <literal>application/x-www-form-urlencoded</literal> field &mdash; <literal>%xx</literal> triples and <literal>+</literal>-for-space &mdash; with no request instance in hand. The body lives here, on the class; the instance method delegates to it. The processor uses it internally to split a form body into its fields.</para>
+
+</section>
+
+<section id="cls-req-class-decodeuricomponent"><title><methodname>decodeURIComponent</methodname> (Class Method)</title>
+<indexterm><primary>decodeURIComponent method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>decodeURIComponent method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_class_decodeuricomponent.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The class-method face of <xref linkend="cls-req-decodeuricomponent" xrefstyle="select:title"/>: percent-decodes <replaceable>string</replaceable> with no request instance in hand. The body lives here, on the class; the instance method delegates to it. The processor uses it internally to decode path and query components.</para>
+
+</section>
+
+<section id="cls-req-bracket"><title><methodname>[]</methodname></title>
+<indexterm><primary>[] method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>[] method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_atget.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Bracket lookup: <replaceable>name</replaceable>, which must have a string
+value, is uppercased, its hyphens become underscores, and the result is looked up
+in the environment pool &mdash; always, never against a like-named method. The
+bracket form is the raw-variable door: it reaches an environment variable
+by its HTTP spelling even when a method shares the name.</para>
+
+<programlisting language="rexx">length = .request["Content-Length"]    -- the CONTENT_LENGTH variable, raw
+agent  = .request["HTTP-User-Agent"]   -- the HTTP_USER_AGENT variable</programlisting>
+
+<para>This is the complement of the message form:
+<computeroutput>.request~content_length</computeroutput> returns the method (the
+parsed length), while <computeroutput>.request["Content-Length"]</computeroutput>
+returns the raw environment variable of that name. Use <literal>~name</literal>
+for the library's view, <literal>[name]</literal> for the variable
+underneath.</para>
+
+<para>There is no bracket assignment: the request is read-only.</para>
+
+</section>
+
+<section id="cls-req-arg"><title><methodname>arg</methodname></title>
+<indexterm><primary>arg method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>arg method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_arg.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Access to the request arguments, modelled on the built-in
+<methodname>Arg</methodname> function. Called with no arguments, it returns how
+many there are. Otherwise the first argument, which must be given and must have a
+string value, selects one &mdash; by position, when it is a positive whole number;
+by name, compared caselessly, in any other case &mdash; and
+<replaceable>option</replaceable> says what to return about it. The option is
+identified by its first nonblank character, caselessly, again in the manner of the
+built-in:</para>
+
+<itemizedlist>
+<listitem><para><literal>Value</literal> &mdash; the default &mdash; returns the
+argument's value, decoded; the null string when there is no such
+argument.</para></listitem>
+<listitem><para><literal>Name</literal> returns the argument's name, in its
+original spelling.</para></listitem>
+<listitem><para><literal>Exists</literal> returns whether such an argument
+exists.</para></listitem>
+<listitem><para><literal>Omitted</literal> returns the opposite.</para></listitem>
+</itemizedlist>
+
+<programlisting language="rexx">-- /rexxlet?q=hello&amp;Lang=ca
+.request~arg                   -- 2
+.request~arg(2, "Name")        -- "Lang" (the spelling is preserved...)
+.request~arg("lang")           -- "ca"   (...but lookup is caseless)
+.request~arg("page", "Exists") -- 0</programlisting>
+
+<para>Positional access reaches the arguments in the order the request sent them;
+a position beyond the count yields the null string (and <literal>Exists</literal>
+and <literal>Omitted</literal> answer accordingly). Under the strict policy these
+are the only shapes a request can have: see
+<xref linkend="cls-req-argpolicy" xrefstyle="select:title"/> for what
+<methodname>arg</methodname> never has to cope with.</para>
+
+</section>
+
+<section id="cls-req-content-length"><title><methodname>content_length</methodname></title>
+<indexterm><primary>content_length method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>content_length method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_content_length.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The size of the request body, in bytes, as the request declared it; the null
+string when the request carried none (a GET, typically).</para>
+
+</section>
+
+<section id="cls-req-content-type"><title><methodname>content_type</methodname></title>
+<indexterm><primary>content_type method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>content_type method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_content_type.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The media type of the request body, as the request declared it &mdash; for a
+form POST, <literal>application/x-www-form-urlencoded</literal>; the null string
+when the request carried none.</para>
+
+</section>
+
+<section id="cls-req-cookie"><title><methodname>cookie</methodname></title>
+<indexterm><primary>cookie method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>cookie method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_cookie.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Access to the cookies the user agent sent, with the same shape as
+<methodname>arg</methodname>: no arguments for the count, a first argument &mdash;
+required, with a string value &mdash; that selects by position when it is a
+positive whole number and by name in any other case, and an
+<replaceable>option</replaceable> choosing among <literal>Name</literal>,
+<literal>Value</literal> (the default), <literal>Exists</literal> and
+<literal>Omitted</literal>, with the same meanings as in
+<methodname>arg</methodname>. Two differences, both deliberate. Lookup by name is
+case-<emphasis role="italic">sensitive</emphasis>: <literal>session</literal> and
+<literal>Session</literal> are different cookies, to the request object as to the
+user agent. And the option is given as an abbreviation of the option word &mdash;
+any leading part will do, caselessly &mdash; rather than by its first character
+alone.</para>
+
+<para>Cookie values are delivered percent-decoded, and only percent-decoded: the
+<literal>+</literal>-for-space convention belongs to form encoding, not to
+cookies, so a literal <literal>+</literal> in a value survives the trip. This is
+the reading half of the round trip stated in the
+<classname>HTTP.Cookie</classname> reference &mdash; encode on output, read plain
+on input &mdash; and it is safe for the whole repertoire: an encoded
+<literal>;</literal> (<literal>%3B</literal>) comes back as a <literal>;</literal>
+<emphasis role="italic">inside</emphasis> the value, never as a cookie
+separator.</para>
+
+<para>When the request carries several cookies with the same name &mdash; the same
+name under different <literal>Path</literal>s, say &mdash; positional access
+reaches every one; lookup by name resolves to the last one sent.</para>
+
+<programlisting language="rexx">If .request~cookie("session", "Exists") Then
+  session = .request~cookie("session")</programlisting>
+
+</section>
+
+<section id="cls-req-decodeform"><title><methodname>decodeForm</methodname></title>
+<indexterm><primary>decodeForm method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>decodeForm method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_decodeform.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Decodes one field of an <literal>application/x-www-form-urlencoded</literal>
+body: <literal>%xx</literal> triples become their bytes,
+<emphasis role="italic">and</emphasis> a <literal>+</literal> becomes a space.
+Since a conforming form serialiser emits a space as <literal>+</literal> but a
+hand-built query string may use <literal>%20</literal>, it accepts both. It is the
+inverse of the response object's <methodname>encodeForm</methodname>, and the
+routine the processor uses internally to split a form body into its fields. This
+is the instance face; the body lives on the class method
+<xref linkend="cls-req-class-decodeform" xrefstyle="select:title"/>, to which it
+delegates.</para>
+
+</section>
+
+<section id="cls-req-decodeuricomponent"><title><methodname>decodeURIComponent</methodname></title>
+<indexterm><primary>decodeURIComponent method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>decodeURIComponent method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_decodeuricomponent.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>Reverses percent-encoding: each <literal>%xx</literal> triple, where
+<literal>xx</literal> is two hex digits, becomes the byte it names; everything else
+passes through untouched. It is the inverse of
+<methodname>encodeURIComponent</methodname> on the response object, and the routine
+the processor uses internally to decode path and query components. A lone
+<literal>%</literal> not followed by two hex digits is left as a literal
+<literal>%</literal>, so malformed input degrades gracefully rather than
+raising. This is the instance face; the body lives on the class method
+<xref linkend="cls-req-class-decodeuricomponent" xrefstyle="select:title"/>, to
+which it delegates.</para>
+
+</section>
+
+<section id="cls-req-document-uri"><title><methodname>document_uri</methodname></title>
+<indexterm><primary>document_uri method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>document_uri method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_document_uri.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The URL-space path of the document Apache actually resolved and served,
+carrying its URL prefix (for example <literal>/mtx/target.mtx</literal> or
+<literal>/ali/sub/index.mtx</literal>). It is the disk-to-URL twin of
+<xref linkend="cls-req-filename" xrefstyle="select:title"/>, exactly as
+<xref linkend="cls-req-script-name" xrefstyle="select:title"/> is the twin of
+<xref linkend="cls-req-script-filename" xrefstyle="select:title"/>:
+<methodname>filename</methodname> names the served document on disk,
+<methodname>document_uri</methodname> names that same document in URL space.</para>
+
+<para>It therefore resolves what <xref linkend="cls-req-uri" xrefstyle="select:title"/>
+leaves raw. Because <methodname>uri</methodname> is the client's typed URL with
+the query string removed, it keeps any extra <methodname>path_info</methodname>
+tail and, for a <literal>DirectoryIndex</literal> request, names the directory.
+<methodname>document_uri</methodname> instead follows
+<methodname>filename</methodname>: the extra tail is gone and a
+<literal>DirectoryIndex</literal> is resolved to the index actually served.
+Under an Action it names the original document, not the processor.</para>
+
+<para>Where the <literal>REXXHTTP_BASE</literal> / <literal>REXXHTTP_URLBASE</literal>
+pair is not configured, it falls back to the stored
+<xref linkend="cls-req-uri" xrefstyle="select:title"/>, so pre-anchor deployments
+are unaffected.</para>
+
+<para>See also method <xref linkend="cls-req-filename" xrefstyle="select:title"/>.</para>
+<para>See also method <xref linkend="cls-req-script-name" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-filename"><title><methodname>filename</methodname></title>
+<indexterm><primary>filename method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>filename method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_filename.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The full filesystem path of the rexxlet file.
+<methodname>path_translated</methodname> answers the same.</para>
+
+</section>
+
+<section id="cls-req-handler"><title><methodname>handler</methodname></title>
+<indexterm><primary>handler method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>handler method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_handler.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The name of the handler that routed the request, or
+<literal>.Nil</literal> when there was none. When Apache reaches a rexxlet
+through an <literal>Action</literal> directive, it records the handler's name
+&mdash; the name given to the <literal>Action</literal> &mdash; and the request
+surfaces it here. A rexxlet asked for directly, with no Action in front of it, was
+routed by no handler, and <methodname>handler</methodname> answers
+<literal>.Nil</literal>.</para>
+
+<para>This lets one file serve two roles and tell them apart: a rexxlet that is both
+reachable on its own and wired as a handler can branch on whether
+<methodname>handler</methodname> names the handler it expects. See
+<xref linkend="ex-md-two-roles" xrefstyle="select:title"/> for a worked example, and
+the boolean twin <xref linkend="cls-req-is-action" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-is-action"><title><methodname>is_action</methodname></title>
+<indexterm><primary>is_action method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>is_action method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_is_action.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para><literal>.True</literal> when the request reached the rexxlet through an
+Apache <literal>Action</literal> &mdash; that is, when a handler routed it &mdash;
+and <literal>.False</literal> otherwise. It is the boolean reading of
+<xref linkend="cls-req-handler" xrefstyle="select:title"/>: true exactly when
+<methodname>handler</methodname> is not <literal>.Nil</literal>. Reach for
+<methodname>is_action</methodname> when only the fact of the routing matters, and for
+<methodname>handler</methodname> when the handler's name does.</para>
+
+</section>
+
+<section id="cls-req-method"><title><methodname>method</methodname></title>
+<indexterm><primary>method method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>method method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_method.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The request method, as sent: <literal>GET</literal>, <literal>POST</literal>,
+and so on. <methodname>method</methodname> and
+<xref linkend="cls-req-request-method" xrefstyle="select:title"/> are one method
+under two names.</para>
+
+<para>See also method <xref linkend="cls-req-request-method" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-path-info"><title><methodname>path_info</methodname></title>
+<indexterm><primary>path_info method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>path_info method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_path_info.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The extra path: what the request URI carries beyond the part that locates the
+rexxlet, decoded, <literal>/</literal>-separated. A request for
+<literal>/test/show/reports/2026</literal>, served by the rexxlet file
+<filename>show</filename>, has the <methodname>script_name</methodname>
+<literal>/test/show</literal> and the <methodname>path_info</methodname>
+<literal>/reports/2026</literal>. The null string when there is none.</para>
+
+</section>
+
+<section id="cls-req-path-translated"><title><methodname>path_translated</methodname></title>
+<indexterm><primary>path_translated method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>path_translated method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_path_translated.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The full filesystem path of the rexxlet file &mdash; where the request URI
+landed once Apache translated it. <methodname>filename</methodname> answers the
+same.</para>
+
+</section>
+
+<section id="cls-req-post-string"><title><methodname>post_string</methodname></title>
+<indexterm><primary>post_string method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>post_string method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_post_string.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The body of a POST request, exactly as received &mdash; still in its transfer
+encoding; the processor has already read it by the time the rexxlet runs. The null
+string for a GET. The parsed, decoded view of the same data is
+<methodname>arg</methodname>.</para>
+
+</section>
+
+<section id="cls-req-query-string"><title><methodname>query_string</methodname></title>
+<indexterm><primary>query_string method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>query_string method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_query_string.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The query string, exactly as received &mdash; still encoded, without the
+<literal>?</literal>. The null string when there is none. The parsed, decoded view
+of the same data is <methodname>arg</methodname>.</para>
+
+</section>
+
+<section id="cls-req-request-method"><title><methodname>request_method</methodname></title>
+<indexterm><primary>request_method method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>request_method method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_request_method.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The request method, as sent. <methodname>request_method</methodname> and
+<xref linkend="cls-req-method" xrefstyle="select:title"/> are one method under
+two names.</para>
+
+<para>See also method <xref linkend="cls-req-method" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-request-uri"><title><methodname>request_uri</methodname></title>
+<indexterm><primary>request_uri method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>request_uri method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_request_uri.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The request URI exactly as the client sent it: path and query string, still
+encoded. <methodname>request_uri</methodname> and
+<xref linkend="cls-req-unparseduri" xrefstyle="select:title"/> are one method
+under two names.</para>
+
+<para>See also method <xref linkend="cls-req-unparseduri" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-request-url"><title><methodname>request_url</methodname></title>
+<indexterm><primary>request_url method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>request_url method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_request_url.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The self-referential URL of the request: the client's own URL with the
+query string peeled off &mdash; a URL to hang return links off, not the CGI
+processor path. It differs from
+<xref linkend="cls-req-script-name" xrefstyle="select:title"/> for a
+<literal>DirectoryIndex</literal> request: when the client asks for
+<literal>/test/</literal>, <methodname>request_url</methodname> answers
+<literal>/test/</literal> (the URL as typed), whereas
+<methodname>script_name</methodname> answers the RFC&nbsp;3875 resolved resource,
+<literal>/test/index.rxl</literal>. For a rexlet the client names directly, the
+two coincide.</para>
+
+<para>This value was named <methodname>script_name</methodname> until the CGI
+<literal>SCRIPT_NAME</literal> of RFC&nbsp;3875 took over that name; it is the
+value the production clients actually consumed.</para>
+
+<para>See also method <xref linkend="cls-req-script-name" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-rexxhttp-dir"><title><methodname>RexxHTTP_DIR</methodname></title>
+<indexterm><primary>RexxHTTP_DIR method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>RexxHTTP_DIR method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_rexxhttp_dir.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The filesystem directory of the RexxHTTP package, with no trailing
+<literal>/</literal>.</para>
+
+<para>See also method <xref linkend="cls-req-rexxhttp-url" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-rexxhttp-url"><title><methodname>RexxHTTP_URL</methodname></title>
+<indexterm><primary>RexxHTTP_URL method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>RexxHTTP_URL method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_rexxhttp_url.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The URL of the RexxHTTP package, or the empty string if RexxHTTP is not
+reachable. When it is not empty it always ends with <literal>/</literal>,
+following the <literal>mod_dir</literal> convention.</para>
+
+<para>See also method <xref linkend="cls-req-rexxhttp-dir" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-script-filename"><title><methodname>script_filename</methodname></title>
+<indexterm><primary>script_filename method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>script_filename method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_script_filename.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The filesystem path of the processor &mdash; the rexxlet Apache resolved
+and ran, the disk-space twin of
+<xref linkend="cls-req-script-name" xrefstyle="select:title"/>. When the client
+names a rexlet directly, this equals
+<xref linkend="cls-req-filename" xrefstyle="select:title"/>. Under an Action the
+two differ: <methodname>script_filename</methodname> names the rexlet, while
+<methodname>filename</methodname> and
+<xref linkend="cls-req-path-translated" xrefstyle="select:title"/> name the
+document it serves.</para>
+
+<para>See also method <xref linkend="cls-req-script-name" xrefstyle="select:title"/>.</para>
+<para>See also method <xref linkend="cls-req-filename" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-script-name"><title><methodname>script_name</methodname></title>
+<indexterm><primary>script_name method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>script_name method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_script_name.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The URI path that locates the rexxlet, decoded: <methodname>uri</methodname>
+without the <methodname>path_info</methodname>.</para>
+
+</section>
+
+<section id="cls-req-system-version"><title><methodname>system_version</methodname></title>
+<indexterm><primary>system_version method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>system_version method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_system_version.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The processor identification string &mdash; for this release,
+<literal>REXXHTTP/1.0 20260611</literal>.</para>
+
+</section>
+
+<section id="cls-req-unknown"><title><methodname>unknown</methodname></title>
+<indexterm><primary>unknown method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>unknown method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_unknown.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The environment pool described at the top of this reference is implemented by
+<methodname>unknown</methodname>: a message that matches no method answers the
+corresponding environment variable. The get form only &mdash; a pool message
+carries no arguments, and one that does is answered with a syntax error rather than
+a value. See <xref linkend="cls-req-envpool" xrefstyle="select:title"/> for the
+lookup rules.</para>
+
+</section>
+
+<section id="cls-req-unparseduri"><title><methodname>unparseduri</methodname></title>
+<indexterm><primary>unparseduri method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>unparseduri method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_unparseduri.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The request URI exactly as the client sent it.
+<methodname>unparseduri</methodname> and
+<xref linkend="cls-req-request-uri" xrefstyle="select:title"/> are one method
+under two names.</para>
+
+<para>See also method <xref linkend="cls-req-request-uri" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-req-uri"><title><methodname>uri</methodname></title>
+<indexterm><primary>uri method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>uri method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_uri.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The path of the request, decoded, query string excluded:
+<methodname>script_name</methodname> plus <methodname>path_info</methodname>.</para>
+
+</section>
+
+<section id="cls-req-validate"><title><methodname>validate</methodname></title>
+<indexterm><primary>validate method</primary>
+<secondary>of HTTP.Request class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>validate method</secondary>
+<tertiary>of HTTP.Request class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject>
+<imagedata fileref="images/classes/request_validate.svg" scale="55" />
+</imageobject>
+</mediaobject>
+
+<para>The processor's hook. Parses the arguments eagerly &mdash; reading the body
+of a POST &mdash; and applies the argument policy, returning the null string when
+the request is acceptable, and a short <literal>code:detail</literal> description
+of the first violation otherwise. The processor calls it before the rexxlet runs
+&mdash; this is where the <literal>400</literal> of the strict policy comes from
+&mdash; so a rexxlet never needs to: by the time a rexxlet runs,
+<methodname>validate</methodname> has already returned the null string. It is
+public so the processor, which is a separate program, can reach it; it is not part
+of the face a rexxlet uses.</para>
+
+</section>
+
+</section>
+
+<section id="cls-response"><title>The <classname>HTTP.Response</classname> Class</title>
+<indexterm><primary>HTTP.Response</primary></indexterm>
+
+<para>An <classname>HTTP.Response</classname> instance represents the response
+being built for the current request. The rexxlet does not create it: the processor
+instantiates one response per request, before the rexxlet runs, and hands it to the
+rexxlet as its second argument. It is also published in the global environment, so
+both of these reach the same object:</para>
+
+<programlisting language="rexx">Use Arg request, response     -- the second argument the processor passes...
+...
+.response~flush               -- ...or the environment symbol</programlisting>
+
+<para>Since the processor passes the response to the rexxlet, it can be picked up
+as the second argument; but the environment symbol works in any scope &mdash; an
+internal routine, a <computeroutput>::Routine</computeroutput>, a method &mdash;
+without the variable having to travel there, and that is the form,
+<literal>.request</literal> and <literal>.response</literal>, this manual uses
+throughout.</para>
+
+<para>A response is made of three parts: a set of
+<emphasis role="italic">headers</emphasis>, an optional set of
+<emphasis role="italic">cookies</emphasis>, and a buffered
+<emphasis role="italic">output stream</emphasis> that collects the body. The
+headers and cookies remain freely modifiable while the rexxlet writes the body;
+they are serialised only when the response is
+<emphasis role="italic">committed</emphasis>, which happens at the first flush
+(see <xref linkend="reqresp" xrefstyle="select:title"/>). After the rexxlet
+returns, the processor issues a final flush, so a rexxlet that never touches the
+response object beyond <methodname>Say</methodname> still produces a complete,
+well-formed response.</para>
+
+<section id="cls-resp-headers"><title>Headers, and the Two Ways to Name Them</title>
+<indexterm><primary>headers</primary></indexterm>
+
+<para>Headers live in a directory keyed by the upper-cased header name. Two
+different syntaxes reach that directory, and they normalise the name differently
+&mdash; deliberately so, because each syntax has its own grammar:</para>
+
+<itemizedlist>
+<listitem><para><emphasis role="bold">Message form.</emphasis>
+<computeroutput>.response~cache_control = "no-store"</computeroutput> and its read
+counterpart <computeroutput>.response~cache_control</computeroutput>. A hyphen is
+not legal inside a &Rexx; message name (it would parse as a subtraction), so the
+message form uses an underscore wherever the HTTP name has a hyphen; the response
+object translates underscores to hyphens to reach the real header name.</para></listitem>
+<listitem><para><emphasis role="bold">Bracket form.</emphasis>
+<computeroutput>.response["Cache-Control"] = "no-store"</computeroutput> and
+<computeroutput>.response["Cache-Control"]</computeroutput>. Here the name is an
+ordinary string, the hyphen poses no problem, and the name is used as written; only
+its case is normalised.</para></listitem>
+</itemizedlist>
+
+<para>Both routes converge on the same internal key
+(<literal>CACHE-CONTROL</literal>), each starting from what its own grammar allows.
+One practical consequence: a header whose real name contains an underscore can only
+be reached through the bracket form, since the message form would turn that
+underscore into a hyphen.</para>
+
+<para>Header names are case-insensitive in HTTP. Internally they are stored
+upper-cased &mdash; that is what makes the lookup case-insensitive, so that the
+message form, the bracket form and any mix of case all reach the same entry. On the
+way out, though, the name is title-cased for readability: the response to the
+example above carries the header line <literal>Cache-Control: no-store</literal>,
+not <literal>CACHE-CONTROL: no-store</literal>. The rule is mechanical &mdash; each
+hyphen-separated word gets an initial capital &mdash; so a few acronym headers come
+out unconventionally (<literal>WWW-Authenticate</literal> would emit as
+<literal>Www-Authenticate</literal>). RexxHTTP never sends those itself, and since
+HTTP treats the names case-insensitively no client minds; only a test that compares
+a raw header block case-sensitively need take note.</para>
+
+<para>Every response carries a <literal>Content-Type</literal>: the header directory
+is seeded at creation time with the default
+<literal>text/plain; charset=utf-8</literal>, which the rexxlet may overwrite but
+not remove.</para>
+
+</section>
+
+<section id="cls-resp-encoding"><title>Encoding Text for Output</title>
+<indexterm><primary>encoding text</primary></indexterm>
+
+<para>Four methods turn raw text into a form that is safe to drop into HTML or into
+a URL. They are the counterpart to the two decoders on the request object
+(<methodname>decodeURIComponent</methodname> and
+<methodname>decodeForm</methodname>), which undo the URL forms on the way in; there
+is deliberately no HTML <emphasis role="italic">decoder</emphasis>, since a rexxlet
+emits HTML but is never handed HTML to parse.</para>
+
+<para>Each method exists twice: as a class method, callable with no response in hand
+(<computeroutput>.HTTP.Response~encodeHTML(s)</computeroutput>), and as an instance
+method on a live response (<computeroutput>.response~encodeHTML(s)</computeroutput>).
+The two are identical &mdash; the instance form delegates to the class form &mdash;
+so a rexxlet uses whichever is closer to hand. None of them touches the response;
+they are pure string functions that happen to live here because emitting safe output
+is the response's job. The class methods are grouped first below, then each name
+reappears as an instance method in its alphabetical place.</para>
+
+</section>
+
+<section id="cls-resp-status"><title>The Status Line</title>
+<indexterm><primary>status line</primary></indexterm>
+
+<para>There is no first-class status method, and none is needed. Under CGI the
+response status is set through the <literal>Status</literal> pseudo-header (RFC
+3875), which to the response object is a header like any other:</para>
+
+<programlisting language="rexx">.response~status = "404 Not Found"</programlisting>
+
+<para><methodname>commit</methodname> emits it with the rest of the headers; Apache
+consumes it and builds the corresponding HTTP status line (the
+<literal>Status</literal> line itself does not reach the client). A response that
+sets no status is a <literal>200 OK</literal>.</para>
+
+<para>Setting <literal>status</literal> by hand is the low-level route. For the
+common cases &mdash; sending an error page or redirecting &mdash;
+<methodname>error</methodname>, <methodname>404</methodname> and
+<methodname>redirect</methodname> set the status, the matching headers and (for
+errors) a body in one call, and are written to be the last statement a rexxlet runs:
+<computeroutput>Exit .response~error(404)</computeroutput>. The reason phrase that
+goes with a code is supplied by <methodname>statusReason</methodname>.</para>
+
+</section>
+
+<!-- ============ Class methods (encoders) ============ -->
+
+<section id="cls-resp-class-encodeform"><title><methodname>encodeForm</methodname> (Class Method)</title>
+<indexterm><primary>encodeForm method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>encodeForm method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_class_encodeform.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<para>The class form of <methodname>encodeForm</methodname>, callable without a
+response in hand (<computeroutput>.HTTP.Response~encodeForm(text)</computeroutput>).
+The body lives here; the instance method <xref linkend="cls-resp-encodeform"
+xrefstyle="select:title"/> delegates to it. See that entry for what the encoding
+does.</para>
+
+</section>
+
+<section id="cls-resp-class-encodehtml"><title><methodname>encodeHTML</methodname> (Class Method)</title>
+<indexterm><primary>encodeHTML method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>encodeHTML method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_class_encodehtml.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<para>The class form of <methodname>encodeHTML</methodname>, callable without a
+response in hand (<computeroutput>.HTTP.Response~encodeHTML(text)</computeroutput>).
+The body lives here; the instance method <xref linkend="cls-resp-encodehtml"
+xrefstyle="select:title"/> delegates to it. See that entry for what the encoding
+does.</para>
+
+</section>
+
+<section id="cls-resp-class-encodeuri"><title><methodname>encodeURI</methodname> (Class Method)</title>
+<indexterm><primary>encodeURI method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>encodeURI method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_class_encodeuri.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<para>The class form of <methodname>encodeURI</methodname>, callable without a
+response in hand (<computeroutput>.HTTP.Response~encodeURI(text)</computeroutput>).
+The body lives here; the instance method <xref linkend="cls-resp-encodeuri"
+xrefstyle="select:title"/> delegates to it. See that entry for what the encoding
+does.</para>
+
+</section>
+
+<section id="cls-resp-class-encodeuricomponent"><title><methodname>encodeURIComponent</methodname> (Class Method)</title>
+<indexterm><primary>encodeURIComponent method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>encodeURIComponent method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_class_encodeuricomponent.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<para>The class form of <methodname>encodeURIComponent</methodname>, callable without
+a response in hand
+(<computeroutput>.HTTP.Response~encodeURIComponent(text)</computeroutput>). The body
+lives here; the instance method <xref linkend="cls-resp-encodeuricomponent"
+xrefstyle="select:title"/> delegates to it. See that entry for what the encoding
+does.</para>
+
+</section>
+
+<section id="cls-resp-atget"><title><methodname>[]</methodname></title>
+<indexterm><primary>[] method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>[] method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_atget.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">value = .response[headername]</programlisting>
+
+<para>Returns the current value of header <replaceable>headername</replaceable>, or
+<literal>.nil</literal> if no such header has been set. The name is case-insensitive
+and is given literally, hyphens included. <replaceable>headername</replaceable> must
+have a string value.</para>
+
+</section>
+
+<section id="cls-resp-atput"><title><methodname>[]=</methodname></title>
+<indexterm><primary>[]= method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>[]= method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_atput.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">.response[headername] = headervalue</programlisting>
+
+<para>Sets header <replaceable>headername</replaceable> to
+<replaceable>headervalue</replaceable>, creating or overwriting it. Headers are
+single-valued: assigning to an existing name replaces its value. Both arguments must
+have string values. Headers may be set after body output has begun &mdash; that is
+the point of the design; see
+<xref linkend="reqresp" xrefstyle="select:title"/> &mdash; but must be set
+before the first flush: once the response is committed the head is already on the
+wire, so a late assignment cannot take effect and is treated as a programming error
+rather than silently ignored &mdash; it raises (error 93.900,
+<emphasis role="italic">the response is already committed</emphasis>). This matches
+<methodname>error</methodname>, <methodname>redirect</methodname> and
+<methodname>addcookie</methodname>, which obey the same discipline; see
+<emphasis role="italic">Commit discipline</emphasis> in
+<xref linkend="reqresp" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-resp-404"><title><methodname>404</methodname></title>
+<indexterm><primary>404 method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>404 method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_404.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">.response~404
+.response~404( detail )                 -- detail is optional</programlisting>
+
+<para>Shorthand for <computeroutput>error(404 [, detail])</computeroutput> &mdash;
+the single most common error from a rexxlet, given its own name. Same return value
+and same buffering rules; see <xref linkend="cls-resp-error"
+xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-resp-addcookie"><title><methodname>addcookie</methodname></title>
+<indexterm><primary>addcookie method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>addcookie method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_addcookie.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">.response~addcookie( cookie )</programlisting>
+
+<para>Schedules <replaceable>cookie</replaceable>, which must be an
+<classname>HTTP.Cookie</classname> instance, for emission as a
+<literal>Set-Cookie</literal> header at commit time. The cookie must be internally
+consistent: an inconsistent one &mdash; say, <literal>SameSite=None</literal>
+without <literal>Secure</literal> &mdash; is not accepted, and
+<methodname>addcookie</methodname> raises at once. The consistency rules are given in
+the <classname>HTTP.Cookie</classname> reference.</para>
+
+<para>A cookie scheduled after the response is committed could never be emitted
+&mdash; the head is already on the wire &mdash; so, like
+<methodname>[]=</methodname>, <methodname>addcookie</methodname> treats this as a
+programming error and raises (error 93.900) rather than dropping the cookie silently.
+The commit check comes first, before the argument is even type-checked: past commit
+the failure is <emphasis role="italic">already committed</emphasis>, not
+<emphasis role="italic">not a cookie</emphasis>.</para>
+
+<para>The cookie is stored <emphasis role="italic">by copy</emphasis>: changes made
+to the cookie object after <methodname>addcookie</methodname> returns do not affect
+what will be emitted. Cookies are keyed by the triple (name,
+<literal>Path</literal>, <literal>Domain</literal>), matching the identity rules user
+agents apply: adding a cookie with the same name but a different
+<literal>Path</literal> or <literal>Domain</literal> yields an additional
+<literal>Set-Cookie</literal> line, while re-adding one with the same triple replaces
+the previous one. The relative order of the <literal>Set-Cookie</literal> lines in
+the response is unspecified.</para>
+
+<programlisting language="rexx">c = .HTTP.Cookie~new("session", "abc123")
+c~httponly = 1
+.response~addcookie(c)</programlisting>
+
+</section>
+
+<section id="cls-resp-commit"><title><methodname>commit</methodname></title>
+<indexterm><primary>commit method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>commit method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_commit.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">.response~commit</programlisting>
+
+<para>Serialises the response head: writes the <literal>Content-Type</literal>
+header, then one <literal>Set-Cookie</literal> line per scheduled cookie, then the
+remaining headers, then the blank line that separates head from body &mdash; all
+directly to the underlying CGI output stream, ahead of the buffered body. Commit is
+idempotent: the first call emits the head and marks the response committed;
+subsequent calls return immediately.</para>
+
+<para>Rexxlets rarely call <methodname>commit</methodname> directly: the first
+<methodname>flush</methodname> &mdash; explicit, or the processor's final one &mdash;
+commits the response if needed. Once the head is committed it cannot be changed: any
+later attempt to set a header (<methodname>[]=</methodname> or
+<computeroutput>response~name = value</computeroutput>), schedule a cookie
+(<methodname>addcookie</methodname>) or replace the response wholesale
+(<methodname>error</methodname>, <methodname>404</methodname>,
+<methodname>redirect</methodname>) raises error 93.900 rather than failing silently.
+The body may still be written and flushed; only the head is frozen.</para>
+
+</section>
+
+<section id="cls-resp-committed"><title><methodname>committed</methodname></title>
+<indexterm><primary>committed method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>committed method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_committed.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">state = .response~committed</programlisting>
+
+<para>Returns <literal>.true</literal> if the response has been committed (its
+headers have been emitted), <literal>.false</literal> otherwise. Read-only and takes
+no arguments. Its companion <methodname>committing</methodname> covers the brief
+window <emphasis role="italic">during</emphasis> commit, before this flag flips.</para>
+
+</section>
+
+<section id="cls-resp-committing"><title><methodname>committing</methodname></title>
+<indexterm><primary>committing method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>committing method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_committing.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">state = .response~committing</programlisting>
+
+<para>Returns <literal>.true</literal> from the moment <methodname>commit</methodname>
+begins emitting the head until it finishes &mdash; the window in which some header
+bytes have already gone to the stream but <methodname>committed</methodname> is still
+<literal>.false</literal>. Read-only and takes no arguments. It lets the error
+handler tell a half-written response apart from an untouched one, so it never tries
+to re-assert headers over a head that is already partly on the wire. A rexxlet rarely
+needs it; <methodname>committed</methodname> is the flag of everyday use.</para>
+
+</section>
+
+<section id="cls-resp-encodeform"><title><methodname>encodeForm</methodname></title>
+<indexterm><primary>encodeForm method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>encodeForm method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_encodeform.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">enc = .response~encodeForm( text )
+enc = .HTTP.Response~encodeForm( text )</programlisting>
+
+<para>Percent-encodes <replaceable>text</replaceable> for an
+<literal>application/x-www-form-urlencoded</literal> body, the conforming
+serialisation defined by the WHATWG URL Standard. It is the twin of
+<methodname>encodeURIComponent</methodname> with the two differences the form media
+type mandates: the safe set is narrower &mdash; only
+<literal>A</literal>&ndash;<literal>Z</literal>,
+<literal>a</literal>&ndash;<literal>z</literal>,
+<literal>0</literal>&ndash;<literal>9</literal>, <literal>*</literal>,
+<literal>-</literal>, <literal>.</literal>, <literal>_</literal> stay raw, so
+<literal>~</literal> <emphasis role="italic">is</emphasis> escaped here though it is
+not by <methodname>encodeURIComponent</methodname> &mdash; and a space becomes
+<literal>+</literal> rather than <literal>%20</literal>. It is the exact inverse of
+the request object's <methodname>decodeForm</methodname>; the two are designed as a
+round-trip pair. This is the instance form; the body lives on the class method
+<xref linkend="cls-resp-class-encodeform" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-resp-encodehtml"><title><methodname>encodeHTML</methodname></title>
+<indexterm><primary>encodeHTML method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>encodeHTML method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_encodehtml.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">safe = .response~encodeHTML( text )
+safe = .HTTP.Response~encodeHTML( text )</programlisting>
+
+<para>Escapes the five characters that are unsafe in HTML, returning a string fit to
+interpolate into either element content or a quoted attribute value. The five are
+<literal>&amp;</literal> &rarr; <literal>&amp;amp;</literal>,
+<literal>&lt;</literal> &rarr; <literal>&amp;lt;</literal>, <literal>&gt;</literal>
+&rarr; <literal>&amp;gt;</literal>, <literal>"</literal> &rarr;
+<literal>&amp;quot;</literal> and <literal>'</literal> &rarr;
+<literal>&amp;#39;</literal>; <literal>&amp;</literal> is converted first, so an
+escape is never double-escaped. Escaping the two quote characters as well as the
+three markup characters is what makes the result safe inside an attribute, not only
+between tags &mdash; a value escaped for element content but interpolated into
+<literal>title="..."</literal> would otherwise let a <literal>"</literal> break out
+of the attribute. This is the method <methodname>error</methodname> uses for its
+diagnostic line. This is the instance form; the body lives on the class method
+<xref linkend="cls-resp-class-encodehtml" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-resp-encodeuri"><title><methodname>encodeURI</methodname></title>
+<indexterm><primary>encodeURI method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>encodeURI method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_encodeuri.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">enc = .response~encodeURI( text )
+enc = .HTTP.Response~encodeURI( text )</programlisting>
+
+<para>Percent-encodes an <emphasis role="italic">already-assembled</emphasis> URL,
+escaping only what is illegal or unwise in a URL &mdash; control characters, space,
+the high-ASCII bytes, and the literal characters
+<literal>&lt; &gt; % " { } [ ] \ ^ `</literal> &mdash; while leaving intact the
+reserved characters that give a URL its structure
+(<literal>/ ? # &amp; = @ : + ; , $ ! ' ( ) *</literal>). A space becomes
+<literal>%20</literal>. The contrast with
+<methodname>encodeURIComponent</methodname> is the whole point of having both: that
+method escapes <literal>&amp; / = ? #</literal>, this one preserves them. The two
+carry the same names as their JavaScript namesakes and divide the work the same way
+&mdash; <methodname>encodeURI</methodname> for a complete URL,
+<methodname>encodeURIComponent</methodname> for a value going inside one. Reach for
+the one that matches the job; they are not interchangeable. This is the instance
+form; the body lives on the class method
+<xref linkend="cls-resp-class-encodeuri" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="cls-resp-encodeuricomponent"><title><methodname>encodeURIComponent</methodname></title>
+<indexterm><primary>encodeURIComponent method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>encodeURIComponent method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_encodeuricomponent.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">enc = .response~encodeURIComponent( text )
+enc = .HTTP.Response~encodeURIComponent( text )</programlisting>
+
+<para>Percent-encodes <replaceable>text</replaceable> for use as a single component
+inside a URL &mdash; a query field value, one path segment &mdash; following RFC
+3986. Every character outside the unreserved set (<literal>A</literal>&ndash;<literal>Z</literal>,
+<literal>a</literal>&ndash;<literal>z</literal>, <literal>0</literal>&ndash;<literal>9</literal>,
+<literal>-</literal>, <literal>.</literal>, <literal>_</literal>,
+<literal>~</literal>) is replaced by <literal>%</literal> followed by its
+hexadecimal byte value; a space becomes <literal>%20</literal>. Crucially it escapes
+the reserved characters <literal>&amp; / = ? #</literal> too, so a component carrying
+any of them cannot break out and alter the structure of the URL it sits in. Use it
+on the <emphasis role="italic">pieces</emphasis>, never on a whole URL &mdash; for
+that, see <methodname>encodeURI</methodname>. This is the instance form; the body
+lives on the class method
+<xref linkend="cls-resp-class-encodeuricomponent" xrefstyle="select:title"/>.</para>
+
+<programlisting language="rexx">url = "/search?q=".response~encodeURIComponent(term)</programlisting>
+
+</section>
+
+<section id="cls-resp-error"><title><methodname>error</methodname></title>
+<indexterm><primary>error method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>error method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_error.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">.response~error( status, detail )
+.response~error( status )               -- detail is optional</programlisting>
+
+<para>Emits an error response with HTTP status <replaceable>status</replaceable> and
+a short HTML page, and returns <literal>0</literal>.
+<replaceable>status</replaceable> is a numeric code;
+<replaceable>detail</replaceable>, if given, is shown on the page as a single
+diagnostic line and is HTML-escaped (see the encoding methods above), so a detail
+containing any of <literal>&amp; &lt; &gt; " '</literal> is displayed literally
+rather than interpreted.</para>
+
+<para>The reason phrase is supplied automatically for the codes a rexxlet is likely
+to use (the <literal>3xx</literal> redirects, <literal>400</literal>,
+<literal>401</literal>, <literal>403</literal>, <literal>404</literal>,
+<literal>405</literal>, <literal>500</literal>, <literal>502</literal>,
+<literal>503</literal>). A code outside that set still works: it is given a generic
+phrase for its family &mdash; <emphasis role="italic">Redirect</emphasis>,
+<emphasis role="italic">Client Error</emphasis> or
+<emphasis role="italic">Server Error</emphasis> &mdash; so an unusual status is
+never refused. The lookup itself is <xref linkend="cls-resp-statusreason"
+xrefstyle="select:title"/>.</para>
+
+<para><methodname>error</methodname> follows the buffering model. If the response
+has <emphasis role="bold">not</emphasis> been committed, any body the rexxlet had
+written so far is discarded, the status and a <literal>text/html</literal> content
+type are set, and the error page replaces the buffered body; the normal flush then
+sends it. If the response <emphasis role="bold">has</emphasis> been committed &mdash;
+the head has already reached the client, so the status can no longer be changed
+&mdash; <methodname>error</methodname> raises a <computeroutput>Syntax</computeroutput>
+condition rather than pretend to do the impossible. This mirrors the rexxlet rule
+for <methodname>sendError</methodname> on a committed response.</para>
+
+<para>Because it returns <literal>0</literal>, <methodname>error</methodname> reads
+naturally as a rexxlet's final act:</para>
+
+<programlisting language="rexx">If \record~exists Then Exit .response~error(404, "no such record")</programlisting>
+
+</section>
+
+<section id="cls-resp-flush"><title><methodname>flush</methodname></title>
+<indexterm><primary>flush method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>flush method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_flush.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">.response~flush</programlisting>
+
+<para>Commits the response if it is not yet committed, then flushes the buffered
+output stream, writing the body collected so far to the underlying CGI stream.
+Returns nothing. The processor calls it once after the rexxlet returns; a rexxlet
+may also call it explicitly at any point
+(see <xref linkend="reqresp" xrefstyle="select:title"/> for what an early flush
+does &mdash; and does not &mdash; buy once <literal>mod_deflate</literal> sits
+downstream).</para>
+
+</section>
+
+<section id="cls-resp-init"><title><methodname>init</methodname></title>
+<indexterm><primary>init method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>init method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<para>Rexxlets do not create responses; the processor does, once per request. A
+fresh response starts with exactly one header,
+<literal>Content-Type: text/plain; charset=utf-8</literal>; no cookies; not
+committed; and a new <classname>HTTP.OutputStream</classname> wrapped around the
+current default output stream as its body buffer.</para>
+
+</section>
+
+<section id="cls-resp-output"><title><methodname>output</methodname></title>
+<indexterm><primary>output method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>output method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_output.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">stream = .response~output</programlisting>
+
+<para>Returns the response's buffered output stream, an
+<classname>HTTP.OutputStream</classname> instance. During rexxlet execution the
+default output stream (<literal>.output</literal>) is redirected to this same object,
+which is why a plain <methodname>Say</methodname> writes to the response body;
+<computeroutput>.response~output</computeroutput> is the explicit handle, for stream
+methods like <methodname>~charout</methodname> or an explicit
+<methodname>~flush</methodname>:</para>
+
+<programlisting language="rexx">.response~output~charout("no trailing newline here")</programlisting>
+
+</section>
+
+<section id="cls-resp-redirect"><title><methodname>redirect</methodname></title>
+<indexterm><primary>redirect method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>redirect method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_redirect.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">.response~redirect( location, status )
+.response~redirect( location )          -- status defaults to 302 (Found)</programlisting>
+
+<para>Emits a redirect to <replaceable>location</replaceable> and returns
+<literal>0</literal>. It sets the <literal>Location</literal> header and a
+<literal>3xx</literal> status; <replaceable>status</replaceable> defaults to
+<literal>302</literal> (<emphasis role="italic">Found</emphasis>), the conventional
+temporary redirect. No body is sent.</para>
+
+<para>A different code is requested explicitly. The two that come up in practice:
+<literal>301</literal> (<emphasis role="italic">Moved Permanently</emphasis>) when a
+resource has acquired its canonical URL and the new address should replace the old
+&mdash; for example when an optional slug is added to a path &mdash; and
+<literal>303</literal> (<emphasis role="italic">See Other</emphasis>) after a form
+<literal>POST</literal>, so that a refresh re-fetches the result page with
+<literal>GET</literal> instead of resubmitting the form. Note that
+<literal>301</literal> is cached aggressively by user agents; use it only for a move
+that is genuinely permanent, never for one that might be undone.</para>
+
+<programlisting language="rexx">Exit .response~redirect("/publishers/acme-press/", 301)</programlisting>
+
+<para><methodname>redirect</methodname> obeys the same commit discipline as
+<methodname>error</methodname>: it discards an uncommitted buffered body and raises
+if the response is already committed.</para>
+
+</section>
+
+<section id="cls-resp-statusreason"><title><methodname>statusReason</methodname></title>
+<indexterm><primary>statusReason method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>statusReason method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_statusreason.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<programlisting language="rexx">phrase = .response~statusReason( code )</programlisting>
+
+<para>Returns the reason phrase for an HTTP status <replaceable>code</replaceable>
+&mdash; <computeroutput>.response~statusReason(404)</computeroutput> yields
+<literal>Not Found</literal>. A short table covers the codes the apps actually use
+(the <literal>3xx</literal> redirects, <literal>400</literal>,
+<literal>401</literal>, <literal>403</literal>, <literal>404</literal>,
+<literal>405</literal>, <literal>500</literal>, <literal>502</literal>,
+<literal>503</literal>); a code not in the table falls back to a generic phrase for
+its family (<emphasis role="italic">Redirect</emphasis>,
+<emphasis role="italic">Client Error</emphasis>,
+<emphasis role="italic">Server Error</emphasis>), so an unusual code is never
+rejected. This is the lookup <methodname>error</methodname> and
+<methodname>redirect</methodname> use to label the status they set; a rexxlet seldom
+calls it directly.</para>
+
+</section>
+
+<section id="cls-resp-unknown"><title><methodname>unknown</methodname></title>
+<indexterm><primary>unknown method</primary>
+<secondary>of HTTP.Response class</secondary></indexterm>
+<indexterm><primary>method</primary>
+<secondary>unknown method</secondary>
+<tertiary>of HTTP.Response class</tertiary></indexterm>
+
+<mediaobject>
+<imageobject><imagedata fileref="images/classes/response_unknown.svg" scale="55" /></imageobject>
+</mediaobject>
+
+<para>The message forms used to name a header &mdash;</para>
+
+<programlisting language="rexx">.response~content_type = "text/html"   -- set
+type = .response~content_type          -- get</programlisting>
+
+<para>&mdash; are not individual methods: they are resolved by
+<methodname>unknown</methodname>, which maps any unknown message to the header of the
+same name, translating underscores to hyphens (so <literal>content_type</literal>
+reaches <literal>CONTENT-TYPE</literal>). Unlike the request object, where only the
+get branch operates, <emphasis role="italic">both</emphasis> branches are live on the
+response: a message ending in <literal>=</literal> is the set branch and writes the
+header (subject to the commit guard &mdash; a set after commit raises error 93.900,
+exactly as <methodname>[]=</methodname> does); a message without
+<literal>=</literal> is the get branch and reads it. The set form requires exactly
+one value, which must have a string value; the get form accepts no arguments. Reading
+a header that has not been set returns <literal>.nil</literal>, exactly as with the
+bracket form.</para>
+
+<para>Because <emphasis role="italic">every</emphasis> unknown message becomes a
+header access, the response object cannot tell a header from a typo. A misspelled
+getter that carries arguments fails fast
+(<computeroutput>.response~addcokie(c)</computeroutput> raises, since the get form
+accepts no arguments), but a misspelled <emphasis role="italic">assignment</emphasis>
+fails silently: <computeroutput>.response~comitted = 1</computeroutput> quietly
+creates &mdash; and emits &mdash; a header named <literal>COMITTED</literal>.
+Spelling must be watched; that is the price of the convenience.</para>
+
+</section>
+
+</section>
+
+</chapter>

@@ -1,0 +1,92 @@
+/* HTTP.Request — invocation grammar (Milestone B).
+   One production per method diagram. Receiver and result-assignment are
+   omitted from the rail, per the rexxref convention: each production
+   models the message from the method name rightwards. Operative methods
+   and their signatures are derived from the RexxHTTP .cls (invariant 5).
+   Leaf non-terminals (name, selector, option, ...) are left undefined on
+   purpose; ebnf2svg renders them as placeholder boxes, the prose explains
+   them.
+
+   Notes on particular methods:
+   - The bracket operator is read-only: [] reads the environment pool, and
+     there is no []= form (the request is read-only).
+   - decodeURIComponent and decodeForm exist as a class method and an
+     instance method with the same name; each gets two productions, the
+     class one carrying a 'class_' segment (ref-decisiones v43).
+   - arg and cookie follow the canonical ARG() shape: a no-argument call
+     (the count) and a 'arg( selector ( , option )? )' call, with the
+     selector a single leaf (position-or-name lives in the prose, as in
+     rexxref's ARG built-in).
+   - unknown carries a rail like the canonical unknown( messagename,
+     messageargs ); in Request only the get branch operates (a message
+     with arguments raises), as the prose states. */
+
+/* ---- Class methods (decoders; the body lives on the class) ---- */
+
+request_class_decodeuricomponent ::= 'decodeURIComponent(' string ')'
+request_class_decodeform         ::= 'decodeForm(' string ')'
+
+/* ---- Bracket operator (read-only: get only, no []= form) ---- */
+
+request_atget ::= '[' name ']'
+
+/* ---- Instance methods (alphabetical) ---- */
+
+/* Argument and cookie access, modelled on the built-in ARG: a bare call
+   for the count, or selector + optional option. */
+request_arg    ::= 'arg(' ( selector ( ',' option )? )? ')'
+request_cookie ::= 'cookie(' ( selector ( ',' option )? )? ')'
+
+request_content_length ::= 'content_length'
+request_content_type   ::= 'content_type'
+
+/* document_uri: the URL-space name of the served document, the twin of
+   filename. See also filename, script_name, uri (prose cross-refs). */
+request_document_uri ::= 'document_uri'
+
+/* Instance decoders: delegate to the class methods of the same name. */
+request_decodeuricomponent ::= 'decodeURIComponent(' string ')'
+request_decodeform         ::= 'decodeForm(' string ')'
+
+request_filename ::= 'filename'
+
+/* handler: the name of the handler that routed the request through an
+   Apache Action, or .Nil when the rexxlet was reached directly. is_action
+   is the boolean twin, true exactly when handler is not .Nil. */
+request_handler   ::= 'handler'
+request_is_action ::= 'is_action'
+
+/* method and request_method are one method under two names. */
+request_method         ::= 'method'
+request_request_method ::= 'request_method'
+
+request_path_info       ::= 'path_info'
+request_path_translated ::= 'path_translated'
+request_post_string     ::= 'post_string'
+request_query_string    ::= 'query_string'
+
+/* request_uri and unparseduri answer the same value; each is documented
+   in its own place (alphabetical), linked by a 'see also' in the prose. */
+request_request_uri ::= 'request_uri'
+request_unparseduri ::= 'unparseduri'
+
+/* request_url: the self-referential URL of the request, distinct from
+   script_name in the DirectoryIndex case (see also in the prose). */
+request_request_url ::= 'request_url'
+
+/* RexxHTTP_DIR / RexxHTTP_URL: the disk directory and the URL of the
+   RexxHTTP package itself. See also script_filename, document_uri. */
+request_rexxhttp_dir ::= 'RexxHTTP_DIR'
+request_rexxhttp_url ::= 'RexxHTTP_URL'
+
+/* script_filename: the disk path of the processor, twin of script_name. */
+request_script_filename ::= 'script_filename'
+request_script_name     ::= 'script_name'
+request_system_version  ::= 'system_version'
+
+/* The environment pool door. Only the get branch operates in Request;
+   a message carrying arguments raises (the prose explains). */
+request_unknown ::= 'unknown(' messagename ( ',' messageargs )? ')'
+
+request_uri      ::= 'uri'
+request_validate ::= 'validate'

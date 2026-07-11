@@ -781,6 +781,422 @@ Else
     "the underscore variable resolves identically through []")
 
 /******************************************************************************/
+/* request_url / script_name family (v76 swap + rename).                      */
+/*                                                                            */
+/* v76 renamed the two self/resolved URL values: the old cgi_script_name      */
+/* became ~script_name (the RFC 3875 SCRIPT_NAME, resolved resource, disk->   */
+/* URL from path_translated), and the old ~script_name became ~request_url    */
+/* (the self-referential URL: the client's own URL, PATH_INFO and query       */
+/* string peeled off). These tests pin the swap's contract in a one-hop       */
+/* request and guard it against regression.                                   */
+/*                                                                            */
+/* The urlprobe fixture emits both values; three deployments (urlprobe with   */
+/* a topology-matching BASE/URLBASE pair, urlnobar with no pair, urlremap     */
+/* with a prefix-injecting URLBASE) drive the three cases below. Deployment   */
+/* details live in the runner's setEnvFor map.                                */
+/******************************************************************************/
+
+::Method test_url_one_hop_values_coincide
+  -- One hop, pair matching the real topology: request_url (stored in init)
+  -- and script_name (reconstructed disk->URL) both land on the client's own
+  -- URL, /test/urlprobe. The swap must leave a plain rexlet with the two
+  -- values identical, each reached by its own honest path.
+  r = self~httpGet(self~url("urlprobe"))
+  self~assertContains(r~entry("body"), "request_url=[/test/urlprobe]", -
+    "request_url is the client's own URL in a one-hop request")
+  self~assertContains(r~entry("body"), "script_name=[/test/urlprobe]", -
+    "script_name reconstructs to the same URL in a one-hop request")
+
+::Method test_url_request_url_peels_pathinfo_and_query
+  -- request_url is the client's URL with PATH_INFO and the query string
+  -- peeled off: extra path and ?x=1 must not leak into it.
+  r = self~httpGet(self~url("urlprobe") || "/extra?x=1")
+  self~assertContains(r~entry("body"), "request_url=[/test/urlprobe]", -
+    "request_url peels trailing PATH_INFO and the query string")
+
+::Method test_url_script_name_falls_back_without_pair
+  -- No REXXHTTP_BASE/URLBASE pair: script_name takes its base=="" fallback
+  -- (Return request_url), so the two values still coincide. This guards the
+  -- pre-REXXHTTP_BASE fallback path -- nothing regresses when the anchor is
+  -- absent.
+  r = self~httpGet(self~url("urlnobar"))
+  self~assertContains(r~entry("body"), "request_url=[/test/urlnobar]", -
+    "request_url is populated with no pair configured")
+  self~assertContains(r~entry("body"), "script_name=[/test/urlnobar]", -
+    "script_name falls back to request_url when no pair is configured")
+
+::Method test_url_script_name_reconstructs_when_pair_diverges
+  -- A pair whose URLBASE injects a prefix the client's URL does not carry
+  -- makes script_name (reconstructed: /otheria/urlremap) DIVERGE from
+  -- request_url (stored: /test/urlremap). This proves script_name performs a
+  -- live disk->URL reconstruction rather than aliasing request_url -- without
+  -- it the two previous tests could pass vacuously.
+  r = self~httpGet(self~url("urlremap"))
+  self~assertContains(r~entry("body"), "request_url=[/test/urlremap]", -
+    "request_url keeps the client's URL when the pair injects a prefix")
+  self~assertContains(r~entry("body"), "script_name=[/otheria/urlremap]", -
+    "script_name reconstructs disk->URL through the URLBASE prefix")
+
+/******************************************************************************/
+/* CGI-contract matrix (variable x topology).                                 */
+/*                                                                            */
+/* RexxHTTP fakes a clean CGI level-1 for a rexlet author who has read a      */
+/* simple CGI tutorial: the variables they expect, reachable as ~request~foo  */
+/* instead of digging in the environment. We are really level 2 (served by an */
+/* Action wrapper); a rexlet-as-Action is level 3 faking level 2. This matrix */
+/* pins, for each contracted variable, that the reconstructed value is what a */
+/* pure CGI would give, across every topology where the fake must hold.       */
+/*                                                                            */
+/* Two axes:                                                                  */
+/*   - VARIABLE: one row per contracted CGI variable (request_url,            */
+/*     script_name today; more as they are validated).                        */
+/*   - TOPOLOGY: twelve cells = docroot/Alias x rexlet/DirectoryIndex x       */
+/*     one/two hops x with/without extra path, minus the impossible           */
+/*     DirectoryIndex+extra (Apache hard 404). Deployed by DeployMatrix in    */
+/*     RunHTTPTests.rex across zones /mtx (docroot) and /ali (Alias).         */
+/*                                                                            */
+/* The expected value in each cell is a LITERAL, decided by hand when the     */
+/* cell was validated in the lab -- never predicted in code, so the test does */
+/* not reimplement what it checks. A cell whose contract is "licence" (no     */
+/* guarantee, e.g. some level-3 corner) carries .nil and is probed but not    */
+/* asserted. To bring a new variable under contract: activate its line in the */
+/* cgivars probe, run the matrix once to see the twelve emitted values,       */
+/* decide which are correct, and add a row here.                              */
+/******************************************************************************/
+
+/* The twelve topology cells: id -> probe URL. The id also names the cell in  */
+/* assertion messages. baseURL is the class default (http://127.0.0.1).       */
+
+::Method matrixCells
+  base = self~class~baseURL
+  cells = .Array~new
+  -- docroot zone (/mtx)
+  cells~append(.Array~of("doc/rexlet/1hop/plain",   base"/mtx/probe.rxl"))
+  cells~append(.Array~of("doc/rexlet/1hop/extra",   base"/mtx/probe.rxl/x/y"))
+  cells~append(.Array~of("doc/rexlet/2hop/plain",   base"/mtx/target.mtx"))
+  cells~append(.Array~of("doc/rexlet/2hop/extra",   base"/mtx/target.mtx/x/y"))
+  cells~append(.Array~of("doc/dirindex/1hop/plain", base"/mtx/"))
+  cells~append(.Array~of("doc/dirindex/2hop/plain", base"/mtx/sub/"))
+  -- aliased zone (/ali)
+  cells~append(.Array~of("ali/rexlet/1hop/plain",   base"/ali/probe.rxl"))
+  cells~append(.Array~of("ali/rexlet/1hop/extra",   base"/ali/probe.rxl/x/y"))
+  cells~append(.Array~of("ali/rexlet/2hop/plain",   base"/ali/target.mtx"))
+  cells~append(.Array~of("ali/rexlet/2hop/extra",   base"/ali/target.mtx/x/y"))
+  cells~append(.Array~of("ali/dirindex/1hop/plain", base"/ali/"))
+  cells~append(.Array~of("ali/dirindex/2hop/plain", base"/ali/sub/"))
+  Return cells
+
+/* The contract table for one variable: a Directory mapping cell-id -> the    */
+/* literal value a pure CGI would expose there. .nil means "licence" (probe   */
+/* but do not assert). Keyed exactly by the ids in matrixCells.               */
+
+::Method contractFor
+  Use Strict Arg varName
+
+  c = .Directory~new
+
+  Select Case varName
+    When "request_url" Then Do
+      -- The self-referential URL: what the client typed, extra path and query
+      -- peeled off. Guaranteed exact in ALL twelve cells (level-2 fake holds
+      -- through two hops, per the v77 fix).
+      c["doc/rexlet/1hop/plain"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/1hop/extra"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/2hop/plain"]   = "/mtx/target.mtx"
+      c["doc/rexlet/2hop/extra"]   = "/mtx/target.mtx"
+      c["doc/dirindex/1hop/plain"] = "/mtx/"
+      c["doc/dirindex/2hop/plain"] = "/mtx/sub/"
+      c["ali/rexlet/1hop/plain"]   = "/ali/probe.rxl"
+      c["ali/rexlet/1hop/extra"]   = "/ali/probe.rxl"
+      c["ali/rexlet/2hop/plain"]   = "/ali/target.mtx"
+      c["ali/rexlet/2hop/extra"]   = "/ali/target.mtx"
+      c["ali/dirindex/1hop/plain"] = "/ali/"
+      c["ali/dirindex/2hop/plain"] = "/ali/sub/"
+    End
+    When "script_name" Then Do
+      -- RFC 3875 SCRIPT_NAME: the resolved resource Apache ran. In one hop the
+      -- rexlet itself; in two hops the Action processor (probe.rxl); under
+      -- DirectoryIndex the resolved index. Guaranteed exact in all twelve.
+      c["doc/rexlet/1hop/plain"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/1hop/extra"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/2hop/plain"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/2hop/extra"]   = "/mtx/probe.rxl"
+      c["doc/dirindex/1hop/plain"] = "/mtx/index.rxl"
+      c["doc/dirindex/2hop/plain"] = "/mtx/probe.rxl"
+      c["ali/rexlet/1hop/plain"]   = "/ali/probe.rxl"
+      c["ali/rexlet/1hop/extra"]   = "/ali/probe.rxl"
+      c["ali/rexlet/2hop/plain"]   = "/ali/probe.rxl"
+      c["ali/rexlet/2hop/extra"]   = "/ali/probe.rxl"
+      c["ali/dirindex/1hop/plain"] = "/ali/index.rxl"
+      c["ali/dirindex/2hop/plain"] = "/ali/probe.rxl"
+    End
+    When "request_uri" Then Do
+      -- RFC 3875 REQUEST_URI: the raw request line Apache received, exactly what
+      -- the client typed -- extra PATH_INFO and query string INCLUDED, unlike
+      -- request_url. Apache never rewrites it across Action sub-requests, so it
+      -- is the client's URL verbatim in all twelve. In the two-hop cells this
+      -- is the document (target.mtx), which DIFFERS from script_name (the
+      -- resolved processor, probe.rxl): the row is not vacuous. Guaranteed
+      -- exact in all twelve.
+      c["doc/rexlet/1hop/plain"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/1hop/extra"]   = "/mtx/probe.rxl/x/y"
+      c["doc/rexlet/2hop/plain"]   = "/mtx/target.mtx"
+      c["doc/rexlet/2hop/extra"]   = "/mtx/target.mtx/x/y"
+      c["doc/dirindex/1hop/plain"] = "/mtx/"
+      c["doc/dirindex/2hop/plain"] = "/mtx/sub/"
+      c["ali/rexlet/1hop/plain"]   = "/ali/probe.rxl"
+      c["ali/rexlet/1hop/extra"]   = "/ali/probe.rxl/x/y"
+      c["ali/rexlet/2hop/plain"]   = "/ali/target.mtx"
+      c["ali/rexlet/2hop/extra"]   = "/ali/target.mtx/x/y"
+      c["ali/dirindex/1hop/plain"] = "/ali/"
+      c["ali/dirindex/2hop/plain"] = "/ali/sub/"
+    End
+    When "path_info" Then Do
+      -- RFC 3875 PATH_INFO: the extra path the client appended AFTER the
+      -- executed resource -- the tail Apache did not consume resolving the
+      -- script. A pure CGI never leaks the script name into it: it is the
+      -- extra ("/x/y") or empty. In the two-hop cells Apache's PATH_INFO
+      -- smuggling fuses processor+document+tail into the raw value; the Action
+      -- cut in init peels it back to the tail only, so 2hop/extra reads "/x/y"
+      -- just like 1hop/extra -- same value, reconstructed path, which is what
+      -- makes the level-2 fake honest. Guaranteed exact in all twelve.
+      c["doc/rexlet/1hop/plain"]   = ""
+      c["doc/rexlet/1hop/extra"]   = "/x/y"
+      c["doc/rexlet/2hop/plain"]   = ""
+      c["doc/rexlet/2hop/extra"]   = "/x/y"
+      c["doc/dirindex/1hop/plain"] = ""
+      c["doc/dirindex/2hop/plain"] = ""
+      c["ali/rexlet/1hop/plain"]   = ""
+      c["ali/rexlet/1hop/extra"]   = "/x/y"
+      c["ali/rexlet/2hop/plain"]   = ""
+      c["ali/rexlet/2hop/extra"]   = "/x/y"
+      c["ali/dirindex/1hop/plain"] = ""
+      c["ali/dirindex/2hop/plain"] = ""
+    End
+    When "path_translated" Then Do
+      -- PATH_TRANSLATED, RexxHTTP flavour: the on-disk path of the DOCUMENT the
+      -- client requested -- the disk twin of REQUEST_URL, and an alias of
+      -- FILENAME (init assigns both from the same resolution). This DIVERGES
+      -- from the strict RFC 3875 reading (there PATH_TRANSLATED is PATH_INFO
+      -- mapped to disk) and ALSO from the older RexxHTTP reading (the processor
+      -- path): the processor now lives in SCRIPT_FILENAME, which is what the
+      -- runtime Calls. Not a licence: exact and deterministic in all twelve.
+      -- One hop -> the requested rexlet (requested == processor); two hops ->
+      -- the Action document (target.mtx, NOT the processor); dirindex -> the
+      -- resolved index file actually served. Roots are the two matrix zones
+      -- fixed in DeployMatrix: /var/www/html/mtx (docroot) and
+      -- /opt/rexxhttp-matrix (aliased). Absolute literals are legitimate here
+      -- because DeployMatrix owns those roots -- change them there and this row
+      -- changes with them.
+      c["doc/rexlet/1hop/plain"]   = "/var/www/html/mtx/probe.rxl"
+      c["doc/rexlet/1hop/extra"]   = "/var/www/html/mtx/probe.rxl"
+      c["doc/rexlet/2hop/plain"]   = "/var/www/html/mtx/target.mtx"
+      c["doc/rexlet/2hop/extra"]   = "/var/www/html/mtx/target.mtx"
+      c["doc/dirindex/1hop/plain"] = "/var/www/html/mtx/index.rxl"
+      c["doc/dirindex/2hop/plain"] = "/var/www/html/mtx/sub/index.mtx"
+      c["ali/rexlet/1hop/plain"]   = "/opt/rexxhttp-matrix/probe.rxl"
+      c["ali/rexlet/1hop/extra"]   = "/opt/rexxhttp-matrix/probe.rxl"
+      c["ali/rexlet/2hop/plain"]   = "/opt/rexxhttp-matrix/target.mtx"
+      c["ali/rexlet/2hop/extra"]   = "/opt/rexxhttp-matrix/target.mtx"
+      c["ali/dirindex/1hop/plain"] = "/opt/rexxhttp-matrix/index.rxl"
+      c["ali/dirindex/2hop/plain"] = "/opt/rexxhttp-matrix/sub/index.mtx"
+    End
+    When "filename" Then Do
+      -- FILENAME: the on-disk path of the DOCUMENT the client requested -- the
+      -- file on disk of what was asked for. Alias of PATH_TRANSLATED (init
+      -- assigns both from the same resolution; each is a plain attribute getter).
+      -- One hop -> the requested rexlet (requested == processor); two hops ->
+      -- the Action document (target.mtx); dirindex -> the resolved index served
+      -- (index.rxl in one hop, sub/index.mtx in two). The processor that runs
+      -- it is SCRIPT_FILENAME, a separate row. It keeps its own literals, not a
+      -- reference to path_translated: the framework is literal-per-cell so each
+      -- variable is anchored to its own observed value, and if the two ever
+      -- diverge only the moved cells change here. Guaranteed exact in all twelve.
+      c["doc/rexlet/1hop/plain"]   = "/var/www/html/mtx/probe.rxl"
+      c["doc/rexlet/1hop/extra"]   = "/var/www/html/mtx/probe.rxl"
+      c["doc/rexlet/2hop/plain"]   = "/var/www/html/mtx/target.mtx"
+      c["doc/rexlet/2hop/extra"]   = "/var/www/html/mtx/target.mtx"
+      c["doc/dirindex/1hop/plain"] = "/var/www/html/mtx/index.rxl"
+      c["doc/dirindex/2hop/plain"] = "/var/www/html/mtx/sub/index.mtx"
+      c["ali/rexlet/1hop/plain"]   = "/opt/rexxhttp-matrix/probe.rxl"
+      c["ali/rexlet/1hop/extra"]   = "/opt/rexxhttp-matrix/probe.rxl"
+      c["ali/rexlet/2hop/plain"]   = "/opt/rexxhttp-matrix/target.mtx"
+      c["ali/rexlet/2hop/extra"]   = "/opt/rexxhttp-matrix/target.mtx"
+      c["ali/dirindex/1hop/plain"] = "/opt/rexxhttp-matrix/index.rxl"
+      c["ali/dirindex/2hop/plain"] = "/opt/rexxhttp-matrix/sub/index.mtx"
+    End
+    When "script_filename" Then Do
+      -- SCRIPT_FILENAME: the on-disk path of the PROCESSOR -- the rexlet Apache
+      -- resolved and ran, the disk twin of SCRIPT_NAME. This is the value the
+      -- runtime Calls (RexxHTTP.rex: callee = .request~script_filename), and the
+      -- value ~script_name maps back to URL space. One hop -> == FILENAME
+      -- (requested == processor). Two hops -> the Action processor (probe.rxl),
+      -- distinct from FILENAME/PATH_TRANSLATED (the document). Dirindex -> the
+      -- resolved index rexlet in one hop; the Action processor in two. It holds
+      -- the value PATH_TRANSLATED carried before PATH_TRANSLATED took on its
+      -- document meaning. Exact and deterministic in all twelve.
+      c["doc/rexlet/1hop/plain"]   = "/var/www/html/mtx/probe.rxl"
+      c["doc/rexlet/1hop/extra"]   = "/var/www/html/mtx/probe.rxl"
+      c["doc/rexlet/2hop/plain"]   = "/var/www/html/mtx/probe.rxl"
+      c["doc/rexlet/2hop/extra"]   = "/var/www/html/mtx/probe.rxl"
+      c["doc/dirindex/1hop/plain"] = "/var/www/html/mtx/index.rxl"
+      c["doc/dirindex/2hop/plain"] = "/var/www/html/mtx/probe.rxl"
+      c["ali/rexlet/1hop/plain"]   = "/opt/rexxhttp-matrix/probe.rxl"
+      c["ali/rexlet/1hop/extra"]   = "/opt/rexxhttp-matrix/probe.rxl"
+      c["ali/rexlet/2hop/plain"]   = "/opt/rexxhttp-matrix/probe.rxl"
+      c["ali/rexlet/2hop/extra"]   = "/opt/rexxhttp-matrix/probe.rxl"
+      c["ali/dirindex/1hop/plain"] = "/opt/rexxhttp-matrix/index.rxl"
+      c["ali/dirindex/2hop/plain"] = "/opt/rexxhttp-matrix/probe.rxl"
+    End
+    When "document_uri" Then Do
+      -- DOCUMENT_URI: the URL-space path of the served DOCUMENT, carrying its
+      -- URL prefix -- the disk->URL twin of FILENAME, as SCRIPT_NAME is the twin
+      -- of SCRIPT_FILENAME. It RESOLVES what URI leaves raw: URI is the client's
+      -- typed URL (query stripped), so it keeps the extra tail and names the
+      -- directory for a dirindex; document_uri follows filename instead, so the
+      -- tail is dropped (the document is named, not its trailing path) and a
+      -- dirindex resolves to the index served. Compare cell by cell with the
+      -- FILENAME row: same twelve resolutions, mapped from disk base to URL
+      -- prefix (/var/www/html/mtx -> /mtx, /opt/rexxhttp-matrix -> /ali).
+      -- Guaranteed exact in all twelve.
+      c["doc/rexlet/1hop/plain"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/1hop/extra"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/2hop/plain"]   = "/mtx/target.mtx"
+      c["doc/rexlet/2hop/extra"]   = "/mtx/target.mtx"
+      c["doc/dirindex/1hop/plain"] = "/mtx/index.rxl"
+      c["doc/dirindex/2hop/plain"] = "/mtx/sub/index.mtx"
+      c["ali/rexlet/1hop/plain"]   = "/ali/probe.rxl"
+      c["ali/rexlet/1hop/extra"]   = "/ali/probe.rxl"
+      c["ali/rexlet/2hop/plain"]   = "/ali/target.mtx"
+      c["ali/rexlet/2hop/extra"]   = "/ali/target.mtx"
+      c["ali/dirindex/1hop/plain"] = "/ali/index.rxl"
+      c["ali/dirindex/2hop/plain"] = "/ali/sub/index.mtx"
+    End
+    When "uri" Then Do
+      -- URI: the client's typed URL with the query string stripped -- REQUEST_URI
+      -- minus the "?..." tail, and nothing else touched. It keeps the extra
+      -- PATH_INFO and the URL prefix, and for a dirindex it names the directory
+      -- as typed (trailing slash, NOT the resolved index). That is what sets it
+      -- apart from document_uri, which follows filename to the served document:
+      -- compare the two rows cell by cell -- they agree on the rexlet cells and
+      -- DIVERGE on the two extra cells (uri keeps "/x/y", document_uri drops it)
+      -- and on the two dirindex cells (uri names the directory, document_uri the
+      -- index). Verified equal to the request_uri row in all twelve because none
+      -- of the matrix cells carries a query; a query would appear in request_uri
+      -- but not here (confirmed by HTTP: /mtx/probe.rxl?a=1&b=2 -> uri
+      -- "/mtx/probe.rxl"). Guaranteed exact in all twelve.
+      c["doc/rexlet/1hop/plain"]   = "/mtx/probe.rxl"
+      c["doc/rexlet/1hop/extra"]   = "/mtx/probe.rxl/x/y"
+      c["doc/rexlet/2hop/plain"]   = "/mtx/target.mtx"
+      c["doc/rexlet/2hop/extra"]   = "/mtx/target.mtx/x/y"
+      c["doc/dirindex/1hop/plain"] = "/mtx/"
+      c["doc/dirindex/2hop/plain"] = "/mtx/sub/"
+      c["ali/rexlet/1hop/plain"]   = "/ali/probe.rxl"
+      c["ali/rexlet/1hop/extra"]   = "/ali/probe.rxl/x/y"
+      c["ali/rexlet/2hop/plain"]   = "/ali/target.mtx"
+      c["ali/rexlet/2hop/extra"]   = "/ali/target.mtx/x/y"
+      c["ali/dirindex/1hop/plain"] = "/ali/"
+      c["ali/dirindex/2hop/plain"] = "/ali/sub/"
+    End
+    When "query_string" Then Do
+      -- QUERY_STRING: the raw query the client sent, verbatim -- everything after
+      -- the "?", or empty when there is none. RexxHTTP does not parse or rewrite
+      -- it here; the arg-policy layer consumes a parsed copy elsewhere. None of
+      -- the twelve matrix cells carries a query, so the contract value is empty
+      -- in all twelve -- the faithful CGI value for a query-less request. The
+      -- non-empty behaviour is confirmed by HTTP in the lab, not by these cells:
+      -- /mtx/probe.rxl?a=1&b=2 emits query_string "a=1&b=2" while uri stays
+      -- "/mtx/probe.rxl". (A bare token without "=" such as "?forget" is rejected
+      -- 400 by the strict arg-policy before the probe runs -- todo item 9 -- so a
+      -- well-formed "k=v" query is what exercises the non-empty path.) Guaranteed
+      -- exact (empty) in all twelve.
+      c["doc/rexlet/1hop/plain"]   = ""
+      c["doc/rexlet/1hop/extra"]   = ""
+      c["doc/rexlet/2hop/plain"]   = ""
+      c["doc/rexlet/2hop/extra"]   = ""
+      c["doc/dirindex/1hop/plain"] = ""
+      c["doc/dirindex/2hop/plain"] = ""
+      c["ali/rexlet/1hop/plain"]   = ""
+      c["ali/rexlet/1hop/extra"]   = ""
+      c["ali/rexlet/2hop/plain"]   = ""
+      c["ali/rexlet/2hop/extra"]   = ""
+      c["ali/dirindex/1hop/plain"] = ""
+      c["ali/dirindex/2hop/plain"] = ""
+    End
+    Otherwise
+      self~fail("no contract row defined for variable" varName)
+  End
+
+  Return c
+
+/* probeVar: GET the cell URL, pull "varName=[value]" out of the body, return  */
+/* the value between the brackets. Returns .nil if the line is absent.         */
+
+::Method probeVar
+  Use Strict Arg url, varName
+
+  body = self~httpGet(url)~entry("body")
+  marker = varName"=["
+  p = body~pos(marker)
+  If p == 0 Then Return .nil
+  start = p + marker~length
+  q = body~pos("]", start)
+  If q == 0 Then Return .nil
+  Return body~substr(start, q - start)
+
+/* runContractRow: walk the twelve cells for one variable, asserting each      */
+/* value against its contract literal. .nil in the table = licence: probed for */
+/* reachability but not asserted. One assertion per guaranteed cell, so a      */
+/* failure names the exact (variable, cell).                                   */
+
+::Method runContractRow
+  Use Strict Arg varName
+
+  contract = self~contractFor(varName)
+
+  Do cell Over self~matrixCells
+    id  = cell[1]
+    url = cell[2]
+    expected = contract[id]
+    actual   = self~probeVar(url, varName)
+    If expected == .nil Then
+      -- Licence cell: no contract, just confirm the probe was reachable.
+      self~assertTrue(actual \== .nil, varName "@" id "(licence): probe reachable")
+    Else
+      self~assertEquals(expected, actual, varName "@" id)
+  End
+
+::Method test_cgi_contract_request_url
+  self~runContractRow("request_url")
+
+::Method test_cgi_contract_script_name
+  self~runContractRow("script_name")
+
+::Method test_cgi_contract_request_uri
+  self~runContractRow("request_uri")
+
+::Method test_cgi_contract_path_info
+  self~runContractRow("path_info")
+
+::Method test_cgi_contract_path_translated
+  self~runContractRow("path_translated")
+
+::Method test_cgi_contract_filename
+  self~runContractRow("filename")
+
+::Method test_cgi_contract_script_filename
+  self~runContractRow("script_filename")
+
+::Method test_cgi_contract_document_uri
+  self~runContractRow("document_uri")
+
+::Method test_cgi_contract_uri
+  self~runContractRow("uri")
+
+::Method test_cgi_contract_query_string
+  self~runContractRow("query_string")
+
+/******************************************************************************/
 /* Encoding family: the four encoders (Response) and two decoders (Request),  */
 /* exercised through the instance accessor — the idiomatic rexxlet path,      */
 /* which delegates to the class method. The enc fixture runs each on a string */

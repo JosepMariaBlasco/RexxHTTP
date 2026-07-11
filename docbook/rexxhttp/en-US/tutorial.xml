@@ -1,0 +1,381 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<chapter id="tutorial"><title>Writing Rexxlets</title>
+<indexterm><primary>tutorial</primary></indexterm>
+<indexterm><primary>rexxlet</primary></indexterm>
+
+<para><xref linkend="shorttut" xrefstyle="select:title"/> showed what a rexxlet
+can build, from a one-line greeting up to a page that fetches data from the
+network. This chapter goes back over the same ground at a slower pace and names
+the parts: it builds a few small rexxlets, each introducing a little more of the
+API, and &mdash; unlike the short tutorial &mdash; it checks every one against a
+running server with <command>curl</command>, so the actual HTTP that
+goes back and forth is visible. It assumes RexxHTTP is installed and reachable, as the
+<xref linkend="installation" xrefstyle="select:title"/> chapter describes; the
+examples are written for a rexxlet directory mapped at <filename>/rexxlets</filename>,
+the layout the test suite uses, so a rexxlet in <filename>hello/index</filename>
+answers at <filename>/rexxlets/hello/</filename>. Adjust the path to wherever the local
+deployment maps its rexxlets.</para>
+
+<para>A rexxlet is an ordinary &Rexx; program. There is no framework class to
+subclass and no entry point to declare: the file <emphasis role="italic">is</emphasis>
+the rexxlet, and running it produces the response. What RexxHTTP adds is the two
+objects it hands the rexxlet &mdash; the request that came in, and the response
+being built &mdash; and the redirection that turns a plain
+<methodname>Say</methodname> into body output. Everything below is a consequence
+of those two facts.</para>
+
+<section id="tut-first-rexxlet"><title>A First Rexxlet</title>
+<indexterm><primary>rexxlet</primary><secondary>first example</secondary></indexterm>
+<indexterm><primary>.request</primary></indexterm>
+<indexterm><primary>.response</primary></indexterm>
+<indexterm><primary>Say</primary></indexterm>
+<indexterm><primary>body</primary></indexterm>
+<indexterm><primary>content_type</primary></indexterm>
+<indexterm><primary>charset</primary></indexterm>
+<indexterm><primary>UTF-8</primary></indexterm>
+
+<para>The smallest useful rexxlet greets the world. Put this in a file named
+<filename>index</filename> in a rexxlet directory &mdash; here
+<filename>hello/</filename>:</para>
+
+<programlisting language="rexx">.response~content_type = "text/plain"
+Say "Hello, world"
+</programlisting>
+
+<para>Request it:</para>
+
+<programlisting>$ curl http://127.0.0.1/rexxlets/hello/
+Hello, world
+</programlisting>
+
+<para>The processor publishes the two objects a rexxlet works with in the global
+environment, as <literal>.request</literal> and <literal>.response</literal>. The
+assignment here sets the response's <literal>Content-Type</literal>; the
+<methodname>Say</methodname> writes the body.</para>
+
+<para>That last point matters. <methodname>Say</methodname> does not print to a
+terminal here: while the rexxlet runs, the default output stream is the response's
+buffered body, so <methodname>Say</methodname>
+<emphasis role="italic">appends a line to the response</emphasis>. Nothing is sent
+yet &mdash; the body is collected in a buffer &mdash; and when the rexxlet ends,
+the processor flushes it, writing the headers and then the body to the client. A
+rexxlet that does nothing but <methodname>Say</methodname> still produces a
+complete, well-formed HTTP response; the processor handles the envelope.</para>
+
+<para>The content type can go too, and so the smallest rexxlet that works is the
+single <computeroutput>Say "Hello, world"</computeroutput> of
+<xref linkend="stut-one-line" xrefstyle="select:title"/> &mdash; a fresh response
+already carries <literal>text/plain; charset=utf-8</literal>, and that default
+charset is why Unicode written straight into a rexxlet reaches the browser intact.
+What this chapter adds to that picture is what the processor does with the two
+objects: the request is built from the incoming call, the body is buffered, and
+<methodname>Say</methodname> appends to it.</para>
+</section>
+
+<section id="tut-reading-request"><title>Reading the Request</title>
+<indexterm><primary>request</primary><secondary>reading arguments</secondary></indexterm>
+<indexterm><primary>arg</primary></indexterm>
+<indexterm><primary>GET</primary></indexterm>
+<indexterm><primary>POST</primary></indexterm>
+<indexterm><primary>query string</primary></indexterm>
+<indexterm><primary>form body</primary></indexterm>
+
+<para>The short tutorial already read a parameter with
+<methodname>arg</methodname>; here is the whole of it. Request arguments &mdash;
+the query string of a <literal>GET</literal>, the form body of a
+<literal>POST</literal> &mdash; are reached through <methodname>arg</methodname>,
+which is modelled on the built-in &Rexx; <function>Arg</function> function:
+called with no argument it returns the count, and otherwise the first argument
+selects one, by position when it is a whole number and by name otherwise. A
+second argument says what to return &mdash; <literal>Value</literal> (the
+default), <literal>Name</literal>, <literal>Exists</literal> or
+<literal>Omitted</literal>.</para>
+
+<para>Here is a rexxlet that enumerates every argument it received, by
+position:</para>
+
+<programlisting language="rexx">n = .request~arg()
+Say "count="n
+Do i = 1 To n
+  Say i": ".request~arg(i, "Name")"=".request~arg(i, "Value")
+End
+</programlisting>
+
+<para>Calling it shows the arguments back in the order they arrived, names in
+their original spelling:</para>
+
+<programlisting>$ curl "http://127.0.0.1/rexxlets/multi/?q=hello&amp;Lang=ca"
+count=2
+1: q=hello
+2: Lang=ca
+</programlisting>
+
+<para>Lookup by name is the more common case, and it is caseless &mdash;
+<computeroutput>arg("lang")</computeroutput> finds <literal>Lang</literal>
+&mdash; while <literal>Exists</literal> lets a rexxlet branch on whether an
+argument was sent at all:</para>
+
+<programlisting language="rexx">Say "q=".request~arg("q", "Value")
+Say "exists=".request~arg("q", "Exists")
+Say "missing_exists=".request~arg("nope", "Exists")
+</programlisting>
+
+<programlisting>$ curl "http://127.0.0.1/rexxlets/qs/?q=hello"
+q=hello
+exists=1
+missing_exists=0
+</programlisting>
+
+<para>Two things are happening here that the rexxlet never has to code around.
+First, names and values arrive <emphasis role="italic">decoded</emphasis>:
+percent-escapes and the <literal>+</literal>-for-space convention of form
+encoding are already undone, on both sides of each pair, so an argument the form
+sent as <literal>user+name</literal> is reached as
+<computeroutput>arg("user name")</computeroutput>. Second, the arguments are
+guaranteed well-formed before the rexxlet runs. RexxHTTP applies a strict
+argument policy &mdash; every parameter must have the shape
+<emphasis role="italic">name</emphasis><literal>=</literal><emphasis role="italic">value</emphasis>,
+names must be non-empty, must not begin with a digit, and must be unique
+caselessly &mdash; and a request that breaks a rule is answered with
+<literal>400 Bad Request</literal> and never reaches the rexxlet. So
+<methodname>arg</methodname> never has to cope with a malformed or duplicated
+parameter; the rexxlet may assume every argument has a name and a value and that
+a name names exactly one argument. The <xref linkend="rationale" xrefstyle="select:title"/> chapter explains
+why strict-by-default is the right policy for this kind of deployment, rather
+than a hazard. The full repertoire of <methodname>arg</methodname> &mdash;
+positional versus named lookup, the four options, the treatment of duplicates
+&mdash; is in the <classname>HTTP.Request</classname> reference in the
+<xref linkend="clsref" xrefstyle="select:title"/>.</para>
+
+<para>The same rexxlet code serves a <literal>GET</literal> and a form
+<literal>POST</literal> without change: the processor parses the query string of
+the one and the <literal>application/x-www-form-urlencoded</literal> body of the
+other into the same arguments, so <methodname>arg</methodname> reads identically
+either way.</para>
+</section>
+
+<section id="tut-cookie"><title>Setting a Cookie</title>
+<indexterm><primary>cookie</primary><secondary>setting</secondary></indexterm>
+<indexterm><primary>addcookie</primary></indexterm>
+
+<para>A cookie the response sets is an <classname>HTTP.Cookie</classname> object:
+create it, set its attributes, and hand it to
+<computeroutput>.response~addcookie</computeroutput>. The cookie is scheduled
+then, and emitted as a <literal>Set-Cookie</literal> header when the response is
+committed.</para>
+
+<programlisting language="rexx">c = .HTTP.Cookie~new("session")
+c~value = "abc123"
+c~path = "/"
+.response~addcookie(c)
+Say "cookie set"
+</programlisting>
+
+<programlisting>$ curl -i "http://127.0.0.1/rexxlets/setck/"
+HTTP/1.1 200 OK
+...
+Set-Cookie: session=abc123; Path=/
+Content-Type: text/plain; charset=utf-8
+
+cookie set
+</programlisting>
+
+<para>A freshly created cookie is the quietest thing possible &mdash; a session
+cookie with <literal>name=value</literal> and nothing else &mdash; and only
+the desired attributes are added: <computeroutput>c~max_age = 86400</computeroutput>
+for a lifetime, <computeroutput>c~httponly = 1</computeroutput> to keep it from
+JavaScript, <computeroutput>c~samesite = "Lax"</computeroutput> and so on. The
+cookie validates eagerly: an inconsistent combination, such as
+<literal>SameSite=None</literal> without <literal>Secure</literal>, is refused at
+<methodname>addcookie</methodname> rather than emitted as a header the browser
+would silently drop. The attribute set and the consistency rules are in the
+<classname>HTTP.Cookie</classname> reference.</para>
+
+<para>Reading a cookie back is the request side, and it parallels
+<methodname>arg</methodname>:</para>
+
+<programlisting language="rexx">Say "count=".request~cookie()
+Say "session=".request~cookie("session", "Value")
+</programlisting>
+
+<programlisting>$ curl --cookie "session=abc123" "http://127.0.0.1/rexxlets/readck/"
+count=1
+session=abc123
+</programlisting>
+
+<para>The two halves form a round trip: a value is taken verbatim on the way out
+(reserved characters must be encoded by the caller) and returned percent-decoded on the
+way in. Note one asymmetry from <methodname>arg</methodname>: cookie lookup by
+name is case-<emphasis role="italic">sensitive</emphasis>, because user agents
+treat <literal>session</literal> and <literal>Session</literal> as different
+cookies, and the option word is given as an abbreviation rather than by its first
+letter alone. The details are in the <methodname>cookie</methodname> entry of the
+<classname>HTTP.Request</classname> reference.</para>
+</section>
+
+<section id="tut-lazy-headers"><title>Headers After the Body: Lazy Headers</title>
+<indexterm><primary>headers</primary><secondary>lazy</secondary></indexterm>
+<indexterm><primary>lazy headers</primary></indexterm>
+<indexterm><primary>buffering</primary></indexterm>
+<indexterm><primary>commit</primary></indexterm>
+
+<para>Because the body is buffered, the response headers stay changeable
+<emphasis role="italic">after</emphasis> output has begun &mdash; right up until
+the response is committed. This is unusual enough to be worth seeing directly.
+The following rexxlet writes a line of body,
+<emphasis role="italic">then</emphasis> sets a header, then writes more
+body:</para>
+
+<programlisting language="rexx">Say "body first line"
+.response~content_type = "text/plain"
+.response~x_late_header = "yes"
+Say "body second line"
+</programlisting>
+
+<para>The header set after the first <methodname>Say</methodname> still reaches
+the client:</para>
+
+<programlisting>$ curl -i "http://127.0.0.1/rexxlets/late/"
+HTTP/1.1 200 OK
+...
+X-Late-Header: yes
+Content-Type: text/plain; charset=utf-8
+
+body first line
+body second line
+</programlisting>
+
+<para>The body the rexxlet <quote>wrote</quote> went into the buffer, not onto
+the wire, so when <literal>x_late_header</literal> was assigned the head had not
+yet been sent and the new header simply joined the others. Nothing is committed
+until the first flush &mdash; here, the processor's automatic one after the
+rexxlet returns &mdash; at which point the whole head goes out in front of the
+whole body. (The message form
+<computeroutput>.response~x_late_header = "yes"</computeroutput> reaches the
+header <literal>X-Late-Header</literal>; the response object turns underscores
+into hyphens. A header whose name truly contains an underscore needs the bracket
+form, <computeroutput>response["X_Odd_Name"] =</computeroutput> &mdash; see the
+<classname>HTTP.Response</classname> reference.)</para>
+
+<para>This freedom has one edge. Once the response
+<emphasis role="italic">is</emphasis> committed the head is on the wire and can
+no longer change, so a header assignment after that point is a programming error
+and raises, rather than failing silently. A rexxlet that just writes body and
+lets the processor flush never meets this edge; a rexxlet that flushes early
+does, deliberately &mdash; which is the next topic.</para>
+</section>
+
+<section id="tut-flushing"><title>Flushing Early</title>
+<indexterm><primary>flush</primary><secondary>early</secondary></indexterm>
+<indexterm><primary>output stream</primary></indexterm>
+
+<para>A rexxlet may flush the response itself, before it returns, by calling
+<computeroutput>.response~flush</computeroutput>:</para>
+
+<programlisting language="rexx">.response~content_type = "text/plain"
+Say "before flush"
+.response~flush
+Say "after flush"
+</programlisting>
+
+<programlisting>$ curl "http://127.0.0.1/rexxlets/partial/"
+before flush
+after flush
+</programlisting>
+
+<para>The output is identical to a rexxlet that never flushed &mdash; and that
+is the honest result to show. The first flush commits the response: it writes
+the headers, then the body buffered so far, and from that point the head is
+frozen. What an explicit flush buys is therefore not what intuition (or the 2006
+manual) suggests. It does <emphasis role="italic">not</emphasis> reliably make
+the client see <quote>before flush</quote> appear before
+<quote>after flush</quote>: in a production deployment
+<literal>mod_deflate</literal> sits downstream and buffers the CGI output to
+compress it, so progressive, client-visible streaming is not something a rexxlet
+can count on. What an early flush does buy is control over
+<emphasis role="italic">when</emphasis> the head is committed &mdash; fixing the
+headers and status at a chosen point &mdash; which is occasionally what is wanted
+and is the mechanism behind the lazy-header behaviour above.
+<xref linkend="reqresp" xrefstyle="select:title"/> tells this story properly,
+<literal>mod_deflate</literal> and all; for everyday rexxlets, simply never
+calling <methodname>flush</methodname> and letting the processor do it is exactly
+right.</para>
+</section>
+
+<section id="tut-errors-redirects"><title>Errors and Redirects</title>
+<indexterm><primary>error</primary></indexterm>
+<indexterm><primary>redirect</primary></indexterm>
+<indexterm><primary>status</primary></indexterm>
+<indexterm><primary>redirects</primary></indexterm>
+
+<para>Two common responses have their own one-line forms, written to be the last
+thing a rexxlet does. To send an error page:</para>
+
+<programlisting language="rexx">If \recordExists(.request~arg("id")) Then
+  Exit .response~error(404, "no such record")
+
+.response~content_type = "text/html; charset=utf-8"
+Say "&lt;p&gt;found it&lt;/p&gt;"
+</programlisting>
+
+<para><computeroutput>error(status [, detail])</computeroutput> sets the status,
+switches the content type to <literal>text/html</literal>, and replaces any
+buffered body with a short error page; the optional detail is HTML-escaped and
+shown as a diagnostic line. <computeroutput>.response~404(detail)</computeroutput>
+is shorthand for the commonest case. To redirect:</para>
+
+<programlisting language="rexx">Exit .response~redirect("/rexxlets/hello/")
+</programlisting>
+
+<para><computeroutput>redirect(location [, status])</computeroutput> defaults to
+<literal>302</literal>; pass <literal>301</literal> for a permanent move or
+<literal>303</literal> after a form <literal>POST</literal>. Both
+<methodname>error</methodname> and <methodname>redirect</methodname> follow the
+same commit discipline as a late header: they discard an uncommitted body and do
+their work, but raise if the response has already been committed, since by then
+the status can no longer change. Their full behaviour is in the
+<classname>HTTP.Response</classname> reference.</para>
+</section>
+
+<section id="tut-next"><title>Where to Go Next</title>
+
+<para>These rexxlets exercise most of the everyday API: reading arguments and
+cookies, writing the body, setting headers and cookies on the response, and the
+two shorthand exits. The next chapter,
+<xref linkend="examples" xrefstyle="select:title"/>, reads two rexxlets that put
+this same API to work in production &mdash; the page factory and the Markdown
+renderer that serve <systemitem>rexx.epbcn.com</systemitem>. The one idea
+underneath all of them &mdash; the buffered body, the lazy headers, the single
+commit &mdash; is the subject of <xref linkend="reqresp" xrefstyle="select:title"/>,
+which is worth reading before building anything larger. The exhaustive,
+method-by-method account of the four classes is the
+<xref linkend="clsref" xrefstyle="select:title"/>.</para>
+</section>
+</chapter>

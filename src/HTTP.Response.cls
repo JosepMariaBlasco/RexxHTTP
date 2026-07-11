@@ -357,16 +357,20 @@
     Raise syntax 93.900 array (-
       "Cannot send an error response: the response is already committed")
 
-  reason = self~statusReason(status)
-
-  -- Discard whatever the rexxlet had written so far
+  -- Discard any body buffered before this call (e.g. a half-built page).
+  -- Mirrors redirect(); without it the stale body leaks ahead of the error
+  -- page. Safe here: committed output was ruled out just above.
   output~reset
 
-  -- Status and content type as headers; the normal commit emits them
-  headers["STATUS"]       = status reason
-  headers["CONTENT-TYPE"] = "text/html; charset=utf-8"
+  reason = self~statusReason(status)
+  title  = status reason
 
-  title = status reason
+ .output~destination(.StdOut)
+
+  Say "Content-type: text/html; charset=utf-8"
+  Say "Status:" status reason
+  Say ""
+
   Say "<!DOCTYPE html>"
   Say "<html lang=""en"">"
   Say "<head>"

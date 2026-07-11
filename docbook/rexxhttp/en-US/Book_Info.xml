@@ -1,0 +1,86 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE bookinfo PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<bookinfo id="book-rexxhttp">
+	<title>RexxHTTP</title>
+	<subtitle>Serving web content with Rexx</subtitle>
+	<productname>ooRexx Documentation</productname>
+	<productnumber>&VERSION;</productnumber>
+	<edition>&EDITION;</edition>
+	<pubsnumber>0</pubsnumber>
+	<corpauthor>
+		<inlinemediaobject>
+			<imageobject>
+				<imagedata fileref="Common_Content/images/oorexx.jpg" align="center" role="cover" />
+			</imageobject>
+		</inlinemediaobject>
+	</corpauthor>
+	<legalnotice>
+		<para>Author Josep Maria Blasco</para>
+
+		<para>Copyright &copy; 2006&ndash;2026 Josep Maria Blasco</para>
+		<para>This documentation and the accompanying materials are made
+		available under the terms of the Apache License, Version 2.0, which
+		accompanies this distribution. A copy is also available as an appendix
+		to this document (see <xref linkend="license" xrefstyle="select:title"/>)
+		and at the following address:
+		<ulink url="https://www.apache.org/licenses/LICENSE-2.0">https://www.apache.org/licenses/LICENSE-2.0</ulink>.</para>
+
+		<para>Licensed under the Apache License, Version 2.0 (the
+		<quote>License</quote>); you may not use this work except in compliance
+		with the License. You may obtain a copy of the License at the address
+		above. Unless required by applicable law or agreed to in writing,
+		software distributed under the License is distributed on an
+		<quote>AS IS</quote> BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+		KIND, either express or implied. See the License for the specific
+		language governing permissions and limitations under the License.</para>
+
+		<para><emphasis role="bold">Disclaimer of Warranty.</emphasis> Unless
+		required by applicable law or agreed to in writing, Licensor provides
+		the Work (and each Contributor provides its Contributions) on an
+		<quote>AS IS</quote> BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+		KIND, either express or implied, including, without limitation, any
+		warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or
+		FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for
+		determining the appropriateness of using or redistributing the Work and
+		assume any risks associated with Your exercise of permissions under this
+		License.</para>
+
+		<para><emphasis role="bold">Limitation of Liability.</emphasis> In no
+		event and under no legal theory, whether in tort (including negligence),
+		contract, or otherwise, unless required by applicable law (such as
+		deliberate and grossly negligent acts) or agreed to in writing, shall
+		any Contributor be liable to You for damages, including any direct,
+		indirect, special, incidental, or consequential damages of any character
+		arising as a result of this License or out of the use or inability to
+		use the Work (including but not limited to damages for loss of goodwill,
+		work stoppage, computer failure or malfunction, or any and all other
+		commercial damages or losses), even if such Contributor has been advised
+		of the possibility of such damages.</para>
+	</legalnotice>
+</bookinfo>

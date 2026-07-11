@@ -1,0 +1,404 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<chapter id="shorttut"><title>A Short Tutorial</title>
+<indexterm><primary>rexxlet</primary></indexterm>
+<indexterm><primary>RexxHTTP</primary></indexterm>
+
+<para>This chapter conveys an idea of what RexxHTTP can do. It assumes the
+program is already installed, so that the reader can concentrate on
+understanding <emphasis role="italic">what it does</emphasis>; the
+details of installation come later, in
+<xref linkend="installation" xrefstyle="select:title"/>.</para>
+
+<section id="stut-one-line"><title>A One-Line Rexxlet</title>
+<indexterm><primary>rexxlet</primary><secondary>minimal</secondary></indexterm>
+
+<para>A rexxlet is nothing more than an ordinary &Rexx; program. Anyone who knows
+&Rexx; can already write one. Here is a complete, working rexxlet:</para>
+
+<programlisting language="rexx">
+  Say "Hello, world!"</programlisting>
+
+<para>One line. Request the rexxlet from a browser and <literal>Hello, world!</literal>
+will come back. That single line is the whole rexxlet:
+RexxHTTP has already given the response a sensible content type
+(<literal>text/plain</literal>, <literal>charset=utf-8</literal>) and everything
+else a well-formed reply needs, so the only thing left to supply is
+what to say.</para>
+
+</section>
+
+<section id="stut-query-string"><title>Reading a Parameter</title>
+<indexterm><primary>query string</primary></indexterm>
+<indexterm><primary>arg</primary></indexterm>
+
+<para>To accept parameters, the rexxlet reads them from the request object. The
+most direct way to send some is the <emphasis role="italic">query string</emphasis>
+&mdash; the part of a URL after the <literal>?</literal>. Add
+<literal>?Name=Josep</literal> to the URL and the rexxlet can read <literal>Name</literal>
+back:</para>
+
+<programlisting language="rexx">
+  If .request~arg("Name", "Omitted") Then Say "NAME parameter is missing"
+  Else                                    Say "Hello," .request~arg("Name")"!"
+</programlisting>
+
+<para>The <methodname>arg</methodname> method works similarly to the built-in
+&Rexx; <function>ARG</function> function, but it takes a name instead of a number
+to identify its arguments.</para>
+
+</section>
+
+<section id="stut-cookies"><title>Storing State</title>
+<indexterm><primary>cookie</primary></indexterm>
+
+<para>HTTP is a stateless protocol. An application that needs to keep state across
+requests can use cookies for that purpose: small named values the browser holds
+and sends back on every later request to the same place. The rexxlet reads an
+incoming cookie the same way it reads an argument &mdash;
+<methodname>cookie</methodname> on the request object, with the same options.</para>
+
+<para>The following rexxlet greets the visitor by name and remembers the name for next
+time. It can be read as one decision: has the visitor been seen before, and is a
+name being supplied now?</para>
+
+<programlisting language="rexx">  nameGiven = .request~arg("Name", "Exists")      -- was Name sent at all?
+  newName   = .request~arg("Name")                -- its value ("" if empty)
+  nameKnown = .request~cookie("Name", "Exists")   -- do we have a stored name?
+  oldName   = .request~cookie("Name")
+
+  Select
+    When nameGiven, newName \== "" Then Do        -- a name is being given
+     .response~addcookie(.HTTP.Cookie~new("Name", newName))
+      If nameKnown, oldName \== newName
+        Then Say "Goodbye," oldName"; and hello," newName"!"
+        Else Say "Hello," newName"!"
+    End
+    When nameGiven, nameKnown Then Do             -- Name= empty: forget me
+      forget = .HTTP.Cookie~new("Name", "")
+      forget~max_age = 0
+     .response~addcookie(forget)
+      Say "Goodbye," oldName"!"
+    End
+    When nameKnown Then Say "Welcome back," oldName"!"  -- no name, but we remember
+    Otherwise           Say "NAME parameter is missing"
+  End</programlisting>
+
+<para>Every branch is ordinary &Rexx;; the only new things are the two cookie
+operations. Handing a fresh <classname>HTTP.Cookie</classname> to
+<methodname>addcookie</methodname> stores a value; setting that cookie's
+<methodname>max_age</methodname> to zero tells the browser to discard it, which is
+how the rexxlet forgets a name when the visitor sends an empty one.</para>
+
+</section>
+
+<section id="stut-html"><title>Sending HTML</title>
+<indexterm><primary>HTML</primary></indexterm>
+<indexterm><primary>content_type</primary></indexterm>
+<indexterm><primary>headers</primary></indexterm>
+
+<para>For richer, structured responses a rexxlet sends HTML. When this happens,
+the rexxlet sets the <literal>Content-Type</literal> header:</para>
+
+<programlisting language="rexx"> .response~content_type = "text/html"
+
+  Say "&lt;!DOCTYPE html&gt;"
+  Say "&lt;html lang=""en""&gt;"
+  Say "  &lt;head&gt;&lt;meta charset=""utf-8""&gt;&lt;title&gt;Hello&lt;/title&gt;&lt;/head&gt;"
+  Say "  &lt;body&gt;"
+  Say "    &lt;h1&gt;Hello, world from HTML!&lt;/h1&gt;"
+  Say "    &lt;p&gt;This is a paragraph.&lt;/p&gt;"
+  Say "  &lt;/body&gt;"
+  Say "&lt;/html&gt;"</programlisting>
+
+</section>
+
+<section id="stut-resource"><title>HTML in a Resource</title>
+<indexterm><primary>::Resource directive</primary></indexterm>
+<indexterm><primary>resources</primary></indexterm>
+
+<para>To handle large blocks of HTML, it is usually practical to use a
+<computeroutput>::RESOURCE</computeroutput> directive:</para>
+
+<programlisting language="rexx"> .response~content_type = "text/html"
+  Say .resources~page
+
+::RESOURCE page
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Hello&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Hello, world from HTML!&lt;/h1&gt;
+    &lt;p&gt;This is a paragraph.&lt;/p&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+::END</programlisting>
+
+</section>
+
+<section id="stut-template"><title>Filling in the Template</title>
+<indexterm><primary>form</primary></indexterm>
+<indexterm><primary>placeholder</primary></indexterm>
+<indexterm><primary>caselessChangeStr</primary></indexterm>
+<indexterm><primary>::Resource directive</primary></indexterm>
+
+<para>HTML pages can display <emphasis role="italic">forms</emphasis> that collect
+data, and a rexxlet reads that data with the same <methodname>arg</methodname>
+method. A second resource holds a <emphasis role="italic">placeholder</emphasis>
+&mdash; a marker written here as <literal>%name%</literal> &mdash; that the rexxlet
+replaces with the submitted value on the way out.</para>
+
+<programlisting language="rexx">
+ .response~content_type = "text/html"
+
+  -- A name came in: greet
+  If .request~arg("Name", "Exists"), .request~arg("Name") \== "" Then Do
+    greeting = .resources~greeting~makeString
+    name     = .request~arg("Name")
+    name     = .response~encodeHTML(name)
+    Say greeting~caselessChangeStr("%name%", name)
+    Exit
+  End
+
+  -- Nothing typed yet: ask
+  Say .resources~form~makeString
+
+::RESOURCE form
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Greeter&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;form method="get"&gt;
+      &lt;label&gt;Your name: &lt;input name="Name"&gt;&lt;/label&gt;
+      &lt;button&gt;Greet me&lt;/button&gt;
+    &lt;/form&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+::END
+
+::RESOURCE greeting
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Greeter&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Hello, %name%!&lt;/h1&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+::END</programlisting>
+
+<para>Ask for the rexxlet with no parameter and the first resource goes out
+untouched: a form with a single field. Fill it in and submit, and the browser
+comes back to the same rexxlet with <literal>Name</literal> set &mdash; the form
+has built the query string on the visitor's behalf, the very thing
+<xref linkend="stut-query-string" xrefstyle="select:title"/> typed out by
+hand.</para>
+
+<para>This time <literal>Name</literal> is there, so the rexxlet reaches for the
+second resource and fills it in. The work is one line:
+<methodname>caselessChangeStr</methodname>, an ordinary &Rexx; string method,
+replaces every <literal>%name%</literal> in the page with the value that came in.
+Nothing about it is particular to the web &mdash; it is the same method one would
+use to edit any string &mdash; and that is the point: the page is just text, the
+substitution is just &Rexx;, and the template fills itself in with a tool that was
+already at hand. Reading the argument is the same <methodname>arg</methodname> from
+before, and it stays the same whether the form sends its data in the URL or in the
+body of the request; <methodname>arg</methodname> reads it the same way either
+way.</para>
+
+</section>
+
+<section id="stut-cookie-html"><title>A Page That Remembers Its Visitor</title>
+<indexterm><primary>cookie</primary></indexterm>
+<indexterm><primary>form</primary></indexterm>
+<indexterm><primary>HTML</primary></indexterm>
+
+<para>The greeter of the previous section forgets the visitor the moment the response goes
+out: send it a name and it fills in the page, but come back without one and it has
+nothing to show but the empty form again. <xref linkend="stut-cookies"
+xrefstyle="select:title"/> already solved remembering, with a cookie &mdash; only
+there the answer came back as plain text. Nothing prevents doing both: store
+the name in a cookie when it is given, and serve the result as a proper HTML page
+either way. That is the whole chapter in one rexxlet &mdash; a form to ask, a
+template to fill, and a cookie to remember.</para>
+
+<programlisting language="rexx"> .response~content_type = "text/html"
+
+  Select
+    When .request~arg("Name", "Exists") Then Do      -- a name is being given
+      name = .request~arg("Name")
+     .response~addcookie(.HTTP.Cookie~new("Name", name))
+      page = .resources~greeting~makeString
+      name = .response~encodeHTML(name)
+      page = page~caselessChangeStr("%name%", name)
+    End
+    When .request~cookie("Name", "Exists") Then Do   -- we have seen you before
+      page = .resources~welcome~makeString
+      name = .response~encodeHTML(.request~cookie("Name"))
+     page = page~caselessChangeStr("%name%", name)
+    End
+    Otherwise page = .resources~form~makeString      -- a stranger: ask
+  End
+
+  Say page
+
+::RESOURCE form
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Greeter&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;form method="get"&gt;
+      &lt;label&gt;Your name: &lt;input name="Name"&gt;&lt;/label&gt;
+      &lt;button&gt;Remember me&lt;/button&gt;
+    &lt;/form&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+::END
+
+::RESOURCE greeting
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Greeter&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Hello, %name%! I will remember you.&lt;/h1&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+::END
+
+::RESOURCE welcome
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Greeter&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Welcome back, %name%!&lt;/h1&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+::END</programlisting>
+
+<para>Three visits tell the story. The first time, a stranger arrives with no
+name and no cookie, and the <literal>form</literal> resource goes out: the page
+asks who the visitor is. The form is filled in and submitted; now <literal>Name</literal> is set,
+so the rexxlet hands back a <classname>HTTP.Cookie</classname> &mdash; the same
+<methodname>addcookie</methodname> from <xref linkend="stut-cookies"
+xrefstyle="select:title"/> &mdash; and fills the <literal>greeting</literal>
+template with the supplied name. On a later visit no name is sent, but the browser
+sends the cookie along with the request; the rexxlet finds it with
+<methodname>cookie</methodname> and fills the <literal>welcome</literal> template
+instead. The page knows the visitor, who typed nothing the second time.</para>
+
+<para>These ideas are all here at once, and each is pulling its weight. The form collects a value without a hand-built URL;
+the cookie carries that value from one visit to the next; the resource holds the
+page as readable markup; <methodname>caselessChangeStr</methodname> drops the name
+into it; and <computeroutput>content_type</computeroutput> makes the browser
+render the result. None of it is more than a few lines, and together they are an
+ordinary web page that remembers its visitors &mdash; which is most of what a
+small web application ever has to do.</para>
+
+</section>
+
+<section id="stut-aggregate"><title>Reaching Out to the Network</title>
+<indexterm><primary>JSON</primary></indexterm>
+<indexterm><primary>wget</primary></indexterm>
+<indexterm><primary>::Requires directive</primary></indexterm>
+<indexterm><primary>encodeHTML</primary></indexterm>
+
+<para>A rexxlet is an ordinary &Rexx; program which can reach out
+to the world &mdash; read a file, query a database, call another service over the network &mdash;
+and weave what it finds into its reply. The code in the following example
+fetches two posts from a public test API, parses the JSON each
+returns, and lays them out as a page.</para>
+
+<programlisting language="rexx">
+ .response~content_type = "text/html"
+
+  posts = ""
+  base  = "https://jsonplaceholder.typicode.com/posts/"
+
+  Loop id = 1 To 2
+    post = FetchJSON(base || id)
+    If post == .nil
+      Then posts = posts || "&lt;p&gt;Could not load post" id".&lt;/p&gt;"
+      Else Do
+        title = .response~encodeHTML(post["title"])
+        body  = .response~encodeHTML(post["body"])
+        posts = posts || "&lt;article&gt;&lt;h2&gt;#" post["id"] "&mdash;" title "&lt;/h2&gt;" -
+                    || "&lt;p&gt;" body "&lt;/p&gt;&lt;/article&gt;"
+      End
+  End
+
+  page = .resources~page~makeString
+  Say page~caselessChangeStr("%posts%", posts)
+
+  Exit
+
+FetchJSON: Procedure
+  Use Strict Arg url
+  -- wget on a short leash: cap each stage at 5s and do not let its
+  -- default twenty silent retries hang the request if the host is down.
+  Address Command "wget -qO- --timeout=5 --tries=1" url With Output Stem lines.
+  If RC \= 0 Then Return .nil
+  text = ""
+  Loop i = 1 To lines.0
+    If i &gt; 1 Then text ||= "0a"x
+    text ||= lines.i
+  End
+  Signal On Syntax Name BadJSON
+  Return .json~fromJson(text)
+BadJSON:
+  Return .nil
+
+::RESOURCE page
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Two posts&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Two posts, fetched and merged&lt;/h1&gt;
+      %posts%
+  &lt;/body&gt;
+&lt;/html&gt;
+::END
+
+::Requires "json.cls"
+</programlisting>
+
+<para>The loop is the whole of it. For each post,
+<computeroutput>FetchJSON</computeroutput> downloads a URL and hands back a parsed
+object &mdash; or <literal>.nil</literal> if anything went wrong. The
+pieces are joined into the <literal>posts</literal> string, dropped into the
+template, and sent.</para>
+
+<para>The use of <methodname>encodeHTML</methodname> is mandatory to sanitize
+text received over the network, to avoid malformed output or XSS attacks.
+As to <computeroutput>FetchJSON</computeroutput>,
+it is called using a short timeout and a single try: a rexxlet that waits on
+the network is only as responsive as the slowest host it calls, and the leash
+keeps one slow answer from holding the request open.</para>
+
+</section>
+
+</chapter>

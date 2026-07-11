@@ -1,0 +1,384 @@
+/* ====================================================================
+   rexxhttp.css - Stylesheet for the RexxHTTP pages
+   ====================================================================
+
+   Sections:
+     1. Custom properties (the palette and the measures)
+     2. Reset / base
+     3. Layout (wrapper, header, footer)
+     4. Content typography
+     5. Cards (the accent-tab pattern)
+     6. Buttons and action links
+     7. Utilities
+     8. Responsive
+   ==================================================================== */
+
+
+/* ====================================================================
+   1. CUSTOM PROPERTIES
+   ==================================================================== */
+
+:root {
+  /* --- Earth palette (epbcn family) --- */
+  --salvia:        #4a6153;   /* muted green: headings, brand */
+  --salvia-claro:  #6e8a7c;   /* card tabs, soft accents */
+  --marron:        #7a6b56;   /* section labels in small caps */
+  --dorado:        #c9a84c;   /* highlight / hover colour */
+  --dorado-oscuro: #b0913a;
+
+  /* --- Backgrounds --- */
+  --fondo:         #f7f4ee;   /* page cream */
+  --superficie:    #ffffff;   /* boxes, cards */
+  --crema:         #fbf3df;   /* punctual warm highlight */
+  --borde:         #cdbf9f;   /* card border */
+  --borde-suave:   #e7e7e7;
+
+  /* --- Text --- */
+  --tinta:         #333333;
+  --tinta-suave:   #555555;
+  --tinta-tenue:   #777777;
+
+  /* --- Typography --- */
+  --font-titular:  Georgia, "Times New Roman", "Playfair Display", serif;
+  --font-cuerpo:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+  --font-mono:     "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+                   monospace;
+
+  /* --- Measures --- */
+  --ancho-max:     880px;
+  --radio:         3px;
+  --gap:           1.25rem;
+}
+
+
+/* ====================================================================
+   2. RESET / BASE
+   ==================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-cuerpo);
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--tinta);
+  background-color: var(--fondo);
+}
+
+img { max-width: 100%; height: auto; }
+
+a {
+  color: var(--salvia);
+  /* Discreet, always-on hint that this is a link: a soft underline set
+     apart from the text, in a muted tone. It firms up to solid gold on
+     hover, so the reader sees the affordance at rest without the heavier
+     look of a full solid underline running through body prose. */
+  text-decoration: underline;
+  text-decoration-color: var(--borde);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+a:hover, a:focus {
+  color: var(--dorado-oscuro);
+  text-decoration-color: var(--dorado);
+}
+
+
+/* ====================================================================
+   3. LAYOUT - wrapper, header, footer
+   ==================================================================== */
+
+.wrap {
+  max-width: var(--ancho-max);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+/* Header: brand on the left, subtitle in small caps */
+.site-header {
+  padding: 2.5rem 0 1.75rem;
+  border-bottom: 1px solid var(--borde-suave);
+  margin-bottom: 2rem;
+}
+.site-header .marca {
+  font-family: var(--font-titular);
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  line-height: 1.1;
+  color: var(--salvia);
+  margin: 0;
+}
+.site-header .marca a {
+  color: inherit;
+  /* Rony's rule: every clickable thing shows it is clickable. The brand is
+     a link too, so it carries the same discreet underline as body links —
+     just the faintest hairline, kept off the text with an offset. */
+  text-decoration: underline;
+  text-decoration-color: var(--borde);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+.site-header .marca a:hover {
+  color: inherit;
+  text-decoration-color: var(--dorado);
+}
+.site-header .lema {
+  font-family: var(--font-titular);
+  font-style: italic;
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  color: var(--marron);
+  margin: 0.35rem 0 0;
+}
+
+/* Footer: quiet, centred, earth */
+.site-footer {
+  margin-top: 3.5rem;
+  padding: 1.75rem 0 2.5rem;
+  border-top: 1px solid var(--borde-suave);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--tinta-tenue);
+}
+.site-footer a { color: var(--marron); }
+
+
+/* ====================================================================
+   4. CONTENT TYPOGRAPHY
+   ==================================================================== */
+
+main { padding-bottom: 1rem; }
+
+h1, h2, h3 {
+  font-family: var(--font-titular);
+  color: var(--salvia);
+  line-height: 1.2;
+  margin: 2rem 0 0.75rem;
+}
+h1 { font-size: clamp(1.6rem, 3.5vw, 2.1rem); }
+h2 { font-size: clamp(1.3rem, 2.8vw, 1.6rem); }
+h3 { font-size: 1.2rem; }
+
+/* Section label in small caps, with a golden bar underneath
+   (the motif from epbcn's funciones-institucionales) */
+.rotulo {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: var(--marron);
+  margin: 2.5rem 0 1.25rem;
+}
+.rotulo::after {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 2px;
+  background: var(--dorado);
+  margin-top: 0.5rem;
+}
+
+p { margin: 0 0 1rem; }
+
+.intro {
+  font-family: var(--font-titular);
+  font-style: italic;
+  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
+  line-height: 1.55;
+  color: var(--tinta-suave);
+  margin-bottom: 1.5rem;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--crema);
+  padding: 0.1em 0.35em;
+  border-radius: var(--radio);
+}
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  background: var(--superficie);
+  border: 1px solid var(--borde-suave);
+  border-left: 3px solid var(--salvia-claro);
+  border-radius: 0 var(--radio) var(--radio) 0;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+}
+pre code { background: none; padding: 0; }
+
+
+/* ====================================================================
+   5. CARDS - the accent-tab pattern
+   ====================================================================
+   Plain white box + a coloured tab on the left + a discreet hover
+   feedback (the tab turns golden). It is the motif that repeats all
+   over the epbcn family (.servicio, .tarjeta-persona).
+   ==================================================================== */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--gap);
+  margin: 1.5rem 0;
+}
+
+.card {
+  display: block;
+  background: var(--superficie);
+  border: 1px solid var(--borde-suave);
+  border-left: 3px solid var(--salvia-claro);
+  border-radius: 0 var(--radio) var(--radio) 0;
+  padding: 1.1rem 1.35rem;
+  color: inherit;
+  text-decoration: none;
+  transition: border-left-color 0.15s ease, box-shadow 0.15s ease;
+}
+a.card:hover, a.card:focus {
+  border-left-color: var(--dorado);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  text-decoration: none;
+}
+.card .card-title {
+  font-family: var(--font-titular);
+  font-size: 1.1rem;
+  color: var(--salvia);
+  margin: 0 0 0.3rem;
+  /* Same discreet hint as links: the card is clickable, so its title
+     wears the hairline underline. The description below stays clean. */
+  text-decoration: underline;
+  text-decoration-color: var(--borde);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+a.card:hover .card-title, a.card:focus .card-title {
+  text-decoration-color: var(--dorado);
+}
+.card .card-desc {
+  font-size: 0.92rem;
+  color: var(--tinta-suave);
+  line-height: 1.5;
+  margin: 0;
+}
+
+
+/* ====================================================================
+   6. BUTTONS AND ACTION LINKS
+   ==================================================================== */
+
+.btn {
+  display: inline-block;
+  font-family: var(--font-cuerpo);
+  font-size: 0.95rem;
+  padding: 0.5rem 1.15rem;
+  border-radius: var(--radio);
+  border: 1px solid var(--salvia);
+  background: var(--salvia);
+  color: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+.btn:hover, .btn:focus {
+  background: var(--salvia-claro);
+  border-color: var(--salvia-claro);
+  color: #fff;
+  text-decoration: none;
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--salvia);
+}
+.btn-ghost:hover, .btn-ghost:focus {
+  background: var(--salvia);
+  color: #fff;
+}
+
+
+/* ====================================================================
+   7. UTILITIES
+   ==================================================================== */
+
+.text-center { text-align: center; }
+.muted       { color: var(--tinta-tenue); }
+.mt-0        { margin-top: 0; }
+
+
+/* ====================================================================
+   8. CODE STYLE BAR - the Rexx highlight-style chooser
+   ====================================================================
+   A quiet control that sits at the top of the content, above the first
+   code block. It reads as a "view" control, not page furniture: right-
+   aligned, small caps label, and a select restyled away from the raw
+   browser widget into the earth palette (salvia border, golden focus,
+   custom golden chevron).
+   ==================================================================== */
+
+.code-style-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin: 0 0 1.75rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--borde-suave);
+}
+/* The bar ships with the `hidden` attribute and JS removes it only when the
+   page has highlighted code. But `display: flex` above outranks the UA
+   `[hidden] { display: none }` rule, so without this the bar shows through
+   even while hidden. Restore the attribute's meaning explicitly. */
+.code-style-bar[hidden] {
+  display: none;
+}
+
+.code-style-bar__label {
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--marron);
+}
+
+.code-style-bar__select {
+  font-family: var(--font-cuerpo);
+  font-size: 0.9rem;
+  color: var(--tinta);
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 0.35rem 2rem 0.35rem 0.7rem;
+  cursor: pointer;
+  /* Drop the native widget chrome and paint our own golden chevron. */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23c9a84c' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.code-style-bar__select:hover {
+  border-color: var(--salvia-claro);
+}
+.code-style-bar__select:focus {
+  outline: none;
+  border-color: var(--salvia);
+  box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.25);
+}
+
+
+/* ====================================================================
+   9. RESPONSIVE
+   ==================================================================== */
+
+@media (max-width: 600px) {
+  .site-header { padding: 1.75rem 0 1.25rem; }
+  .grid { grid-template-columns: 1fr; }
+}

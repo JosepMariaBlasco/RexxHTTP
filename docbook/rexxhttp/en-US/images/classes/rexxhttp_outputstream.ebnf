@@ -1,0 +1,42 @@
+/* HTTP.OutputStream — invocation grammar (Milestone B).
+   Subclass of Stream. Receiver (.response~output~) omitted from the rail,
+   per the rexxref convention: each production models the message from the
+   method name rightwards. Operative methods are derived from the RexxHTTP
+   .cls (invariant 5), not from Stream's canonical signature, because the
+   subclass reimplements them. Non-operative methods (the seven input
+   methods, and position/seek) carry a minimal 'method( options )' rail and
+   prose saying the call raises: the method is part of the interface but is
+   disabled at runtime. chars and supplier take no parentheses in Stream,
+   so they appear bare. Leaf non-terminals left undefined on purpose. */
+
+/* ---- Operative methods (from the RexxHTTP code) ---- */
+
+outputstream_arrayout         ::= 'arrayout(' array ( ',' option )? ')'
+outputstream_charout          ::= 'charout(' string? ')'
+outputstream_close            ::= 'close'
+outputstream_command          ::= 'command(' string ')'
+outputstream_description      ::= 'description'
+outputstream_flush            ::= 'flush'
+outputstream_lineout          ::= 'lineout(' line? ')'
+outputstream_open             ::= 'open'
+outputstream_qualify          ::= 'qualify'
+outputstream_query            ::= 'query(' option ')'
+outputstream_reset            ::= 'reset'
+outputstream_say              ::= 'say(' line? ')'
+outputstream_state            ::= 'state'
+outputstream_underlyingstream ::= 'underlyingstream'
+
+/* ---- Non-operative: the seven Stream input methods (all Raise notready) ---- */
+
+outputstream_arrayin   ::= 'arrayin(' options ')'
+outputstream_charin    ::= 'charin(' options ')'
+outputstream_chars     ::= 'chars'
+outputstream_linein    ::= 'linein(' options ')'
+outputstream_lines     ::= 'lines(' options ')'
+outputstream_makearray ::= 'makearray(' options ')'
+outputstream_supplier  ::= 'supplier'
+
+/* ---- Non-operative: positioning (both raise; same method, two names) ---- */
+
+outputstream_position ::= 'position(' options ')'
+outputstream_seek     ::= 'seek(' options ')'

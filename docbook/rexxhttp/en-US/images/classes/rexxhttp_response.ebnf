@@ -1,0 +1,63 @@
+/* HTTP.Response — invocation grammar (Milestone B).
+   One production per method diagram. Receiver and result-assignment are
+   omitted from the rail, per the rexxref convention: each production
+   models the message from the method name rightwards. Operative methods
+   and their signatures are derived from the RexxHTTP .cls (invariant 5).
+   Leaf non-terminals (string, headername, status, ...) are left undefined
+   on purpose; ebnf2svg renders them as placeholder boxes, the prose
+   explains them.
+
+   Notes on particular methods:
+   - The bracket operator is read-write: [] reads a header, []= writes one.
+     The set form is four separate tokens, '[' headername ']' '=' value,
+     because the '=' need not abut the ']' (ref-decisiones, setters v43).
+   - encodeHTML, encodeURIComponent, encodeURI and encodeForm each exist as
+     a class method and an instance method with the same name; each gets
+     two productions, the class one carrying a 'class_' segment.
+   - 404 is the shorthand for error(404 [,detail]); it carries its own rail
+     with an optional detail, the prose remits to error.
+   - unknown carries a rail like the canonical unknown( messagename,
+     messageargs ); in Response BOTH branches operate -- get reads a header,
+     set (a message ending in '=') writes one -- as the prose states. */
+
+/* ---- Class methods (encoders; the body lives on the class) ---- */
+
+response_class_encodeform         ::= 'encodeForm(' string ')'
+response_class_encodehtml         ::= 'encodeHTML(' string ')'
+response_class_encodeuri          ::= 'encodeURI(' string ')'
+response_class_encodeuricomponent ::= 'encodeURIComponent(' string ')'
+
+/* ---- Instance methods (by method name, lowercase ASCII) ---- */
+
+/* Shorthand for error(404 [,detail]); the prose remits to error. */
+response_404 ::= '404(' ( detail )? ')'
+
+/* Bracket operator: get reads a header, set writes one. The set form keeps
+   '=' as a separate token, since it need not abut the ']'. */
+response_atget ::= '[' headername ']'
+response_atput ::= '[' headername ']' '=' headervalue
+
+response_addcookie ::= 'addcookie(' cookie ')'
+response_commit    ::= 'commit'
+
+/* Read-only state flags (::Attribute ... Get). */
+response_committed  ::= 'committed'
+response_committing ::= 'committing'
+
+/* Instance encoders: delegate to the class methods of the same name. */
+response_encodeform         ::= 'encodeForm(' string ')'
+response_encodehtml         ::= 'encodeHTML(' string ')'
+response_encodeuri          ::= 'encodeURI(' string ')'
+response_encodeuricomponent ::= 'encodeURIComponent(' string ')'
+
+response_error    ::= 'error(' status ( ',' detail )? ')'
+response_flush    ::= 'flush'
+response_output   ::= 'output'
+response_redirect ::= 'redirect(' location ( ',' status )? ')'
+
+response_statusreason ::= 'statusReason(' code ')'
+
+/* The header pool door. Both branches operate in Response: the get branch
+   reads a header, the set branch (message ending in '=') writes one, with
+   the post-commit fail-fast guard (the prose explains). */
+response_unknown ::= 'unknown(' messagename ( ',' messageargs )? ')'

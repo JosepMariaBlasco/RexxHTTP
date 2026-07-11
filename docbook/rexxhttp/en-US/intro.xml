@@ -1,0 +1,94 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<chapter id="introduction"><title>Introduction</title>
+<indexterm><primary>introduction</primary></indexterm>
+
+<para>RexxHTTP is a rexxlet processor for &Rexx; and Apache. It runs as a
+CGI program under the Apache HTTP server: Apache hands it an incoming<indexterm><primary>RexxHTTP</primary></indexterm><indexterm><primary>rexxlet processor</primary></indexterm><indexterm><primary>rexxlet</primary></indexterm><indexterm><primary>CGI</primary></indexterm><indexterm><primary>Apache</primary></indexterm>
+request, and RexxHTTP turns the raw CGI environment into a small set of
+objects, runs the rexxlet against them, and writes the result back as an
+HTTP response. A rexxlet is an ordinary &Rexx; program, so the whole of
+&Rexx; is available to it, with the HTTP request and the response it is
+about to build handed in as objects rather than scraped out of environment
+variables by hand.</para>
+
+<para>For each request RexxHTTP builds three objects. A
+<emphasis role="bold">request</emphasis> object exposes the request line,<indexterm><primary>request</primary><secondary>request object</secondary></indexterm><indexterm><primary>response</primary><secondary>response object</secondary></indexterm><indexterm><primary>output stream</primary></indexterm><indexterm><primary>buffering</primary></indexterm><indexterm><primary>lazy headers</primary></indexterm><indexterm><primary>headers</primary></indexterm><indexterm><primary>cookie</primary></indexterm><indexterm><primary>status line</primary></indexterm><indexterm><primary>commit</primary></indexterm><indexterm><primary>body</primary></indexterm><indexterm><primary>.request</primary></indexterm><indexterm><primary>.response</primary></indexterm>
+the headers and the GET/POST arguments through named methods, decoding
+percent- and plus-escapes automatically. A <emphasis role="bold">response</emphasis>
+object collects the status line and the response headers &mdash; cookies are
+among those headers &mdash; and allows them to be attached. And an <emphasis role="bold">output stream</emphasis> receives the
+body: it is a buffering subclass of the built-in <classname>Stream</classname>
+class, which allows the response headers to be written
+<emphasis role="italic">lazily</emphasis> &mdash; status, headers and cookies may
+still be changed after the body has already been started, right up
+until the response is committed. The request and the response reach the rexxlet
+as the <literal>.request</literal> and <literal>.response</literal> objects,
+placed in the environment by RexxHTTP. The body is
+produced with ordinary <methodname>Say</methodname> or
+<methodname>CharOut</methodname> instructions. The response is committed on the
+first flush, which normally happens when the rexxlet ends. This is the central
+idea of the design, and the chapter
+<xref linkend="reqresp" xrefstyle="select:title"/> returns to it in detail.</para>
+
+<para>The rest of this book is organized as follows:</para>
+
+<itemizedlist>
+<listitem><para><xref linkend="shorttut" xrefstyle="select:title"/> is a
+short, hands-on tour that builds a handful of small rexxlets, just enough to
+get a feel for how RexxHTTP works before going into detail.</para></listitem>
+<listitem><para><xref linkend="installation" xrefstyle="select:title"/>
+explains how to install RexxHTTP and how to configure Apache to run
+rexxlets.</para></listitem>
+<listitem><para><xref linkend="tutorial" xrefstyle="select:title"/> covers
+the same ground as the short tutorial, but more slowly and methodically,
+naming each piece and verifying every rexxlet against a running
+server.</para></listitem>
+<listitem><para><xref linkend="reqresp" xrefstyle="select:title"/>
+describes the model that lies at the heart of the design
+&mdash; the central idea introduced above.</para></listitem>
+<listitem><para><xref linkend="clsref" xrefstyle="select:title"/> is the
+complete reference to the four classes that RexxHTTP places at a rexxlet's
+disposal.</para></listitem>
+<listitem><para><xref linkend="rationale" xrefstyle="select:title"/>
+explains why RexxHTTP is built the way it is.</para></listitem>
+<listitem><para><xref linkend="license" xrefstyle="select:title"/>
+reproduces the Apache License 2.0, under which RexxHTTP is
+released.</para></listitem>
+</itemizedlist>
+
+<para>RexxHTTP requires &Rexx; 5.3.0 or later and Apache 2.4 or later. It is
+released under the Apache License 2.0 and published at
+<ulink url="https://rexx.epbcn.com/rexxhttp/">https://rexx.epbcn.com/rexxhttp/</ulink>
+and on GitHub at
+<ulink url="https://github.com/JosepMariaBlasco/RexxHTTP">https://github.com/JosepMariaBlasco/RexxHTTP</ulink>.
+The first of these is the preferred one, as it takes advantage of the
+<application>Rexx Highlighter</application> to colour its program listings.</para>
+
+</chapter>

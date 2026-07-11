@@ -45,8 +45,8 @@
   stream_name = "HTTP.OutputStream:1"
 
   -- Initialize the buffer and other variables
-  buffer = .mutablebuffer~new(,32768)
-  state  = underlyingstream~state
+  buffer = .MutableBuffer~new(,32768)
+  state  =  underlyingstream~state
   opened =  state == "READY"
   If opened Then description = ""
   Else description = "Underlying stream not ready:" underlyingstream~description
@@ -63,12 +63,10 @@
 -- UNDERLYINGSTREAM                                                           --
 --------------------------------------------------------------------------------
 
-::Method underlyingstream
-  Expose underlyingstream
-  Return underlyingstream
+::Attribute underlyingStream Get
 
 /*******************************************************************************
-* The following are STREAM input methods. They all raise NOTREADY              *
+* The following are STREAM input methods                                       *
 *******************************************************************************/
 
 ::Method arrayin
@@ -80,16 +78,14 @@
   Raise notready Additional (self) Description (stream_name) Return ""
 
 ::Method chars
-  Expose stream_name
-  Raise notready Additional (self) Description (stream_name) Return ""
+  Return 0
 
 ::Method linein
   Expose stream_name
   Raise notready Additional (self) Description (stream_name) Return ""
 
 ::Method lines
-  Expose stream_name
-  Raise notready Additional (self) Description (stream_name) Return 0
+  Return 0
 
 ::Method makearray
   Expose stream_name

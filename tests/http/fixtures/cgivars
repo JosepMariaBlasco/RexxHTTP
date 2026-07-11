@@ -1,0 +1,26 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- CGI-contract probe for the variable x topology matrix. Each active line
+-- below emits one reconstructed CGI variable as "name=[value]". The matrix
+-- framework (RunHTTPTests.rex + the CGI-contract tests in RexxHTTP.testGroup)
+-- deploys this same probe across the twelve topologies and asserts each
+-- value against the contract literal for that (variable, topology) cell.
+--
+-- To bring a NEW variable under contract: uncomment its line here, run the
+-- matrix once to SEE what it emits in each of the twelve cells, decide with
+-- the CGI contract in hand which values are correct, and paste those twelve
+-- literals as a new row in the contract table. Never predict the value in
+-- code -- the probe reports, the table records, so the test never
+-- reimplements what it checks.
+Say "request_url=["request~request_url"]"
+Say "script_name=["request~script_name"]"
+-- Not yet under contract (validate before activating):
+Say "path_info=["request~path_info"]"
+Say "path_translated=["request~path_translated"]"
+Say "filename=["request~filename"]"
+Say "script_filename=["request~script_filename"]"
+Say "request_uri=["request~request_uri"]"
+Say "uri=["request~uri"]"
+Say "document_uri=["request~document_uri"]"
+-- Say "requested_file=["request~requested_file"]"
+Say "query_string=["request~query_string"]"

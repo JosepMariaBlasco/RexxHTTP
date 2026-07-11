@@ -16,7 +16,7 @@
 /* unpacks it, enables the cgi and actions modules and the RexxHTTP handler   */
 /* through an Include fragment (the main httpd.conf is left untouched bar one */
 /* appended Include line), deploys the sources to cgi-bin, plants a minimal   */
-/* index rexxlet, installs Apache as a service and smoke-tests with curl.      */
+/* index rexxlet, installs Apache as a service and smoke-tests with curl.     */
 /*                                                                            */
 /* On Windows there is NO wrapper: Apache runs RexxHTTP.rex directly through  */
 /* its #!rexx shebang, so the handler points straight at the processor.       */
@@ -64,7 +64,10 @@
 -- Locate the sources (src\ is a sibling of this install\ directory)          --
 --------------------------------------------------------------------------------
 
-  srcDir = .File~new(.Context~package~name)~parentFile~parent"\src"
+  -- The package root is the parent of this install\ directory; src\ is its
+  -- child. srcRoot feeds the exclusion-model htdocs population (PlantHtdocs).
+  srcRoot = .File~new(.Context~package~name)~parentFile~parent
+  srcDir  = srcRoot"\src"
 
   -- The five sources. On Windows the wrapper is NOT used: Apache runs
   -- RexxHTTP.rex directly via its shebang, so the wrapper is not deployed.
@@ -95,11 +98,30 @@
   assumeYes  = opts~assumeYes
   uninstall  = (opts~mode == "uninstall")
   keepApache = opts~keepApache
+  userMode   = opts~user
+
+  -- A --user install roots under the user's home (no elevation, no service),
+  -- for people who cannot write to C:\ or register services -- students on
+  -- lab machines, say. Absent an explicit --root, the default moves from
+  -- C:\Apache24 to %USERPROFILE%\Apache24 (same folder name, in the home).
+  -- USERPROFILE, not HOMEPATH: it is the absolute local profile path, whereas
+  -- HOMEPATH omits the drive and may point at a network share on managed PCs.
+  If userMode Then Do
+    home = Value("USERPROFILE", , "ENVIRONMENT")
+    If home \== "" Then serverRoot = home"\Apache24"
+  End
 
   -- Override the defaults only when the user actually supplied a value
   -- (the driver leaves these empty otherwise, preserving "discover/default").
   If opts~serverRoot \== "" Then serverRoot = opts~serverRoot
   If opts~zipUrl     \== "" Then zipUrl     = opts~zipUrl
+
+  -- The Apache Listen port. Windows/Apache Lounge ships httpd.conf with
+  -- "Listen 80", so 80 is the default; --port overrides it (e.g. when 80 is
+  -- already taken by IIS or another server). The uninstall needs it too, but
+  -- reads it from the manifest -- see Uninstall.
+  If opts~port \== "" Then port = opts~port
+                      Else port = 80
 
   -- Derived paths, all under the server root we control.
   apacheBin  = serverRoot"\bin\httpd.exe"
@@ -107,10 +129,10 @@
   docRoot    = serverRoot"\htdocs"
   confFile   = serverRoot"\conf\httpd.conf"
   extraConf  = serverRoot"\conf\extra\rexxhttp.conf"
-  indexFile  = docRoot"\index"
+  indexFile  = docRoot"\index.rxl"
 
   If uninstall Then
-    Return Uninstall(assumeYes, keepApache, serverRoot, apacheBin, -
+    Return Uninstall(assumeYes, keepApache, userMode, serverRoot, apacheBin, -
                      cgiBinDir, confFile, extraConf, indexFile, sources)
 
   Say
@@ -166,44 +188,71 @@
 --------------------------------------------------------------------------------
 -- Step 3b: Refuse to run on a machine that already serves the web             --
 --------------------------------------------------------------------------------
--- Two independent probes, by running executable and by port, so we catch an   --
--- existing web server whatever its service is called and wherever its files   --
--- live -- the curious user who once installed XAMPP and forgot, an Apache     --
--- under Program Files, IIS, anything. We never adopt or fight another server; --
--- we stop and let the user sort it out. Both probes report through their text --
--- (tasklist and netstat return 0 regardless), so we scan the output.          --
+-- Three independent probes: a live httpd.exe process, an Apache registered as --
+-- a Windows service (even if stopped), and the target TCP port. Between them   --
+-- they catch an existing web server whatever its service is called and         --
+-- wherever its files live -- the curious user who once installed XAMPP and     --
+-- forgot, an Apache under Program Files, IIS, anything. We never adopt or fight --
+-- another server; we stop and let the user sort it out. The probes report      --
+-- through their text (tasklist, reg and netstat return 0 regardless), so we    --
+-- scan the output.                                                             --
+--                                                                              --
+-- In --user mode only the port probe applies: a user-level install registers   --
+-- no service and is meant to coexist on a machine the user does not control,   --
+-- so an existing Apache (process or service) on some OTHER port is fine -- it   --
+-- would only matter if it holds OUR port, which the port probe already covers. --
 
-  Say "Checking that no web server is already running..."
+  Say "Checking that no other web server is present..."
 
-  -- Probe 1: any httpd.exe process alive (Apache under any name or path).
-  If CmdOutputHas('tasklist /FI "IMAGENAME eq httpd.exe" /NH', "httpd.exe") Then Do
-    Say
-    Say "  STOP: an Apache process (httpd.exe) is already running."
-    Say "  This installer sets up its own Apache and will not disturb one that"
-    Say "  is already there -- XAMPP, WampServer, a manual install, whatever it"
-    Say "  may be. Stop that Apache (or use the machine it is not on) and re-run."
-    Say "  Nothing was changed."
-    Return 1
+  If \userMode Then Do
+    -- Probe 1: any httpd.exe process alive (Apache under any name or path).
+    If CmdOutputHas('tasklist /FI "IMAGENAME eq httpd.exe" /NH', "httpd.exe") Then Do
+      Say
+      Say "  STOP: an Apache process (httpd.exe) is already running."
+      Say "  This installer sets up its own Apache and will not disturb one that"
+      Say "  is already there -- XAMPP, WampServer, a manual install, whatever it"
+      Say "  may be. Stop that Apache (or use the machine it is not on) and re-run."
+      Say "  Nothing was changed."
+      Return 1
+    End
+
+    -- Probe 1b: any Apache registered as a Windows SERVICE, even if it is not
+    -- running right now. Probe 1 only sees a live process; a stopped Apache
+    -- service would pass it, and then our own "httpd -k install" would collide
+    -- with (or overwrite) the existing service. Every service records its binary
+    -- in the registry under HKLM\...\Services\<name>\ImagePath, so one "reg query
+    -- ... /s /v ImagePath" lists them all at once (running or stopped) and we
+    -- look for an httpd.exe among them. Changing the port would NOT help here --
+    -- the clash is over the service, not the port -- so we send the user to a
+    -- manual setup rather than suggesting --port.
+    If CmdOutputHas("reg query ""HKLM\SYSTEM\CurrentControlSet\Services"" /s /v ImagePath", "httpd.exe") Then Do
+      Say
+      Say "  STOP: an Apache is already registered as a Windows service."
+      Say "  This installer registers its own Apache service, which would clash"
+      Say "  with the one already there. --port will not help: the conflict is the"
+      Say "  service, not the port. Remove that Apache service (or use a machine"
+      Say "  without one) and re-run, or set RexxHTTP up by hand."
+      Say "  Nothing was changed."
+      Return 1
+    End
   End
 
-  -- Probe 2: is TCP port 80 already taken (by IIS or anything else)? The local
-  -- address is the second token; its port is whatever follows the last colon,
-  -- which also does the right thing for IPv6 forms like [::]:80. We match only
-  -- an exact :80 in LISTENING state, so :8080 and ephemeral :NNN80 do not fool
-  -- us.
-  net80 = .Array~new
-  Address System "netstat -ano -p tcp" With Output Using (net80) Error Using (.Array~new)
-  Do line Over net80
+  -- Probe 2: is the TCP port we are about to use already taken (by IIS or
+  -- anything else)? The local address is the second token; its port is whatever
+  -- follows the last colon, which also does the right thing for IPv6 forms like
+  -- [::]:80. We match only an exact port in LISTENING state, so a different port
+  -- and ephemeral :NNNport do not fool us. The port is 80 by default or whatever
+  -- --port set; if it is busy we stop and point at the --port way out.
+  net = .Array~new
+  Address System "netstat -ano -p tcp" With Output Using (net) Error Using (.Array~new)
+  Do line Over net
     If \line~caselessContains("LISTENING") Then Iterate
     Parse Var line . localAddr .
     colon = localAddr~lastPos(":")
     If colon == 0 Then Iterate
-    If localAddr~substr(colon + 1) == "80" Then Do
+    If localAddr~substr(colon + 1) == port Then Do
       Say
-      Say "  STOP: something is already listening on TCP port 80."
-      Say "  That may be IIS or another web server. This installer would put"
-      Say "  Apache on port 80 too, and the two cannot share it. Free port 80"
-      Say "  (or install RexxHTTP on a machine where it is free) and re-run."
+      Say "  STOP:" PortBusyMsg(port)
       Say "  Nothing was changed."
       Return 1
     End
@@ -254,7 +303,10 @@
   Say "  - enable cgi + actions and the RexxHTTP handler via an Include"
   Say "  - deploy the RexxHTTP sources to" cgiBinDir
   Say "  - plant a smoke-test rexxlet at" indexFile
-  Say "  - install Apache as a service, start it and smoke-test it"
+  If userMode Then
+    Say "  - start Apache in its own window (no service), and smoke-test it"
+  Else
+    Say "  - install Apache as a service, start it and smoke-test it"
   Say
   If \assumeYes Then
     If \Ask("Proceed?") Then Do
@@ -320,9 +372,10 @@
 
   -- Apache Lounge ships ServerRoot baked to its own build path (it varies by
   -- build). Rewrite it to the location we actually installed into, so every
-  -- derived path (htdocs, cgi-bin, logs) resolves correctly.
+  -- derived path (htdocs, cgi-bin, logs) resolves correctly. When --port asked
+  -- for a non-default port, the same pass rewrites httpd.conf's "Listen 80".
   Say "Setting ServerRoot in httpd.conf..."
-  Call RewriteServerRoot confFile, serverRoot
+  Call RewriteServerRoot confFile, serverRoot, port
   Say "  OK."
 
 --------------------------------------------------------------------------------
@@ -331,6 +384,23 @@
 
   Say "Writing config fragment" extraConf"..."
   frag = .Resources~RexxHTTPConf~makeString("L", "0D0A"x)
+  -- The <Directory> in the fragment must name the REAL document root, not the
+  -- hard-wired C:/Apache24/htdocs -- otherwise a --root or --user install (which
+  -- roots elsewhere, e.g. under %USERPROFILE%) would point the handler at a
+  -- directory that does not hold the served files, and RexxHTTP would never run.
+  -- Apache config wants forward slashes, so we convert the backslashes.
+  fwdRoot = docRoot~changeStr("\", "/")
+  frag = frag~changeStr("%docRoot%", fwdRoot)
+  -- Splice in the install-time SetEnv lines (RexxHTTPSetEnvLines documents
+  -- which variables are emitted). We pass the forward-slashed root: Apache reads
+  -- it, and loadPackage accepts "/" on Windows too. .endOfLine is CRLF here, so
+  -- strip the trailing one the routine adds, matching the fragment's CRLF.
+  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(fwdRoot, "    ")~strip("T", .endOfLine))
+  -- The fragment ships "ServerName localhost"; when we are on a non-default
+  -- port, name the server with it (ServerName localhost:NNNN) so redirects and
+  -- self-references use the right port.
+  If port \== 80 Then
+    frag = frag~changeStr("ServerName localhost", "ServerName localhost:"port)
   Call CharOut extraConf, frag
   Call Stream extraConf, "C", "Close"
 
@@ -357,74 +427,179 @@
   Say "  OK."
 
 --------------------------------------------------------------------------------
--- Step 12: Plant the smoke-test index rexxlet                                --
+-- Step 12: Populate the document root (exclusion model)                      --
 --------------------------------------------------------------------------------
+-- Instead of enumerating what to deploy, copy the WHOLE package into htdocs
+-- and leave out only the scaffolding (see HtdocsExclude): install\, tests\,
+-- pack.rex, and the two repo-only metadata files. Everything else becomes the
+-- browsable sample web: the root index rexxlet, apps\page.cls, the stylesheets,
+-- the examples\ tree with their pre-rendered .highlighted sources, src\ as a
+-- readable copy, the manual PDF, readme.md and LICENSE. The AddHandler in the
+-- conf fragment runs only *.rxl files as rexxlets, so
+-- every .cls/.rex/.md copied here is served as text, never executed. src\
+-- additionally lives in cgi-bin (Step 11), where it executes: two destinations.
+--
+-- The installer owns the server root, so PlantHtdocs copies in-process (no
+-- privileged prefix). It returns the manifest of planted files (paths relative
+-- to docRoot, forward-slashed), recorded in the management directory below so
+-- the uninstall retires exactly what was planted and nothing of the operator's.
 
-  Say "Planting smoke-test rexxlet" indexFile"..."
-  index = SmokeTest()~makeString
-  Call CharOut indexFile, index
-  Call Stream indexFile, "C", "Close"
-  Say "  OK."
-
---------------------------------------------------------------------------------
--- Step 12b: Deploy the bundled example rexxlets                              --
---------------------------------------------------------------------------------
--- The welcome page planted above links to these. examples/ is a sibling of
--- src/ in the distribution; each is a rexxlet at examples\<name>\index copied
--- to docRoot\examples\<name>\index. The <Files "index"> handler in the conf
--- fragment matches by basename across the whole document tree, so these run
--- as rexxlets with no per-directory configuration of their own. SysFileCopy
--- does not create directories, so each subdirectory is made first.
-
-  examplesSrc = .File~new(.Context~package~name)~parentFile~parent"\examples"
-  Say "Deploying example rexxlets to" docRoot"\examples..."
-  Call SysMkDir docRoot"\examples"
-  Do name Over ExampleDirs()~makeArray(" ")
-    Call SysMkDir docRoot"\examples\"name
-    Call SysFileCopy examplesSrc"\"name"\index", docRoot"\examples\"name"\index"
-    If result \== 0 Then Do
-      Say "  ERROR: failed to copy example" name", error code=" result
-      Return 1
-    End
-  End
-  -- Plant an index at examples\ itself, so /examples/ returns this listing
-  -- instead of Apache's default directory index.
-  eIndexFile = docRoot"\examples\index"
-  Call CharOut eIndexFile, ExamplesIndex()~makeString
-  Call Stream eIndexFile, "C", "Close"
-  Say "  OK."
+  Say "Populating" docRoot "from the package (exclusion model)..."
+  planted = PlantHtdocs(srcRoot, docRoot, "")
+  Say "  OK." planted~items "files planted."
 
 --------------------------------------------------------------------------------
 -- Step 13: Start httpd                                                       --
 --------------------------------------------------------------------------------
 
-  Say "Installing Apache as a Windows service..."
-  -- Run as a service (not a detached console window): it starts automatically
-  -- with Windows and needs no visible window kept open. This requires the
-  -- elevation the driver already checked for. -k install registers the
-  -- service; -k start launches it.
-  Address System "cmd /c """ || apacheBin || """ -k install >nul 2>&1"
-  If RC \== 0 Then Do
-    Say "  ERROR: could not register the Apache service (httpd -k install)."
-    Say "  Make sure this console is elevated (Run as administrator)."
-    Return 1
+  If userMode Then Do
+    -- User-level install: no service (that needs elevation). Plant a launcher
+    -- in the server root so the user can start Apache without remembering the
+    -- httpd.exe syntax, then start it now so the install ends up serving.
+    startCmd = serverRoot"\start.cmd"
+    Say "Writing the launcher" startCmd"..."
+    cmd = .Stream~new(startCmd)
+    cmd~open("write replace")
+    -- The launcher starts httpd DETACHED in its own window and returns at once,
+    -- so it does not tie up the console it was run from. Closing the Apache
+    -- window (titled "Apache 2.4") stops the server. start's first quoted token
+    -- is the window TITLE, so we pass one explicitly before the executable --
+    -- otherwise start would treat the quoted exe path as the title and fail.
+    cmd~lineout("@echo off")
+    cmd~lineout("rem Start RexxHTTP's Apache (user-level install, no service).")
+    cmd~lineout("rem A new window titled 'Apache 2.4' opens; close it to stop the server.")
+    cmd~lineout('start "Apache 2.4" "'apacheBin'"')
+    cmd~close
+    Say "  OK."
+
+    Say "Starting Apache (no service; user-level install)..."
+    -- Launch it detached in its own window, so it keeps running after this
+    -- installer returns and does not block the install console.
+    Address System "cmd /c start ""RexxHTTP Apache"" """ || apacheBin || """"
+    Call SysSleep 1.5
+    Say "  OK."
   End
-  Address System "cmd /c """ || apacheBin || """ -k start >nul 2>&1"
-  If RC \== 0 Then Do
-    Say "  ERROR: the Apache service was registered but did not start"
-    Say "  (httpd -k start). Check" serverRoot"\logs\error.log."
-    Return 1
+  Else Do
+    Say "Installing Apache as a Windows service..."
+    -- Run as a service (not a detached console window): it starts automatically
+    -- with Windows and needs no visible window kept open. This requires the
+    -- elevation the driver already checked for. -k install registers the
+    -- service; -k start launches it.
+    Address System "cmd /c """ || apacheBin || """ -k install >nul 2>&1"
+    If RC \== 0 Then Do
+      Say "  ERROR: could not register the Apache service (httpd -k install)."
+      Say "  Make sure this console is elevated (Run as administrator)."
+      Return 1
+    End
+    Address System "cmd /c """ || apacheBin || """ -k start >nul 2>&1"
+    If RC \== 0 Then Do
+      Say "  ERROR: the Apache service was registered but did not start"
+      Say "  (httpd -k start). Check" serverRoot"\logs\error.log."
+      Return 1
+    End
+    Call SysSleep 1.5
+    Say "  OK."
   End
-  Call SysSleep 1.5
-  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 13b: Deploy the management directory (self-sufficient uninstall)       --
+--------------------------------------------------------------------------------
+-- Copy the five install\ files to a stable location under %ProgramData% and
+-- write a manifest recording the server root. This is the platform where the
+-- manifest earns its keep: the management directory now lives OUTSIDE the
+-- Apache tree, so the script's parent is no longer the server root and the
+-- old deduce-by-path trick is gone -- the manifest's SERVERROOT is the only
+-- truth. It also absorbs a --root'd non-standard root, which a later uninstall
+-- would otherwise have to be handed again. Alongside the files we GENERATE a
+-- launcher, rexxhttp-uninstall.cmd, whose whole reason to exist is one line:
+-- it steps the CMD session to a neutral cwd (cd /d C:\) BEFORE invoking the
+-- uninstaller, so the uninstall can then delete the entire Apache tree and its
+-- own management directory with nothing holding a live cwd inside either. It
+-- is generated, not copied, because its body embeds this machine's resolved
+-- mgmtDir path. Done before the smoke test so a failed test still leaves a
+-- working uninstaller. SysMkDir/SysFileCopy, not sudo: we already run elevated.
+
+  If userMode Then Do
+    -- A --user install writes nothing outside the home, so the management
+    -- directory (which lives under %ProgramData% and needs elevation to
+    -- create) is not deployed here. That directory exists only to give a
+    -- service-style install a self-sufficient, service-aware uninstaller; a
+    -- --user install needs neither -- it registers no service and keeps
+    -- everything under %USERPROFILE%\Apache24. It is removed by running
+    -- "rexx uninstall --user" from the unpacked package (the driver skips the
+    -- service teardown and the elevation check, and deletes the home folder).
+    Say "User-level install: no separate uninstaller is deployed."
+    Say "  (To remove it later, run 'rexx uninstall --user' from the unpacked"
+    Say "  package. Closing the Apache window stops the server meanwhile.)"
+  End
+  Else Do
+    mgmtDir = ManagementDir("Windows", serverRoot)
+    Say "Installing the uninstaller to" mgmtDir"..."
+    installDir = .File~new(.Context~package~name)~parentFile~absolutePath
+    Call SysMkDir mgmtDir
+    deployOK = 1
+    Do f Over ManagementFiles()~makeArray(" ")
+      Call SysFileCopy installDir"\"f, mgmtDir"\"f
+      If result \== 0 Then Do
+        Say "  WARNING: could not copy" f "to" mgmtDir"."
+        Say "  The install itself is fine, but the uninstaller will not be"
+        Say "  available from a stable location. You can still uninstall from"
+        Say "  this download directory, passing the same --root you used here."
+        deployOK = 0
+        Leave
+      End
+    End
+    If deployOK Then Do
+      -- Record the port in the manifest only when we changed it: on a default
+      -- (80) install there is nothing for the uninstall to restore, so we pass ""
+      -- and no PORT key is written.
+      If port == 80 Then manifestPort = ""
+                    Else manifestPort = port
+      Call WriteManifest ManifestPath("Windows", mgmtDir), serverRoot, manifestPort
+      -- The htdocs manifest: the files planted in htdocs under the exclusion
+      -- model, so the uninstall retires exactly those and leaves operator files
+      -- untouched. It lives beside the main manifest in the management directory,
+      -- outside the Apache tree, so it survives even a symmetric uninstall that
+      -- deletes the whole server root.
+      Call WriteHtdocsManifest HtdocsManifestPath("Windows", mgmtDir), planted
+      -- Generate the launcher. The neutral cwd (cd /d C:\) is the whole point:
+      -- it is what frees the uninstall to remove the Apache tree without anything
+      -- holding a live cwd. %* forwards flags such as --keep-apache through to the
+      -- uninstaller. The uninstall empties this directory of everything EXCEPT
+      -- this .cmd (it cannot delete the file CMD is still reading without CMD then
+      -- printing "The system cannot find the path specified."). So the .cmd's last
+      -- act spawns a DETACHED child (start /b) that waits ~1s for CMD to release
+      -- the file, then deletes this .cmd and rmdir's the now-empty directory. The
+      -- parent .cmd returns normally with the file still present, so there is no
+      -- failed re-read and no error message; the child does the final cleanup
+      -- after everyone has let go. %~f0 is this .cmd's own path; the directory is
+      -- passed as an absolute path with NO trailing backslash, because rmdir on
+      -- some CMD versions balks at a path ending in "\" (which %~dp0 would give).
+      cmdPath = mgmtDir"\rexxhttp-uninstall.cmd"
+      cmd = .Stream~new(cmdPath)
+      cmd~open("write replace")
+      cmd~lineout("@echo off")
+      cmd~lineout("cd /d C:\")
+      cmd~lineout("rexx """mgmtDir"\uninstall.rex"" %*")
+      cmd~lineout("start """" /b cmd /c ""timeout /t 1 /nobreak >nul & del ""%~f0"" >nul 2>&1 & rmdir """mgmtDir""" >nul 2>&1""")
+      cmd~close
+    End
+    Say "  OK."
+  End
+
 
 --------------------------------------------------------------------------------
 -- Step 14: Smoke test                                                        --
 --------------------------------------------------------------------------------
 
-  Say "Smoke test (curl http://localhost/)..."
+  -- The base URL for the smoke test and the messages. Port 80 is implicit
+  -- (http://localhost/); any other port is spelled out (http://localhost:NNNN/).
+  If port == 80 Then baseUrl = "http://localhost"
+                Else baseUrl = "http://localhost:"port
+
+  Say "Smoke test (curl" baseUrl"/)..."
   out = .Array~new
-  Address System "curl -s --noproxy localhost http://localhost/" -
+  Address System "curl -s --noproxy localhost" baseUrl"/" -
     With Output Using (out) Error Using (.Array~new)
   body = ""
   Do l Over out
@@ -432,31 +607,56 @@
   End
 
   Say
-  If body~caselessContains("Welcome to RexxHTTP") Then Do
+  If body~caselessContains("RexxHTTP") Then Do
     Say "============================================================"
     Say " SUCCESS: a minimal RexxHTTP installation is up and running."
     Say "============================================================"
     Say
-    Say " Open it in a browser at:  http://localhost/"
-    Say " or from the command line:  curl http://localhost/"
+    Say " Open it in a browser at:  " || baseUrl"/"
+    Say " or from the command line:  curl" baseUrl"/"
     Say
     Say " The welcome page links to a set of example rexxlets you can"
     Say " explore. They are small Rexx programs; follow a link to see"
     Say " each one run."
     Say
-    Say " Apache runs as a Windows service, so it starts automatically"
-    Say " with Windows and needs no window kept open. To stop or remove"
-    Say " it, run this installer's uninstall."
-    Say
-    Say " The official RexxHTTP documentation is at:"
+    If userMode Then Do
+      Say " Apache is running WITHOUT a Windows service (user-level install),"
+      Say " so it does NOT start automatically when Windows starts. To start it"
+      Say " again after a reboot, run:"
+      Say
+      Say "   """startCmd""""
+      Say
+      Say " It opens Apache in a separate window titled 'Apache 2.4' and returns"
+      Say " to your prompt. Closing that Apache window stops the server."
+      Say
+      Say " To uninstall later, run from the install subdirectory of the"
+      Say " unpacked package (no elevation needed):"
+      Say
+      Say "   rexx uninstall --user"
+      Say
+    End
+    Else Do
+      Say " Apache runs as a Windows service, so it starts automatically"
+      Say " with Windows and needs no window kept open."
+      Say
+      Say " To uninstall later, open an elevated console and run:"
+      Say
+      Say "   """ || ManagementDir("Windows", serverRoot) || "\rexxhttp-uninstall.cmd"""
+      Say
+      Say " (add --keep-apache to remove only RexxHTTP and leave Apache.)"
+      Say
+    End
+    Say " You can find a copy of the RexxHTTP documentation at:"
     Say "   https://rexx.epbcn.com/rexxhttp/"
+    Say " and at:"
+    Say "   " || baseUrl"/"
     Say
     Return 0
   End
   Else Do
     Say "============================================================"
     Say " WARNING: install finished, but the smoke test did not return"
-    Say " the expected output. http://localhost/ returned:"
+    Say " the expected output. " || baseUrl"/ returned:"
     Say "   " || body~strip~left(200)
     Say " Check" serverRoot"\logs\error.log and the config fragment."
     Say "============================================================"
@@ -472,13 +672,45 @@
 /* leaving the Apache tree otherwise intact (the "coexist" path).             */
 /******************************************************************************/
 Uninstall: Procedure
-  Use Strict Arg assumeYes, keepApache, serverRoot, apacheBin, -
+  Use Strict Arg assumeYes, keepApache, userMode, serverRoot, apacheBin, -
                  cgiBinDir, confFile, extraConf, indexFile, sources
 
   Say
   Say "RexxHTTP Uninstaller for Windows"
   Say "================================="
   Say
+  -- docRoot is derived from serverRoot like every other path; the coexist
+  -- path below needs it. (It was previously referenced there without being
+  -- defined in this Procedure -- a latent bug on the --keep-apache path,
+  -- fixed here by deriving it up front.)
+  docRoot = serverRoot"\htdocs"
+
+  -- Recover the real server root. The management directory now lives under
+  -- %ProgramData%, OUTSIDE the Apache tree, so the script's parent is NO
+  -- longer the server root and the old deduce-by-path trick cannot apply --
+  -- the MANIFEST is the single source of truth. When this uninstaller runs
+  -- from the management directory the install left behind, we read SERVERROOT
+  -- from the manifest beside the script; that value absorbs whatever --root
+  -- was used at install time, so uninstall works with no flags and no
+  -- surviving download. The passed-in serverRoot (default or --root) is the
+  -- fallback only when we are NOT running from a management directory
+  -- (e.g. invoked from a loose download, where the manifest is absent).
+  scriptDir = .File~new(.Context~package~name)~parentFile
+  manifestPort = ""
+  If scriptDir~name~caselessEquals("rexxhttp") Then Do
+    manRoot = ReadManifestRoot(ManifestPath("Windows", scriptDir~absolutePath))
+    If manRoot \== "" Then serverRoot = manRoot
+    -- The port the install recorded, if it changed it from 80. Empty means the
+    -- install used the default, so there is no Listen to restore.
+    manifestPort = ReadManifestPort(ManifestPath("Windows", scriptDir~absolutePath))
+    apacheBin = serverRoot"\bin\httpd.exe"
+    cgiBinDir = serverRoot"\cgi-bin"
+    confFile  = serverRoot"\conf\httpd.conf"
+    extraConf = serverRoot"\conf\extra\rexxhttp.conf"
+    docRoot   = serverRoot"\htdocs"
+    indexFile = docRoot"\index.rxl"
+  End
+
   Say "Server root:" serverRoot
   Say
 
@@ -493,7 +725,7 @@ Uninstall: Procedure
     Say "  - the RexxHTTP Include line from" confFile
     Say "  - the config fragment" extraConf
     Say "  - the RexxHTTP sources from" cgiBinDir
-    Say "  - the smoke-test rexxlet" indexFile
+    Say "  - the files RexxHTTP planted in" docRoot "(per the install manifest)"
     Say "  - (Apache is kept: --keep-apache)"
   End
   Else
@@ -505,33 +737,48 @@ Uninstall: Procedure
       Return 1
     End
 
-  -- Stop and de-register the Apache service before touching its files.
-  -- Order matters: stop, then uninstall the service, so we never leave a
-  -- registered service pointing at binaries we are about to delete. Failures
-  -- are ignored (the service may not be present, e.g. a partial install).
-  Say
-  Say "Stopping and removing the Apache service..."
-  Address System "cmd /c """ || apacheBin || """ -k stop >nul 2>&1"
-  Call SysSleep 1
-  Address System "cmd /c """ || apacheBin || """ -k uninstall >nul 2>&1"
-  Call SysSleep 0.5
-  -- Safety net: kill any stray detached httpd (e.g. from an older install
-  -- that ran it as a console window rather than a service).
-  Address System "cmd /c taskkill /f /im httpd.exe >nul 2>&1"
-  Call SysSleep 0.5
-  Say "  OK."
-
   If \keepApache Then Do
     -- Symmetric uninstall: the install created the whole tree, so remove it.
+    -- Stop Apache before deleting the binaries it is running from. How Apache
+    -- was started differs by mode, so the teardown does too.
+    Say
+    If userMode Then Do
+      -- A --user install registered no service: Apache runs as a detached
+      -- httpd from the start.cmd window. There is nothing to -k stop or
+      -- -k uninstall (those would just fail silently), so we go straight to
+      -- taskkill, which is what actually ends that detached httpd.
+      Say "Stopping Apache (user-level install; no service)..."
+      Address System "cmd /c taskkill /f /im httpd.exe >nul 2>&1"
+      Call SysSleep 0.5
+      Say "  OK."
+    End
+    Else Do
+      -- Normal install: DE-REGISTER the Apache service before deleting the
+      -- binaries it points at, so a registered service must not survive.
+      -- Order matters: stop, then uninstall the service. Failures are ignored
+      -- (the service may be absent, e.g. a partial install). The taskkill is a
+      -- safety net for a stray detached httpd from an older console-style run.
+      Say "Stopping and removing the Apache service..."
+      Address System "cmd /c """ || apacheBin || """ -k stop >nul 2>&1"
+      Call SysSleep 1
+      Address System "cmd /c """ || apacheBin || """ -k uninstall >nul 2>&1"
+      Call SysSleep 0.5
+      Address System "cmd /c taskkill /f /im httpd.exe >nul 2>&1"
+      Call SysSleep 0.5
+      Say "  OK."
+    End
+    -- The management directory this uninstaller runs from lives under
+    -- %ProgramData%, OUTSIDE this tree, and the launcher put the CMD session
+    -- at a neutral cwd (C:\) before we ran -- so nothing here is a live
+    -- process's cwd and the whole server root comes away clean in one rmdir.
     Say "Removing the server root" serverRoot"..."
     Address System "cmd /c rmdir /s /q """ || serverRoot || """ 2>nul"
-    If SysFileExists(serverRoot) Then Do
-      Say "  WARNING: could not fully remove" serverRoot"."
-      Say "  A file may still be locked (is httpd still running?). Remove it"
-      Say "  by hand once nothing holds it open."
-      Return 1
-    End
     Say "  OK."
+    -- Empty the management directory too (it lives outside the tree just
+    -- removed, so the rmdir above did not take it). This clears its files;
+    -- the launcher .cmd deletes itself and the directory afterwards, from a
+    -- detached child, so CMD never loses the file it is still reading.
+    Call RemoveMgmtDir serverRoot
     Say
     Say "============================================================"
     Say " RexxHTTP and Apache removed. The server root is gone and the"
@@ -540,13 +787,26 @@ Uninstall: Procedure
     Return 0
   End
 
-  -- Coexist path: surgical retirement, leaving the Apache tree in place.
+  -- Coexist path: surgical retirement, leaving the Apache SERVICE in place.
+  -- We do NOT stop or de-register the service here (that would break the
+  -- --keep-apache promise: Apache must stay a Windows service, starting with
+  -- the machine). We edit its config and reload it in place, the same way
+  -- the Linux installer does systemctl reload. See the -k restart below.
 
   -- 1. Strip the Include line (and the comment we wrote above it) from
   --    httpd.conf, rewriting the file without those two lines and nothing else.
   Say "Removing the RexxHTTP Include from" confFile"..."
   Call StripInclude confFile
   Say "  OK."
+
+  -- 1b. If the install changed Apache's Listen port, put it back to 80. This
+  -- keeps the --keep-apache promise whole: the operator's Apache is left as it
+  -- was before RexxHTTP, port included. Only the manifest knows we changed it.
+  If manifestPort \== "", manifestPort \== 80 Then Do
+    Say "Restoring Apache's Listen port to 80..."
+    Call RewriteListenPort confFile, manifestPort, 80
+    Say "  OK."
+  End
 
   -- 2. Delete the fragment.
   Say "Removing the config fragment" extraConf"..."
@@ -560,20 +820,25 @@ Uninstall: Procedure
   End
   Say "  OK."
 
-  -- 4. Delete the smoke-test rexxlet.
-  Say "Removing smoke-test rexxlet" indexFile"..."
-  Address System "cmd /c del /q """ || indexFile || """ >nul 2>&1"
+  -- 4. Remove everything the installer planted in htdocs, and nothing else.
+  -- Read the htdocs manifest written at install time and retire exactly those
+  -- files, pruning the directories they leave empty. Operator files (and the
+  -- directories that still hold them) are left untouched -- the coexist-safe
+  -- behaviour that matters on this --keep-apache path. If the manifest is
+  -- missing (an install predating the exclusion model), there is nothing to
+  -- walk and the step is a no-op. We run elevated and own htdocs, so no sudo.
+  mgmtDir = ManagementDir("Windows", serverRoot)
+  planted = ReadHtdocsManifest(HtdocsManifestPath("Windows", mgmtDir))
+  Say "Removing" planted~items "planted files from" docRoot"..."
+  Call UnplantHtdocs docRoot, planted, ""
   Say "  OK."
 
-  -- 4b. Delete the bundled example rexxlets.
-  examplesDir = docRoot"\examples"
-  Say "Removing example rexxlets" examplesDir"..."
-  Address System "cmd /c rmdir /s /q """ || examplesDir || """ >nul 2>&1"
-  Say "  OK."
-
-  -- Restart Apache so it comes back without the RexxHTTP handler.
-  Say "Restarting Apache (without the RexxHTTP config)..."
-  Address System "cmd /c start """" """ || apacheBin || """"
+  -- Reload the config into the still-registered service. -k restart tells the
+  -- running Apache service to re-read httpd.conf (now without our Include), so
+  -- it comes back serving without the RexxHTTP handler -- and crucially it
+  -- stays a Windows service. No console-detached httpd, no popup window.
+  Say "Reloading Apache without the RexxHTTP config..."
+  Address System "cmd /c """ || apacheBin || """ -k restart >nul 2>&1"
   Call SysSleep 1
   Say "  OK."
 
@@ -582,10 +847,34 @@ Uninstall: Procedure
   Say " RexxHTTP removed. The Apache tree at" serverRoot
   Say " is left in place and running."
   Say "============================================================"
+
+  -- Apache stays, so nothing above emptied the management directory; do it
+  -- here, the same way the symmetric path does (the launcher .cmd removes
+  -- itself and the directory afterwards, from a detached child).
+  Call RemoveMgmtDir serverRoot
   Return 0
 
 /******************************************************************************/
-/* StripInclude: rewrite httpd.conf without the two lines the installer       */
+/* RemoveMgmtDir: empty the %ProgramData% management directory of everything   */
+/* EXCEPT the running launcher .cmd -- the five copied files and the manifest. */
+/* These can be deleted in place while we run (ooRexx has already tokenised    */
+/* them into memory). We deliberately do NOT delete rexxhttp-uninstall.cmd,    */
+/* nor rmdir the directory: that .cmd is still being read by the CMD process   */
+/* that launched us, and deleting a file out from under CMD makes it print     */
+/* "The system cannot find the path specified." when it returns to disk for    */
+/* the next line. Instead the launcher itself, as its last act, spawns a       */
+/* detached child that waits for CMD to let go and THEN removes the .cmd and   */
+/* the now-empty directory (see the launcher generated in Step 13b). Called    */
+/* from BOTH uninstall paths -- symmetric and coexist.                         */
+/******************************************************************************/
+RemoveMgmtDir: Procedure
+  Use Strict Arg serverRoot
+  mgmtDir = ManagementDir("Windows", serverRoot)
+  Do f Over ManagementFiles()~makeArray(" ")
+    Call SysFileDelete mgmtDir"\"f
+  End
+  Call SysFileDelete ManifestPath("Windows", mgmtDir)
+  Return
 /* appended -- the "# RexxHTTP: ..." comment and the "Include ...rexxhttp"     */
 /* line -- and nothing else. Matching is by content, not by position, so a     */
 /* hand-edited conf is handled too. Idempotent: a conf without them is left    */
@@ -606,6 +895,38 @@ StripInclude: Procedure
 
   Call Stream conf, "C", "Open Write Replace"
   Do line Over kept
+    Call LineOut conf, line
+  End
+  Call Stream conf, "C", "Close"
+  Return
+
+/******************************************************************************/
+/* RewriteListenPort: change a "Listen <fromPort>" directive back to          */
+/* "Listen <toPort>", used by the coexist uninstall to undo the port change   */
+/* the install made. Only a Listen line whose port equals fromPort is touched, */
+/* so any other Listen the operator may have is left alone. Idempotent: a conf */
+/* without a matching Listen is left unchanged. Shares RewriteListen with the  */
+/* install so the address:port forms are handled the same way.                */
+/******************************************************************************/
+RewriteListenPort: Procedure
+  Use Strict Arg conf, fromPort, toPort
+  lines = .Array~new
+  Do While Lines(conf) > 0
+    line = LineIn(conf)
+    If line~strip~caselessAbbrev("Listen") Then Do
+      stripped = line~strip
+      Parse Var stripped . spec .
+      colon = spec~lastPos(":")
+      If colon > 0 Then linePort = spec~substr(colon + 1)
+                   Else linePort = spec
+      If linePort == fromPort Then line = RewriteListen(line, toPort)
+    End
+    lines~append(line)
+  End
+  Call Stream conf, "C", "Close"
+
+  Call Stream conf, "C", "Open Write Replace"
+  Do line Over lines
     Call LineOut conf, line
   End
   Call Stream conf, "C", "Close"
@@ -667,9 +988,13 @@ DiscoverZipUrl:
 /* paths in DocumentRoot, <Directory> and ScriptAlias. Rewrite ServerRoot and */
 /* replace every occurrence of the baked build-root with our chosen root, so  */
 /* nothing points at a directory that does not exist on this machine.         */
+/* Also rewrite the Listen port when the caller asked for a non-default one:   */
+/* httpd.conf ships "Listen 80", and we change it in place (rather than adding */
+/* a Listen to our fragment) so there is exactly one Listen and no clash. The  */
+/* address part of "Listen 0.0.0.0:80" style lines, if any, is preserved.      */
 /******************************************************************************/
 RewriteServerRoot:
-  Use Strict Arg conf, root
+  Use Strict Arg conf, root, port = 80
   fwd = root~changeStr("\", "/")
 
   -- Derive the factory build-root from DocumentRoot (".../htdocs" -> "...").
@@ -685,12 +1010,15 @@ RewriteServerRoot:
   End
   Call Stream conf, "C", "Close"
 
-  -- Rewrite: ServerRoot line explicitly, plus any baked build-root anywhere.
+  -- Rewrite: ServerRoot line explicitly, the Listen port when non-default,
+  -- plus any baked build-root anywhere.
   lines = .array~new
   Do While Lines(conf) > 0
     line = LineIn(conf)
     If line~strip~caselessAbbrev("ServerRoot") Then
       line = 'ServerRoot "'fwd'"'
+    Else If port \== 80, line~strip~caselessAbbrev("Listen") Then
+      line = RewriteListen(line, port)
     Else If baked \== "", baked \== fwd Then
       line = line~changeStr(baked, fwd)
     lines~append(line)
@@ -711,8 +1039,8 @@ RewriteServerRoot:
 -- The Include fragment. It enables the two modules (they ship commented out
 -- in httpd.conf, so we LoadModule them here rather than editing that file),
 -- declares the handler pointing straight at RexxHTTP.rex (no wrapper on
--- Windows), and whitelists a single rexxlet named "index" in the document
--- root with DirectoryIndex. ${SRVROOT} resolves to the rewritten ServerRoot.
+-- Windows), and treats every *.rxl file in the document root as a rexxlet,
+-- with DirectoryIndex index.rxl. ${SRVROOT} resolves to the rewritten ServerRoot.
 ::Resource RexxHTTPConf
 # RexxHTTP drop-in configuration (Windows / Apache Lounge).
 # Included from httpd.conf by install\InstallWindows.rex.
@@ -728,11 +1056,43 @@ ServerName localhost
 # the handler points straight at the processor (no wrapper).
 Action RexxHTTP /cgi-bin/RexxHTTP.rex
 
-<Directory "C:/Apache24/htdocs">
-    DirectoryIndex index
-    <Files "index">
-        SetHandler RexxHTTP
-    </Files>
+<Directory "%docRoot%">
+    DirectoryIndex index.rxl readme.md
+    # Route every *.md through the Markdown renderer at /md/index.rxl: it turns
+    # the file into a styled HTML page (via pandoc when present), or serves
+    # it verbatim as UTF-8 text when pandoc is absent. Visiting /md/ directly
+    # shows a short help page. The Action target must name the rexxlet
+    # explicitly (/md/index.rxl): Apache does not apply DirectoryIndex to it.
+    Action markdown /md/index.rxl
+    AddHandler markdown .md
+    # The AddType/AddCharset below is the static fallback: if the renderer is
+    # ever removed, Apache still serves .md inline as UTF-8 plain text rather
+    # than offering it as a download (the default for text/markdown). The
+    # charset is pinned to UTF-8 -- the shipped .md files are UTF-8 -- so the
+    # browser need not guess. Other encodings are not supported for now; if
+    # the need arises, this is where it would be handled.
+    AddType text/plain .md
+    AddCharset utf-8 .md
+    # Route program source through the viewer at /src-viewer/index.rxl: it
+    # highlights the file on the fly when the Rexx Parser is present, or serves
+    # it verbatim as UTF-8 text when it is absent. Visiting /src-viewer/
+    # directly shows a short help page. As with markdown, the Action target
+    # must name the rexxlet explicitly. Note .rxl is deliberately NOT listed:
+    # a rexxlet is run by RexxHTTP (see below), never shown as source.
+    Action src-viewer /src-viewer/index.rxl
+    AddHandler src-viewer .rex .rexx .cls .orx
+    # Static fallback, as for .md: if the viewer is ever removed, Apache still
+    # serves these inline as UTF-8 plain text rather than offering a download.
+    AddType text/plain .rex .rexx .cls .orx
+    AddCharset utf-8 .rex .rexx .cls .orx
+    # Any *.rxl file is a rexxlet: hand it to the RexxHTTP processor.
+    AddHandler RexxHTTP .rxl
+    # Install-time SetEnv lines are spliced in on the line below (the installer
+    # replaces the marker with the output of RexxHTTPSetEnvLines, which
+    # documents which variables are emitted). They live inside <Directory> so
+    # their scope is our document tree, not the whole server (matters on the
+    # keep-apache path). With nothing to set, the line vanishes.
+%SETENV%
 </Directory>
 ::END
 

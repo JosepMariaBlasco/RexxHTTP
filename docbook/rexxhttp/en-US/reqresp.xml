@@ -1,0 +1,237 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<chapter id="reqresp"><title>The Request/Response Model</title>
+<indexterm><primary>request/response model</primary></indexterm>
+
+<para>The <xref linkend="tutorial" xrefstyle="select:title"/> chapter showed
+rexxlets that work without explaining why they work. This chapter is the why. It
+describes the three objects RexxHTTP builds for each request, the buffering
+that sits under the response, and the single moment &mdash; the
+<emphasis role="italic">commit</emphasis> &mdash; that turns a buffer full of
+headers and body into bytes on the wire. Almost everything that can surprise a
+rexxlet author, from a header that takes effect after it was <quote>too
+late</quote> to set, to one that mysteriously raises, follows from this one
+model.</para>
+
+<section id="rr-three-objects"><title>The Three Objects</title>
+<indexterm><primary>request</primary><secondary>request object</secondary></indexterm>
+<indexterm><primary>response</primary><secondary>response object</secondary></indexterm>
+<indexterm><primary>output stream</primary></indexterm>
+<indexterm><primary>environment pool</primary></indexterm>
+<indexterm><primary>.request</primary></indexterm>
+<indexterm><primary>.response</primary></indexterm>
+
+<para>For each request, before the rexxlet runs, RexxHTTP builds three objects
+and hands the rexxlet the first two.</para>
+
+<para>A <emphasis role="bold">request</emphasis>
+(<classname>HTTP.Request</classname>) is the incoming side, read-only. It holds
+the request line and headers &mdash; reached as named accessors or, for
+anything CGI passed as an environment variable, through the environment pool
+&mdash; and it holds the arguments and cookies the client sent, parsed and
+decoded. By the time the rexxlet runs the parsing is already done and the
+argument policy already applied, so the request a rexxlet sees is always
+well-formed.</para>
+
+<para>A <emphasis role="bold">response</emphasis>
+(<classname>HTTP.Response</classname>) is the outgoing side, and it is the
+object this chapter is really about. It is made of three parts: a set of
+headers (seeded with one,
+<literal>Content-Type: text/plain; charset=utf-8</literal>), an optional set of
+cookies, and a buffered output stream that collects the body. The headers and
+cookies stay freely modifiable for as long as the body is being written &mdash;
+that is the whole point of the design &mdash; and are serialised only once, at
+commit.</para>
+
+<para>An <emphasis role="bold">output stream</emphasis>
+(<classname>HTTP.OutputStream</classname>) is that body buffer: a write-only
+subclass of <classname>Stream</classname> that the response creates for itself.
+While the rexxlet runs, the default output stream is redirected to it, which is
+why a plain <methodname>Say</methodname> writes to the response body rather than
+to a console that is not there. The rexxlet almost never names this object; it
+just uses <methodname>Say</methodname>.</para>
+
+<para>The request and response reach the rexxlet as the environment symbols
+<literal>.request</literal> and <literal>.response</literal>, placed there by the
+processor. Being environment symbols, they reach the two objects from any scope
+&mdash; a routine, a method &mdash; without the object having to be passed along,
+so the body of a rexxlet never has to thread <literal>response</literal> through
+every call that might need to set a header.</para>
+
+</section>
+
+<section id="rr-buffering"><title>Buffering, and Why</title>
+<indexterm><primary>buffering</primary></indexterm>
+<indexterm><primary>lazy headers</primary></indexterm>
+<indexterm><primary>output stream</primary></indexterm>
+<indexterm><primary>headers</primary></indexterm>
+
+<para>A CGI program speaks to the web server through its standard output: the
+bytes it writes become the HTTP response, headers first, then a blank line, then
+the body. The catch is order. Once a single header byte has been written, the
+headers are decided; anything the program <quote>sets</quote> after that is too
+late, because it has already gone out &mdash; or worse, the body has, and the
+header lands in the middle of it.</para>
+
+<para>RexxHTTP removes that catch by not writing the body straight to the
+server. The output stream collects it in a buffer instead. While the buffer
+fills, the headers and cookies are still just entries in two directories on the
+response object: setting one, changing one, adding a cookie are all ordinary
+updates to in-memory state, and the order in which the rexxlet does them
+relative to its <methodname>Say</methodname>s does not matter, because none of
+it has been serialised yet.</para>
+
+<para>This is what the introduction and the
+<xref linkend="tutorial" xrefstyle="select:title"/> chapter called
+<emphasis role="italic">lazy headers</emphasis>. A rexxlet can write half its
+page, decide from what it computed there that the content type should be
+<literal>text/html</literal> rather than the default, set it, and finish the
+page &mdash; and the header is correct on the wire, because at the moment it was
+set nothing had yet been committed. The buffer buys the rexxlet the freedom to
+decide late.</para>
+
+</section>
+
+<section id="rr-commit"><title>Commit</title>
+<indexterm><primary>commit</primary></indexterm>
+<indexterm><primary>flush</primary></indexterm>
+<indexterm><primary>status line</primary></indexterm>
+<indexterm><primary>idempotent</primary></indexterm>
+
+<para><emphasis role="italic">Commit</emphasis> is the moment the buffered head
+becomes bytes. It happens once per response, and it does a fixed sequence: it
+writes the <literal>Content-Type</literal> header, then one
+<literal>Set-Cookie</literal> line per scheduled cookie, then every other
+header, then the blank line that separates head from body &mdash; all straight
+to the server's output stream, ahead of the buffered body. After commit the head
+is on the wire and cannot be changed.</para>
+
+<para>Commit is <emphasis role="bold">idempotent</emphasis>: the first call
+emits the head and marks the response committed; any later call returns at once,
+having done nothing. A rexxlet therefore never has to track whether the response
+is <quote>already</quote> committed before asking for a flush &mdash; asking
+twice is harmless.</para>
+
+<para>Rexxlets rarely call <methodname>commit</methodname> directly. It is
+driven by <emphasis role="italic">flush</emphasis>. The response's
+<methodname>flush</methodname> (and the output stream's, which it delegates to)
+commits the response if it has not been committed yet, and only then writes the
+buffered body out and empties the buffer. So the
+<emphasis role="bold">first flush is what commits</emphasis>, and that first
+flush is one of two things:</para>
+
+<itemizedlist>
+<listitem><para>one the rexxlet performs itself, by calling
+<computeroutput>.response~flush</computeroutput> &mdash; for instance to fix the
+headers at a deliberate point; or</para></listitem>
+<listitem><para>the one RexxHTTP performs automatically after the rexxlet
+returns.</para></listitem>
+</itemizedlist>
+
+<para>A rexxlet that never flushes still gets exactly one flush, the processor's
+final one, and so still produces a complete response with its head committed
+once. The common case needs no <methodname>flush</methodname> at all.</para>
+
+</section>
+
+<section id="rr-commit-discipline"><title>Commit Discipline</title>
+<indexterm><primary>commit discipline</primary></indexterm>
+<indexterm><primary>already committed</primary></indexterm>
+
+<para>Everything a rexxlet can do to the head &mdash; set a header
+(<computeroutput>.response[...]=</computeroutput> or the message form), schedule
+a cookie (<methodname>addcookie</methodname>), or replace the response wholesale
+(<methodname>error</methodname>, <methodname>404</methodname>,
+<methodname>redirect</methodname>) &mdash; is legal
+<emphasis role="italic">before</emphasis> commit and an error
+<emphasis role="italic">after</emphasis> it. The reason is physical: past commit
+the head is already on the wire, so a late change could not possibly take
+effect. RexxHTTP treats the attempt as a programming error and raises
+(<computeroutput>Syntax</computeroutput> 93.900,
+<emphasis role="italic">the response is already committed</emphasis>) rather
+than accept a call it would have to silently ignore. The body may still be
+written and flushed after commit; only the head is frozen.</para>
+
+<para>This is why the order of guards matters in one place worth noting. When a
+cookie is added to an already-committed response, the failure reported is
+<emphasis role="italic">already committed</emphasis>, not
+<emphasis role="italic">not a cookie</emphasis> even if the argument is also
+wrong: the commit check comes first, because the commit state outranks argument
+validation. The same fail-fast governs <methodname>error</methodname> and
+<methodname>redirect</methodname>, which discard an uncommitted buffered body and
+do their work, but raise on a committed response instead of pretending to change
+a status that has already shipped.</para>
+
+<para>There is also a brief internal window the rexxlet never sees but which
+explains the care in the design: while <methodname>commit</methodname> is partway
+through writing the head, the response is
+<emphasis role="italic">committing</emphasis> but not yet
+<emphasis role="italic">committed</emphasis>. RexxHTTP's own error handling
+distinguishes the two, so that a fault raised in the middle of emitting headers
+does not try to re-assert headers over a response that is already half-written. A
+rexxlet only ever observes the two stable states, before and after;
+<methodname>committed</methodname> reports which. The per-method detail &mdash;
+what <methodname>error</methodname>, <methodname>addcookie</methodname>,
+<methodname>commit</methodname> and <methodname>committed</methodname> each do,
+argument by argument &mdash; is in the <xref linkend="clsref" xrefstyle="select:title"/>.</para>
+
+</section>
+
+<section id="rr-streaming"><title>A Note on Streaming and mod_deflate</title>
+<indexterm><primary>streaming</primary></indexterm>
+<indexterm><primary>flush</primary></indexterm>
+<indexterm><primary>mod_deflate</primary></indexterm>
+
+<para>It is tempting to read <quote>the rexxlet can flush early</quote> as
+<quote>the rexxlet can stream a page to the browser progressively, a piece at a
+time.</quote> The 2006 manual made roughly that promise. In a modern production
+deployment it no longer holds, and this manual will not repeat it.</para>
+
+<para>The reason is <literal>mod_deflate</literal>. To compress the response,
+Apache's <literal>mod_deflate</literal> buffers the CGI program's output on its
+own account before sending it on, which means the boundaries at which a rexxlet
+flushes are not the boundaries at which the client receives anything: the
+compressor decides those. An early <computeroutput>.response~flush</computeroutput>
+does <emphasis role="italic">not</emphasis> reliably make the first half of a
+page appear in the browser before the rexxlet has finished computing the second
+half.</para>
+
+<para>What an early flush still does &mdash; and the reason the flush mechanism
+is kept &mdash; is <emphasis role="italic">internal</emphasis> and entirely real.
+It commits the response at a chosen point, fixing the headers and status exactly
+there rather than at the end. That control over commit ordering is occasionally
+what a rexxlet wants, and it is the mechanism behind the lazy-header behaviour
+this chapter described. Think of <methodname>flush</methodname> as
+<quote>decide the head now,</quote> not as <quote>push bytes to the browser
+now.</quote> For the great majority of rexxlets neither concern arises: they
+write their body, return, and let the processor's final flush commit and send
+the whole thing at once.</para>
+
+</section>
+</chapter>

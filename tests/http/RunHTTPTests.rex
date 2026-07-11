@@ -93,7 +93,8 @@
              "commitfail flushcrash addckfail" -
              "setpair readpair readname dupck" -
              "err404 errgen errescape errreset rdr rdr301 rdr303"  -
-             "envpool enc"
+             "envpool enc" -
+             "urlprobe urlnobar urlremap"
 
   -- Per-fixture SetEnv lines for the .htaccess block. Each entry is an
   -- array of "NAME value" strings; under the Action sub-request Apache
@@ -103,6 +104,24 @@
   setEnvFor["polstrict"] = .array~of("REXXHTTP_ARGPOLICY Strict")    -- caseless; honoured
   setEnvFor["polbad"]    = .array~of("REXXHTTP_ARGPOLICY disparate") -- unknown -> 500
   setEnvFor["envpool"]   = .array~of("MYPLAIN plainvalue", "_MYVAR underscored")
+  -- request_url / script_name probe (v76 swap+rename). Three deployments of
+  -- the same fixture code, each with a different .htaccess, exercise the
+  -- swap's contract in a one-hop request (fixtures deploy under testDir,
+  -- /var/www/html/test):
+  --   urlprobe - pair that matches the real topology (BASE=testDir peels the
+  --     on-disk path to /<name>, URLBASE=/test restores the URL prefix).
+  --     script_name reconstructs disk->URL and lands on the client's URL;
+  --     request_url == script_name.
+  --   urlnobar - NO pair. script_name takes its base=="" fallback (Return
+  --     request_url), so the two still coincide, by the fallback path.
+  --   urlremap - pair whose URLBASE injects a prefix the client's URL does
+  --     not carry (BASE=testDir, URLBASE=/otheria). script_name reconstructs
+  --     to /otheria/urlremap while request_url stays /test/urlremap: the two
+  --     DIVERGE, proving the RFC reconstruction is live, not an alias.
+  setEnvFor["urlprobe"]  = .array~of("REXXHTTP_BASE /var/www/html/test", -
+                                     "REXXHTTP_URLBASE /test")
+  setEnvFor["urlremap"]  = .array~of("REXXHTTP_BASE /var/www/html/test", -
+                                     "REXXHTTP_URLBASE /otheria")
 
   Say
   Say "RexxHTTP Integration Tests - Setup and Runner"
@@ -243,6 +262,16 @@
   Say "  OK."
 
 --------------------------------------------------------------------------------
+-- Step 6b: Deploy the CGI-contract matrix (variable x topology)              --
+--   Two physical zones (docroot /mtx, aliased /ali), each serving the same   --
+--   cgivars probe through the four resolution/hop shapes, give the twelve    --
+--   topology cells. See DeployMatrix and the CGI-contract tests.             --
+--------------------------------------------------------------------------------
+
+  Call DeployMatrix fixturesDir, sep
+  Say "  OK."
+
+--------------------------------------------------------------------------------
 -- Step 7: Start Apache                                                      --
 --------------------------------------------------------------------------------
 
@@ -316,6 +345,11 @@
     Say "  OK."
   End
 
+  -- Tear down the CGI-contract matrix (config + both zones).
+  Address System "sudo a2disconf rexxhttp-matrix > /dev/null 2>&1"
+  Address System "sudo rm -f /etc/apache2/conf-available/rexxhttp-matrix.conf"
+  Address System "sudo rm -rf /var/www/html/mtx /opt/rexxhttp-matrix"
+
   Return testRC
 
 /******************************************************************************/
@@ -327,6 +361,62 @@ Ask:
   Call CharOut , prompt "(y/n) "
   Parse Pull answer
   Return Lower(answer~strip)~abbrev("y")
+
+/******************************************************************************/
+/* DeployMatrix: build the twelve-cell CGI-contract topology.                */
+/*                                                                            */
+/* Two physical zones give the "docroot vs Alias" axis:                       */
+/*   - docroot zone at /var/www/html/mtx, served in URL space at /mtx         */
+/*   - aliased zone at /opt/rexxhttp-matrix, served at /ali (Alias)           */
+/* Within each zone the same cgivars probe is deployed under the names each   */
+/* resolution needs, giving the "rexlet vs DirectoryIndex" and "one vs two    */
+/* hops" axes:                                                                */
+/*   probe.rxl        rexlet named directly           -> one hop              */
+/*   target.mtx       served by Action -> probe.rxl    -> two hops            */
+/*   index.rxl        DirectoryIndex of the zone root  -> one hop             */
+/*   sub/index.mtx    DirectoryIndex -> Action          -> two hops            */
+/* The "with/without extra path" axis is exercised by the test URLs, not by   */
+/* deployment. DirectoryIndex + extra path is the impossible cell (Apache     */
+/* hard 404), so eleven URLs over four resources give the twelve live cells   */
+/* (the two DirectoryIndex resources carry no extra-path variant).            */
+/*                                                                            */
+/* The (base, urlbase) pair is set per zone via SetEnv in MatrixConf. Both    */
+/* zones use a real prefix (/mtx, /ali), never the "*" sentinel, so the       */
+/* reconstruction is exercised, not just the fallback.                        */
+/******************************************************************************/
+
+DeployMatrix:
+  Use Strict Arg fixturesDir, sep
+
+  probe = fixturesDir || sep || "cgivars"
+
+  docZone = "/var/www/html/mtx"
+  aliZone = "/opt/rexxhttp-matrix"
+
+  Do zone Over .Array~of(docZone, aliZone)
+    Address System "sudo mkdir -p" zone
+    Address System "sudo mkdir -p" zone"/sub"
+    -- One hop, rexlet named:            probe.rxl
+    -- Two hops, rexlet as Action:       target.mtx (a plain file, run via Action)
+    -- One hop, DirectoryIndex:          index.rxl
+    -- Two hops, DirectoryIndex->Action: sub/index.mtx
+    Address System "sudo cp" '"'probe'"' zone"/probe.rxl"
+    Address System "sudo cp" '"'probe'"' zone"/index.rxl"
+    Address System 'printf "matrix target\n" | sudo tee' zone"/target.mtx > /dev/null"
+    Address System 'printf "matrix index\n"  | sudo tee' zone"/sub/index.mtx > /dev/null"
+  End
+
+  -- Write the zone config from the MatrixConf resource and enable it.
+  tmpConf = "/tmp/rexxhttp-matrix.conf.tmp"
+  conf = .Resources~MatrixConf~makeString("L", "0A"x)
+  Call Stream tmpConf, "C", "Open Write Replace"
+  Call CharOut tmpConf, conf
+  Call Stream tmpConf, "C", "Close"
+  Address System "sudo cp" tmpConf "/etc/apache2/conf-available/rexxhttp-matrix.conf"
+  Address System "rm -f" tmpConf
+  Address System "sudo a2enconf rexxhttp-matrix > /dev/null 2>&1"
+
+  Return
 
 /******************************************************************************/
 /* Resources: the files this script generates.                               */
@@ -357,5 +447,69 @@ Action RexxHTTPCGI /RexxHTTP/wrapper
     AllowOverride All
     Options +ExecCGI
     Require all granted
+</Directory>
+::END
+
+::Resource MatrixConf
+# ==========================================================================
+# CGI-contract matrix: two zones, twelve topology cells.
+# Deployed by DeployMatrix (see the prolog). The cgivars probe lives in both
+# zones; each zone pairs REXXHTTP_BASE (disk) with REXXHTTP_URLBASE (URL) so
+# the disk->URL reconstruction is exercised with a real prefix, not the "*"
+# sentinel. probe.rxl and index.rxl are rexlets (one hop); target.mtx and
+# sub/index.mtx are documents served through an Action to probe.rxl (two hops).
+# ==========================================================================
+
+# ---- docroot zone: /var/www/html/mtx served at /mtx ----
+<Directory "/var/www/html/mtx">
+    AllowOverride None
+    Options +ExecCGI
+    Require all granted
+    SetEnv REXXHTTP_BASE /var/www/html/mtx
+    SetEnv REXXHTTP_URLBASE /mtx
+    DirectoryIndex index.rxl
+    <Files "probe.rxl">
+        SetHandler RexxHTTPCGI
+    </Files>
+    <Files "index.rxl">
+        SetHandler RexxHTTPCGI
+    </Files>
+    AddHandler mtxhandler-doc .mtx
+    Action mtxhandler-doc /mtx/probe.rxl
+</Directory>
+<Directory "/var/www/html/mtx/sub">
+    AllowOverride None
+    Options +ExecCGI
+    Require all granted
+    SetEnv REXXHTTP_BASE /var/www/html/mtx
+    SetEnv REXXHTTP_URLBASE /mtx
+    DirectoryIndex index.mtx
+</Directory>
+
+# ---- aliased zone: /opt/rexxhttp-matrix served at /ali ----
+Alias /ali /opt/rexxhttp-matrix
+<Directory "/opt/rexxhttp-matrix">
+    AllowOverride None
+    Options +ExecCGI
+    Require all granted
+    SetEnv REXXHTTP_BASE /opt/rexxhttp-matrix
+    SetEnv REXXHTTP_URLBASE /ali
+    DirectoryIndex index.rxl
+    <Files "probe.rxl">
+        SetHandler RexxHTTPCGI
+    </Files>
+    <Files "index.rxl">
+        SetHandler RexxHTTPCGI
+    </Files>
+    AddHandler mtxhandler-ali .mtx
+    Action mtxhandler-ali /ali/probe.rxl
+</Directory>
+<Directory "/opt/rexxhttp-matrix/sub">
+    AllowOverride None
+    Options +ExecCGI
+    Require all granted
+    SetEnv REXXHTTP_BASE /opt/rexxhttp-matrix
+    SetEnv REXXHTTP_URLBASE /ali
+    DirectoryIndex index.mtx
 </Directory>
 ::END

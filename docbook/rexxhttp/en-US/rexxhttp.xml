@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<book>
+	<xi:include href="Book_Info.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="Preface.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="concepts.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="intro.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="shorttut.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="install.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="tutorial.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="examples.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="reqresp.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="clsref.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="rationale.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<xi:include href="license.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+	<index />
+</book>

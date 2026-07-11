@@ -70,7 +70,10 @@
 --------------------------------------------------------------------------------
 
   sep = .File~separator
-  srcDir = .File~new(.Context~package~name)~parentFile~parent || sep"src"
+  -- The package root is the parent of this install/ directory; src/ is its
+  -- child. srcRoot feeds the exclusion-model htdocs population (PlantHtdocs).
+  srcRoot = .File~new(.Context~package~name)~parentFile~parent
+  srcDir  = srcRoot || sep"src"
 
   -- The six files that make up a Unix installation: the five sources plus
   -- the LF wrapper Apache execs (which Calls RexxHTTP.rex beside it).
@@ -85,6 +88,13 @@
   assumeYes  = opts~assumeYes
   uninstall  = (opts~mode == "uninstall")
   keepApache = opts~keepApache
+
+  -- The Apache Listen port. Homebrew's httpd ships httpd.conf with "Listen
+  -- 8080" (it runs unprivileged, so 8080 rather than 80), so 8080 is the
+  -- default; --port overrides it. The uninstall needs it too, but reads it
+  -- from the manifest -- see Uninstall.
+  If opts~port \== "" Then port = opts~port
+                      Else port = 8080
 
   If uninstall Then
     Return Uninstall(assumeYes, keepApache, srcDir, sep, sources)
@@ -144,7 +154,7 @@
   docRoot   = prefix"/var/www"
   confFile  = prefix"/etc/httpd/httpd.conf"
   extraConf = prefix"/etc/httpd/extra/rexxhttp.conf"
-  indexFile = docRoot"/index"
+  indexFile = docRoot"/index.rxl"
 
 --------------------------------------------------------------------------------
 -- Step 4: Stop if the httpd formula is already installed (clean-machine)      --
@@ -163,15 +173,15 @@
   End
 
   -- Beyond the Homebrew httpd formula, refuse if anything else already holds
-  -- port 8080 -- the port this installer runs Apache on (Homebrew serves
-  -- unprivileged there). lsof filters by port and LISTEN state itself, so a
-  -- non-empty result means 8080 is taken. If lsof is missing or silent we do
-  -- not block on a guess; the formula check above is the real gate.
-  If CmdOutputHas("lsof -nP -iTCP:8080 -sTCP:LISTEN 2>/dev/null", "LISTEN") Then Do
+  -- the port we are about to use (8080 by default, or whatever --port set --
+  -- the port this installer runs Apache on, unprivileged). lsof filters by port
+  -- and LISTEN state itself, so a non-empty result means it is taken. If lsof
+  -- is missing or silent we do not block on a guess; the formula check above is
+  -- the real gate. If busy, we stop and point at the --port way out.
+  If CmdOutputHas("lsof -nP -iTCP:"port" -sTCP:LISTEN 2>/dev/null", "LISTEN") Then Do
     Say
-    Say "  STOP: something is already listening on TCP port 8080."
-    Say "  That is the port this installer runs Apache on. Free it (or use a"
-    Say "  machine where it is free) and re-run. Nothing was changed."
+    Say "  STOP:" PortBusyMsg(port)
+    Say "  Nothing was changed."
     Return 1
   End
 
@@ -237,6 +247,14 @@
   Say "Writing config fragment" extraConf"..."
   frag = .Resources~RexxHTTPConf~makeString("L", "0A"x)
   frag = frag~changeStr("%docRoot%", docRoot)
+  -- Splice in the install-time SetEnv lines (RexxHTTPSetEnvLines documents
+  -- which variables are emitted). docRoot is the installation root the whole
+  -- package was planted under, where src/RexxHTTP.CommonRoutines.cls now lives.
+  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ")~strip("T", .endOfLine))
+  -- The fragment ships "ServerName localhost"; when we are on a non-default
+  -- port, name the server with it so redirects and self-references use it.
+  If port \== 8080 Then
+    frag = frag~changeStr("ServerName localhost", "ServerName localhost:"port)
   Call CharOut extraConf, frag
   Call Stream extraConf, "C", "Close"
 
@@ -253,41 +271,63 @@
   Say "  OK."
 
 --------------------------------------------------------------------------------
--- Step 9: Plant the smoke-test index rexxlet                                 --
+-- Step 8b: Set the Listen port when --port asked for a non-default one        --
 --------------------------------------------------------------------------------
+-- Homebrew's httpd.conf carries "Listen 8080". When the user asked for another
+-- port we rewrite that line in place (rather than adding a second Listen, which
+-- would leave Apache trying 8080 as well). The port is recorded in the manifest
+-- (below) so the uninstall can put it back. The user owns the prefix, no sudo.
 
-  Say "Planting smoke-test rexxlet" indexFile"..."
-  index = SmokeTest()~makeString
-  Call CharOut indexFile, index
-  Call Stream indexFile, "C", "Close"
-  Say "  OK."
-
---------------------------------------------------------------------------------
--- Step 9b: Deploy the bundled example rexxlets                               --
---------------------------------------------------------------------------------
--- The welcome page planted above links to these. examples/ is a sibling of
--- src/ in the distribution; each is a rexxlet at examples/<name>/index copied
--- to docRoot/examples/<name>/index. The <Files "index"> handler in the conf
--- fragment matches by basename across the whole document tree, so these run
--- as rexxlets with no per-directory configuration of their own.
-
-  examplesSrc = .File~new(.Context~package~name)~parentFile~parent || sep"examples"
-  Say "Deploying example rexxlets to" docRoot"/examples..."
-  Do name Over ExampleDirs()~makeArray(" ")
-    Address System "mkdir -p" '"'docRoot"/examples/"name'"'
-    Address System "cp" '"'examplesSrc || sep || name || sep"index"'"' -
-                        '"'docRoot"/examples/"name"/index"'"'
-    If RC \== 0 Then Do
-      Say "  ERROR: failed to copy example" name
-      Return 1
+  If port \== 8080 Then Do
+    Say "Setting Apache to listen on port" port "("confFile")..."
+    tmpConf = "/tmp/rexxhttp-httpd.tmp"
+    lines = .Array~new
+    Do While Lines(confFile) > 0
+      line = LineIn(confFile)
+      -- Rewrite only the Listen whose port is 8080 (the Homebrew default we are
+      -- changing); leave any other Listen the operator may have added alone.
+      If line~strip~caselessAbbrev("Listen") Then Do
+        stripped = line~strip
+        Parse Var stripped . spec .
+        colon = spec~lastPos(":")
+        If colon > 0 Then linePort = spec~substr(colon + 1)
+                     Else linePort = spec
+        If linePort == 8080 Then line = RewriteListen(line, port)
+      End
+      lines~append(line)
     End
+    Call Stream confFile, "C", "Close"
+    Call Stream tmpConf, "C", "Open Write Replace"
+    Do line Over lines
+      Call LineOut tmpConf, line
+    End
+    Call Stream tmpConf, "C", "Close"
+    Address System "cp" '"'tmpConf'"' '"'confFile'"'
+    Address System "rm -f" tmpConf
+    Say "  OK."
   End
-  -- Plant an index at examples/ itself, so /examples/ returns this listing
-  -- instead of Apache's default directory index.
-  eIndexFile = docRoot"/examples/index"
-  Call CharOut eIndexFile, ExamplesIndex()~makeString
-  Call Stream eIndexFile, "C", "Close"
-  Say "  OK."
+
+--------------------------------------------------------------------------------
+-- Step 9: Populate the document root (exclusion model)                       --
+--------------------------------------------------------------------------------
+-- Instead of enumerating what to deploy, copy the WHOLE package into docRoot
+-- and leave out only the scaffolding (see HtdocsExclude): install/, tests/,
+-- pack.rex, and the two repo-only metadata files. Everything else becomes the
+-- browsable sample web: the root index rexxlet, apps/page.cls, the stylesheets,
+-- the examples/ tree with their pre-rendered .highlighted sources, src/ as a
+-- readable copy, the manual PDF, readme.md and LICENSE. The AddHandler in the
+-- conf fragment runs only *.rxl files as rexxlets, so
+-- every .cls/.rex/.md copied here is served as text, never executed. src/
+-- additionally lives in cgi-bin (Step 7), where it executes: two destinations.
+--
+-- No sudo on Mac: Homebrew installs into prefixes the user owns, so PlantHtdocs
+-- copies in-process. It returns the manifest of planted files (paths relative
+-- to docRoot), recorded in the management directory below so the uninstall
+-- retires exactly what was planted and nothing of the operator's.
+
+  Say "Populating" docRoot "from the package (exclusion model)..."
+  planted = PlantHtdocs(srcRoot, docRoot, "")
+  Say "  OK." planted~items "files planted."
 
 --------------------------------------------------------------------------------
 -- Step 10: Start Apache                                                      --
@@ -299,12 +339,54 @@
   Say "  OK."
 
 --------------------------------------------------------------------------------
--- Step 11: Smoke test (Homebrew listens on 8080)                            --
+-- Step 11b: Deploy the management directory (self-sufficient uninstall)       --
+--------------------------------------------------------------------------------
+-- Copy the six install/ files to a stable location and write a manifest, so
+-- uninstall still exists after the download is deleted. Done before the smoke
+-- test, not as a reward for it: even if the smoke test fails, the user must be
+-- able to uninstall and clean up. On Mac the layout is derived from brew, so
+-- the manifest records no path uninstall could not recompute; it is written
+-- for uniformity across platforms. No sudo here: Homebrew installs into
+-- prefixes the user owns.
+
+  mgmtDir = ManagementDir("MacOS")
+  Say "Installing the uninstaller to" mgmtDir"..."
+  installDir = .File~new(.Context~package~name)~parentFile~absolutePath
+  Address System "mkdir -p" mgmtDir
+  Do f Over ManagementFiles()~makeArray(" ")
+    Address System "cp" '"'installDir || sep || f'"' '"'mgmtDir || "/" || f'"'
+    If RC \== 0 Then Do
+      Say "  WARNING: could not copy" f "to" mgmtDir"."
+      Say "  The install itself is fine, but 'rexx uninstall' will not be"
+      Say "  available from a stable location. You can still uninstall from"
+      Say "  this download directory."
+      Leave
+    End
+  End
+  -- Record the port only when we changed it from the Homebrew default (8080);
+  -- otherwise there is nothing for the uninstall to restore.
+  If port == 8080 Then manifestPort = ""
+                  Else manifestPort = port
+  Call WriteManifest ManifestPath("MacOS", mgmtDir), "", manifestPort   -- Mac: no serverRoot
+  -- The htdocs manifest: the files planted in docRoot under the exclusion
+  -- model, so the uninstall retires exactly those and leaves operator files
+  -- untouched. No sudo on Mac (user owns the prefix), so write it straight to
+  -- its home in the management directory.
+  Call WriteHtdocsManifest HtdocsManifestPath("MacOS", mgmtDir), planted
+  Say "  OK."
+
+
+--------------------------------------------------------------------------------
+-- Step 11: Smoke test (Homebrew listens on 8080 by default, or --port)       --
 --------------------------------------------------------------------------------
 
-  Say "Smoke test (curl http://localhost:8080/)..."
+  -- Homebrew serves unprivileged, so the default is 8080 (not 80); --port may
+  -- have changed it. Either way the port is explicit in the URL.
+  baseUrl = "http://localhost:"port
+
+  Say "Smoke test (curl" baseUrl"/)..."
   out = .Array~new
-  Address System "curl -s --noproxy localhost http://localhost:8080/" -
+  Address System "curl -s --noproxy localhost" baseUrl"/" -
     With Output Using (out) Error Using (.Array~new)
   body = ""
   Do l Over out
@@ -312,27 +394,29 @@
   End
 
   Say
-  If body~caselessContains("Welcome to RexxHTTP") Then Do
+  If body~caselessContains("RexxHTTP") Then Do
     Say "============================================================"
     Say " SUCCESS: a minimal RexxHTTP installation is up and running."
     Say "============================================================"
     Say
-    Say " Open it in a browser at:  http://localhost:8080/"
-    Say " or from the command line:  curl http://localhost:8080/"
+    Say " Open it in a browser at:  " || baseUrl"/"
+    Say " or from the command line:  curl" baseUrl"/"
     Say
     Say " The welcome page links to a set of example rexxlets you can"
     Say " explore. They are small Rexx programs; follow a link to see"
     Say " each one run."
     Say
-    Say " The official RexxHTTP documentation is at:"
+    Say " You can find a copy of the RexxHTTP documentation at:"
     Say "   https://rexx.epbcn.com/rexxhttp/"
+    Say " and at:"
+    Say "   " || baseUrl"/"
     Say
     Return 0
   End
   Else Do
     Say "============================================================"
     Say " WARNING: install finished, but the smoke test did not return"
-    Say " the expected output. http://localhost:8080/ returned:"
+    Say " the expected output. " || baseUrl"/ returned:"
     Say "   " || body~strip~left(200)
     Say " Check" prefix"/var/log/httpd/error_log and the config fragment."
     Say "============================================================"
@@ -379,13 +463,13 @@ Uninstall: Procedure
   docRoot   = prefix"/var/www"
   confFile  = prefix"/etc/httpd/httpd.conf"
   extraConf = prefix"/etc/httpd/extra/rexxhttp.conf"
-  indexFile = docRoot"/index"
+  indexFile = docRoot"/index.rxl"
 
   Say "About to remove, under the Homebrew prefix" prefix":"
   Say "  - the RexxHTTP Include line from" confFile
   Say "  - the config fragment" extraConf
   Say "  - the RexxHTTP sources from" cgiBinDir
-  Say "  - the smoke-test rexxlet" indexFile
+  Say "  - the files RexxHTTP planted in" docRoot "(per the install manifest)"
   If \keepApache Then
     Say "  - Apache itself (brew uninstall httpd), to undo the install"
   Else
@@ -421,17 +505,55 @@ Uninstall: Procedure
   End
   Say "  OK."
 
-  -- 4. Delete the smoke-test rexxlet.
-  Say "Removing smoke-test rexxlet" indexFile"..."
-  Address System "rm -f" '"'indexFile'"'
+  -- 4. Remove everything the installer planted in docRoot, and nothing else.
+  -- Read the htdocs manifest written at install time and retire exactly those
+  -- files, pruning the directories they leave empty. Operator files (and the
+  -- directories that still hold them) are left untouched -- the coexist-safe
+  -- behaviour that matters on the --keep-apache path. If the manifest is
+  -- missing (an install predating the exclusion model), there is nothing to
+  -- walk and the step is a no-op. No sudo on Mac (the user owns the prefix).
+  mgmtDir = ManagementDir("MacOS")
+  planted = ReadHtdocsManifest(HtdocsManifestPath("MacOS", mgmtDir))
+  Say "Removing" planted~items "planted files from" docRoot"..."
+  Call UnplantHtdocs docRoot, planted, ""
   Say "  OK."
 
-  -- 4b. Delete the bundled example rexxlets.
-  Say "Removing example rexxlets" docRoot"/examples..."
-  Address System "rm -rf" '"'docRoot"/examples"'"'
-  Say "  OK."
+  -- The port the install recorded, if it changed it from 8080. Empty means the
+  -- install used the default, so there is no httpd.conf Listen to restore.
+  manifestPort = ReadManifestPort(ManifestPath("MacOS", mgmtDir))
 
   If keepApache Then Do
+    -- If the install changed the Listen port, put httpd.conf back to 8080 (the
+    -- Homebrew default) so the operator's Apache is left as it was. Only the
+    -- manifest knows we changed it. (On the symmetric path below httpd is
+    -- uninstalled, so there is nothing to restore there.)
+    If manifestPort \== "", manifestPort \== 8080 Then Do
+      Say "Restoring Apache's Listen port to 8080 ("confFile")..."
+      tmpConf = "/tmp/rexxhttp-httpd.tmp"
+      lines = .Array~new
+      Do While Lines(confFile) > 0
+        line = LineIn(confFile)
+        If line~strip~caselessAbbrev("Listen") Then Do
+          stripped = line~strip
+          Parse Var stripped . spec .
+          colon = spec~lastPos(":")
+          If colon > 0 Then linePort = spec~substr(colon + 1)
+                       Else linePort = spec
+          If linePort == manifestPort Then line = RewriteListen(line, 8080)
+        End
+        lines~append(line)
+      End
+      Call Stream confFile, "C", "Close"
+      Call Stream tmpConf, "C", "Open Write Replace"
+      Do line Over lines
+        Call LineOut tmpConf, line
+      End
+      Call Stream tmpConf, "C", "Close"
+      Address System "cp" '"'tmpConf'"' '"'confFile'"'
+      Address System "rm -f" tmpConf
+      Say "  OK."
+    End
+
     -- Coexist path: restart httpd so it forgets the handler, and stop here.
     Say "Restarting Apache (without the RexxHTTP config)..."
     Call SysCmd "brew services start httpd >/dev/null 2>&1"
@@ -442,6 +564,11 @@ Uninstall: Procedure
     Say " RexxHTTP removed. The Homebrew httpd formula is still"
     Say " installed and running."
     Say "============================================================"
+
+    -- Remove the management directory last: the uninstaller is running
+    -- from here, but ooRexx has already tokenised these files into memory,
+    -- so deleting them now is safe. This makes the removal complete.
+    Address System "rm -rf" ManagementDir("MacOS")
     Return 0
   End
 
@@ -459,6 +586,9 @@ Uninstall: Procedure
   Say " RexxHTTP and the Homebrew httpd formula removed. The machine"
   Say " is back to its pre-install state."
   Say "============================================================"
+
+  -- Remove the management directory last (see note in the keep-apache path).
+  Address System "rm -rf" ManagementDir("MacOS")
   Return 0
 
 /******************************************************************************/
@@ -533,7 +663,7 @@ PinShebang: Procedure
 -- current Homebrew formula, so they are loaded only inside <IfModule> guards:
 -- if already present, the guard is false and nothing happens; if a build ever
 -- shipped them off, the guard loads them. The handler points at the wrapper
--- (Unix), and a single "index" rexxlet is whitelisted in the document root.
+-- (Unix), and every *.rxl file in the document root is treated as a rexxlet.
 ::Resource RexxHTTPConf
 # RexxHTTP drop-in configuration (macOS / Homebrew).
 # Included from httpd.conf by install/InstallMac.rex.
@@ -552,10 +682,42 @@ ServerName localhost
 Action RexxHTTP /cgi-bin/RexxHTTP_wrapper
 
 <Directory "%docRoot%">
-    DirectoryIndex index
-    <Files "index">
-        SetHandler RexxHTTP
-    </Files>
+    DirectoryIndex index.rxl readme.md
+    # Route every *.md through the Markdown renderer at /md/index.rxl: it turns
+    # the file into a styled HTML page (via pandoc when present), or serves
+    # it verbatim as UTF-8 text when pandoc is absent. Visiting /md/ directly
+    # shows a short help page. The Action target must name the rexxlet
+    # explicitly (/md/index.rxl): Apache does not apply DirectoryIndex to it.
+    Action markdown /md/index.rxl
+    AddHandler markdown .md
+    # The AddType/AddCharset below is the static fallback: if the renderer is
+    # ever removed, Apache still serves .md inline as UTF-8 plain text rather
+    # than offering it as a download (the default for text/markdown). The
+    # charset is pinned to UTF-8 -- the shipped .md files are UTF-8 -- so the
+    # browser need not guess. Other encodings are not supported for now; if
+    # the need arises, this is where it would be handled.
+    AddType text/plain .md
+    AddCharset utf-8 .md
+    # Route program source through the viewer at /src-viewer/index.rxl: it
+    # highlights the file on the fly when the Rexx Parser is present, or serves
+    # it verbatim as UTF-8 text when it is absent. Visiting /src-viewer/
+    # directly shows a short help page. As with markdown, the Action target
+    # must name the rexxlet explicitly. Note .rxl is deliberately NOT listed:
+    # a rexxlet is run by RexxHTTP (see below), never shown as source.
+    Action src-viewer /src-viewer/index.rxl
+    AddHandler src-viewer .rex .rexx .cls .orx
+    # Static fallback, as for .md: if the viewer is ever removed, Apache still
+    # serves these inline as UTF-8 plain text rather than offering a download.
+    AddType text/plain .rex .rexx .cls .orx
+    AddCharset utf-8 .rex .rexx .cls .orx
+    # Any *.rxl file is a rexxlet: hand it to the RexxHTTP processor.
+    AddHandler RexxHTTP .rxl
+    # Install-time SetEnv lines are spliced in on the line below (the installer
+    # replaces the marker with the output of RexxHTTPSetEnvLines, which
+    # documents which variables are emitted). They live inside <Directory> so
+    # their scope is our document tree, not the whole server (matters on the
+    # keep-apache path). With nothing to set, the line vanishes.
+%SETENV%
 </Directory>
 ::END
 

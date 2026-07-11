@@ -1,0 +1,13 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- The two self/resolved URL values that v76 renamed and swapped:
+--   request_url  - self-referential URL (client's own URL, PATH_INFO and
+--                  query string peeled off), computed in init.
+--   script_name  - RFC 3875 SCRIPT_NAME (resolved resource, disk->URL from
+--                  path_translated). Falls back to request_url when no
+--                  REXXHTTP_BASE/URLBASE pair is configured.
+-- In a one-hop request the two coincide; they diverge only when an Action
+-- or a URLBASE prefix rewrites the resolved path. The .htaccess block for
+-- each deployment of this probe sets (or omits) the pair to exercise both.
+Say "request_url=["request~request_url"]"
+Say "script_name=["request~script_name"]"

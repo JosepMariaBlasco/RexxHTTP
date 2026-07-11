@@ -34,8 +34,10 @@
   -- The response object creates a buffered output stream
   bufferedOutput       = .response~output
 
-  -- The rexxlet we have to call has been computed by the request object
-  callee   = .request~path_translated
+  -- The rexxlet we have to call has been computed by the request object.
+  -- SCRIPT_FILENAME is the processor's disk path -- the file to execute --
+  -- whereas FILENAME/PATH_TRANSLATED now name the requested document.
+  callee   = .request~script_filename
 
   -- Apply the argument policy BEFORE running the rexxlet. validate parses
   -- the request arguments eagerly (consuming any POST body) and reports
@@ -162,16 +164,67 @@ Syntax:
   -- Restore STDOUT if necessary
   If Var("originalOutput") Then .output~destination --(originalOutput)
 
-  -- Commit the response. This will emit the page headers.
-  -- Only assert the 500 status/type if nothing has gone out yet: once
-  -- the response is committed (or mid-commit), the headers are already
-  -- on the wire and setting them now would raise (committed) or corrupt
-  -- a half-written response (committing). commit itself is idempotent.
-  If \.response~committed, \.response~committing Then Do
-   .response~content_type = "text/plain; charset=utf-8"
-   .response~status       = "500 Internal Server Error"
+  If error~code == 98.900 Then Do
+    -- 98.900 is our internal signal: a configuration condition a method
+    -- deliberately raised (see rawResourcePath) to surface as a clean 500
+    -- page rather than a stack trace. Honour the response's state the same
+    -- three ways the generic path below does. Today rawResourcePath raises
+    -- this while .request is still being built, so .response does not exist
+    -- yet and we take the Else (Say straight to the CGI stream, as the
+    -- deployed version already does). The .response arms are hardening for
+    -- any future use of the channel from a point where a response is live.
+    reason = error~additional[1]
+    If .response~isA(.HTTP.Response) Then Do
+      -- A live, untouched response: let error() reset the body, set the
+      -- 500 status/type and HTML-escape the reason, then commit so the
+      -- headers and page actually go out. If it is already committed the
+      -- headers are on the wire; don't try to re-emit -- the condition is
+      -- still in error~additional for the log via the generic path is not
+      -- reached, so we simply stop without corrupting the stream.
+      If \.response~committed, \.response~committing Then Do
+       .response~error(500, reason)
+      End
+    End
+    Else Do
+      Say "Status: 500 Internal Server Error"
+      Say "Content-type: text/html; charset=utf-8"
+      Say
+      Say reason
+    End
+    Exit
   End
- .response~commit
+
+  -- Commit the response. This will emit the page headers.
+  --
+  -- .response only exists once RexxHTTP.rex has built it (see the main
+  -- flow). A syntax error raised BEFORE that -- e.g. inside
+  -- HTTP.Request~new() -- reaches this handler with .response still
+  -- unset, so .response is the literal string "RESPONSE" (the default
+  -- value of an unset .environment entry). Sending it ~committed then
+  -- raises here and buries the ORIGINAL error under a misleading
+  -- 'RESPONSE does not understand COMMITTED'. Guard on the real type so
+  -- an early failure still surfaces its own stack trace to the client
+  -- and the error log.
+  If .response~isA(.HTTP.Response) Then Do
+    -- Only assert the 500 status/type if nothing has gone out yet: once
+    -- the response is committed (or mid-commit), the headers are already
+    -- on the wire and setting them now would raise (committed) or corrupt
+    -- a half-written response (committing). commit itself is idempotent.
+    If \.response~committed, \.response~committing Then Do
+     .response~content_type = "text/plain; charset=utf-8"
+     .response~status       = "500 Internal Server Error"
+    End
+   .response~commit
+  End
+  Else Do
+    -- No response object: the failure predates its creation. Emit a
+    -- minimal CGI 500 by hand. .output was never redirected to the
+    -- response buffer (that happens later in the main flow), so Say
+    -- writes straight to STDOUT, which is exactly the CGI response.
+    Say "Status: 500 Internal Server Error"
+    Say "Content-Type: text/plain; charset=utf-8"
+    Say ""
+  End
 
   -- Output an error page
   Say "Internal server error"
@@ -192,7 +245,7 @@ Syntax:
   End
   Say "Error" error~rc "running" program_name "line" -
     error~position":" error~errortext
-  Say "Error" error~code":" error~errortext
+  Say "Error" error~code":" error~message
 
 Exit
 

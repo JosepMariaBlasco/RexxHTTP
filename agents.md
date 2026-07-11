@@ -20,7 +20,7 @@ which `Call`s `RexxHTTP.rex`; the processor builds the request/response
 objects, runs the rexxlet, and flushes the response. The response is
 buffered, which is what makes *lazy headers* possible — see below.
 
-The full specification is the manual in [`manual/book.md`](manual/book.md).
+The full specification is the manual in [`rexxhttp.pdf`](rexxhttp.pdf).
 **The manual is the spec; the code is the state.** When they disagree,
 that is a finding to report, not a thing to silently "fix".
 
@@ -63,10 +63,7 @@ a proof.
 Environment
 -----------
 
-- **Minimum ooRexx version: 5.3.0.** Earlier versions are not supported.
-  Modern syntax (`.File~separator`, `~isA`, `||=`,
-  `Use Strict Arg ... = default`, `caselessContains`, `Select Case`) is
-  allowed and used.
+- **Minimum ooRexx version: 5.2.0.** Earlier versions are not supported.
 - **Apache 2** with the `cgid` and `actions` modules.
 
 Line endings

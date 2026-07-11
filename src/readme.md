@@ -3,13 +3,13 @@ RexxHTTP — sources
 
 The RexxHTTP rexxlet processor and its classes.
 
-- `RexxHTTP.rex` — the rexxlet processor: sets up the request/response
-  objects, runs the rexxlet, and flushes the response.
-- `HTTP.Request.cls` — the HTTP request class.
-- `HTTP.Response.cls` — the HTTP response class.
-- `HTTP.OutputStream.cls` — a buffered output stream for HTTP responses
-  (this is what makes lazy headers possible).
-- `HTTP.Cookie.cls` — the cookie class.
+- [`RexxHTTP.rex`](RexxHTTP.rex) — the rexxlet processor: sets up the
+  request/response objects, runs the rexxlet, and flushes the response.
+- [`HTTP.Request.cls`](HTTP.Request.cls) — the HTTP request class.
+- [`HTTP.Response.cls`](HTTP.Response.cls) — the HTTP response class.
+- [`HTTP.OutputStream.cls`](HTTP.OutputStream.cls) — a buffered output
+  stream for HTTP responses (this is what makes lazy headers possible).
+- [`HTTP.Cookie.cls`](HTTP.Cookie.cls) — the cookie class.
 
-See [the manual](../manual/) for details and
+See [the manual](../rexxhttp.pdf) for details and
 [the top-level readme](../readme.md) for an overview.

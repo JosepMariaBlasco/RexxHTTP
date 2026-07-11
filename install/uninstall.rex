@@ -29,6 +29,13 @@
     Exit 1
   End
 
+  -- RexxHTTP requires ooRexx 5.2.0 or later. Stop early on an interpreter
+  -- too old, before touching arguments or the system.
+  If \RexxVersionOK() Then Do
+    Say RexxVersionMsg()
+    Exit 1
+  End
+
   -- --help is driver-specific (its own usage text), so handle it here.
   Do a Over .sysCargs
     If a~caselessEquals("--help") Then Signal Help
@@ -43,7 +50,20 @@
   End
 
   Select Case OSType()
-    When "Windows" Then Call "Windows.install.orx" opts
+    When "Windows" Then Do
+      -- A normal uninstall stops and de-registers the Apache service and deletes
+      -- the tree under the server root; both need Administrator, so we check up
+      -- front and stop cleanly rather than failing halfway through. A --user
+      -- uninstall skips all of that: it only stops the user's own Apache and
+      -- deletes a folder under the home, so it needs no elevation.
+      If \opts~user, \IsWindowsAdmin() Then Do
+        Say "ERROR: this uninstaller must be run as Administrator."
+        Say "  Open a Command Prompt with 'Run as administrator' and try again,"
+        Say "  or use --user to remove a user-level install."
+        Exit 1
+      End
+      Call "Windows.install.orx" opts
+    End
     When "Linux"   Then Call "Linux.install.orx"   opts
     When "MacOS"   Then Call "Mac.install.orx"     opts
   End

@@ -34,11 +34,35 @@
 ::Method init
 
   Expose http env envvars args_processed cookies_processed,
-    rspfilename filename,
+    rexxletFilename filename script_filename,
     content_length content_type,
     path_info path_translated,
     post_string query_string,
-    request_method request_uri script_name uri arg_violation
+    request_method request_uri request_url uri arg_violation,
+    action_request standard_request,
+    action_document,
+    urlbase base
+
+  -- A third redirect level = three chained Actions: unsupported topology.
+  If Env("REDIRECT_REDIRECT_REDIRECT_REXXHTTP_BASE") \== "" Then
+    Raise syntax 98.900 array -
+      ("rawResourcePath: unsupported Action chain (three redirect levels)")
+
+  -- Two redirect levels? -- A rexxlet used as an Action
+  -- One redirect level?  -- A standard rexxlet
+  action_request   = Env("REDIRECT_REDIRECT_REXXHTTP_BASE") \== ""
+  standard_request = \ action_request
+
+  Select
+    When standard_request Then Do
+      urlbase = Env("REDIRECT_REXXHTTP_URLBASE")
+      base    = Env("REDIRECT_REXXHTTP_BASE")
+    End
+    When action_request   Then Do
+      urlbase = Env("REDIRECT_REDIRECT_REXXHTTP_URLBASE")
+      base    = Env("REDIRECT_REDIRECT_REXXHTTP_BASE")
+    End
+  End
 
   -- Separator: "/" for unix, "\" for windows
   sep = .File~separator
@@ -61,19 +85,19 @@
   query_string          = Env(query_string   )
   request_uri           = Env(request_uri    )
 
-  If sep == "\" Then
+  If .File~separator == "\" Then
     path                = path~translate("\","/")
 
   args_processed        = .false
   cookies_processed     = .false
   arg_violation         = ""
 
-  -- Determine rsp file from PATH_TRANSLATED, adjust FILENAME, and
-  -- set current directory to point to the rsp file.
+  -- Determine rexxlet file from PATH_TRANSLATED, adjust FILENAME, and
+  -- set current directory to point to the rexxlet file.
 
-  rspfilename = ""
+  rexxletFilename = ""
   If SysIsFile(path) Then Do
-    rspfilename = path
+    rexxletFilename = path
     path_info = ""
     End
   Else Do
@@ -82,29 +106,113 @@
       pos = path~pos(sep,pos+1)
       If pos = 0 Then Leave
       If SysIsFile(path~left(pos-1)) Then Do
-        rspfilename = path~left(pos-1)
+        rexxletFilename = path~left(pos-1)
         path_info = path~substr(pos)~translate("/",sep)
         Leave
       End
     End
   End
 
-  filename = rspfilename
-  path_translated = rspfilename
-  directory = rspfilename~left(rspfilename~lastpos(sep))
+  -- SCRIPT_FILENAME is the disk path of the PROCESSOR: the rexlet Apache
+  -- resolved. RexxHTTP.rex reads it as the callee it Calls, and ~script_name
+  -- maps it back to URL space -- it is the execution/processor axis and must
+  -- stay the rexlet.
+  script_filename = rexxletFilename
+
+  -- FILENAME / PATH_TRANSLATED are the disk path of the DOCUMENT the client
+  -- asked for -- the disk twin of REQUEST_URL. Nothing executes them (the
+  -- callee is script_filename), so they name the document. One hop: requested
+  -- == processor, so the rexlet (final value here). Two hops: reassigned to the
+  -- document after the Action cut below.
+  filename = rexxletFilename
+  path_translated = rexxletFilename
+  directory = rexxletFilename~left(rexxletFilename~lastpos(sep))
 
   Call directory directory
 
-  -- Build SCRIPT_NAME
+  -- Build REQUEST_URL (the self-referential URL: the client's own URL with
+  -- PATH_INFO and query string peeled off). This is NOT the CGI SCRIPT_NAME:
+  -- that one is served by the ~script_name method, reconstructed from
+  -- path_translated. This value was historically named script_name, hence the
+  -- "SCRIPT_NAME" wording that survives in the length-clamp note below.
 
   requri = self~decodeForm(request_uri)
-  pathinfolen = self~decodeForm(self~path_info)~length
-  querylen = self~decodeForm(query_string)~length
-  If querylen > 0 Then querylen = querylen + 1
-  script_name = requri~left(requri~length - pathinfolen - querylen)
+  -- REQUEST_URL (the self-referential URL: the client's own URL, PATH_INFO and
+  -- query string peeled off) is built BELOW, after the Action document/tail cut
+  -- has resolved path_info to its final document-axis, tail-only value. It must
+  -- read that doctored path_info, not the raw handler-axis walk above: the raw
+  -- value fuses processor+document under an Action (PATH_INFO longer than
+  -- REQUEST_URI, subtraction negative, request_url empties out), whereas the
+  -- doctored path_info is always a genuine suffix of REQUEST_URI, in one hop and
+  -- in two. See the Action cut and the request_url build that follows it.
 
   If requri~pos("?") == 0 Then uri = requri
   Else uri = requri~left(requri~pos("?")-1)
+
+  -- Action document/tail cut. For a rexlet used as an Action (two hops) the
+  -- handler-axis walk near the top left path_info holding the whole client
+  -- request (document + tail fused) -- Apache's PATH_INFO smuggling. Re-run the
+  -- same SysIsFile walk on the document axis (rawResourcePath) to split the
+  -- resolved document from its trailing path, and OVERWRITE path_info with the
+  -- tail only -- "what you put after the resource you named". This happens
+  -- AFTER request_url read the raw path_info above, so request_url keeps its
+  -- established value while the path_info attribute ends up tail-only. Computed
+  -- here, once, like everything else: CGI has no persistent state to make a
+  -- lazy cache meaningful. action_document is kept for reuse (path_translated
+  -- as document, a later round). Standard rexlets skip this: their handler axis
+  -- and document axis coincide, so the raw path_info is already tail-only.
+  action_document = ""
+  If action_request Then Do
+    reqfile = self~rawResourcePath
+    action_document = reqfile
+    path_info       = ""
+    If \SysIsFile(reqfile) Then Do
+      pos = reqfile~pos(sep)
+      Do Forever
+        pos = reqfile~pos(sep, pos + 1)
+        If pos = 0 Then Leave
+        If SysIsFile(reqfile~left(pos - 1)) Then Do
+          action_document = reqfile~left(pos - 1)
+          path_info       = reqfile~substr(pos)~translate("/", sep)
+          Leave
+        End
+      End
+    End
+  End
+
+  -- FILENAME / PATH_TRANSLATED for an Action (two hops): the document on disk.
+  -- The callee is script_filename (the rexlet), so both may name the document.
+  -- action_document holds the requested resource, resolved via rawResourcePath
+  -- (REQUEST_URI + BASE/URLBASE) -- the honest, Alias-aware disk path. When it
+  -- is a regular file it IS the document (target.mtx, any /x/y tail already
+  -- split off). When it is a DIRECTORY it can only be a DirectoryIndex request
+  -- (we never serve directories), so Apache has already resolved and appended
+  -- the index basename to the tail of the raw PATH_TRANSLATED; graft that
+  -- basename onto the directory to name the index file actually served
+  -- (.../sub/ + index.mtx). One hop leaves action_document empty and both keep
+  -- their rexlet value.
+  If action_document \== "" Then Do
+    If SysIsFile(action_document) Then
+      filename = action_document
+    Else
+      filename = action_document || path~substr(path~lastpos(sep) + 1)
+    path_translated = filename
+  End
+
+  -- REQUEST_URL: the self-referential URL -- the client's own URL with its
+  -- extra PATH_INFO and query string peeled off, in ONE hop and in TWO. Built
+  -- here, after the Action cut, because path_info is now the document-axis,
+  -- tail-only value: a genuine suffix of REQUEST_URI in every cell of the
+  -- matrix (docroot/Alias x rexlet/DirectoryIndex x one/two hops x with/without
+  -- extra path). Reading the RAW handler-axis path_info here instead would fuse
+  -- processor+document under an Action, make PATH_INFO longer than REQUEST_URI,
+  -- drive the length negative and empty request_url out (the two-hop bug). With
+  -- the doctored suffix the subtraction is always non-negative; the Max(0,...)
+  -- guard stays only as a belt-and-braces against a decode length mismatch.
+  pathinfolen = self~decodeForm(path_info)~length
+  querylen = self~decodeForm(query_string)~length
+  If querylen > 0 Then querylen = querylen + 1
+  request_url = requri~left(Max(0, requri~length - pathinfolen - querylen))
 
   -- Delay processing until Arg() has been called
 
@@ -356,19 +464,13 @@
 -- CONTENT_LENGTH                                                             --
 --------------------------------------------------------------------------------
 
-::Method content_length
-  Expose content_length
-  Use Strict Arg
-  Return content_length
+::Attribute content_length Get
 
 --------------------------------------------------------------------------------
 -- CONTENT_TYPE                                                               --
 --------------------------------------------------------------------------------
 
-::Method content_type
-  Expose content_type
-  Use Strict Arg
-  Return content_type
+::Attribute content_type Get
 
 --------------------------------------------------------------------------------
 -- COOKIE                                                                     --
@@ -435,13 +537,38 @@
 
 --------------------------------------------------------------------------------
 -- FILENAME                                                                   --
---   NOTE: This returns the full path and filename to the rexxlet or rsp file.--
+--   The disk path of the DOCUMENT the client requested -- the file on disk    --
+--   of what was asked for. One hop: the rexlet (requested == processor). Two  --
+--   hops: the document served through the processor (target.mtx), or the      --
+--   resolved DirectoryIndex file for a requested directory. Always a genuine  --
+--   file; any trailing PATH_INFO is excluded. Alias of PATH_TRANSLATED. The   --
+--   processor that runs it is SCRIPT_FILENAME. Resolved at init.              --
 --------------------------------------------------------------------------------
 
-::Method filename
-  Expose filename
-  Use Strict Arg
-  Return filename
+::Attribute filename Get
+
+--------------------------------------------------------------------------------
+-- HANDLER                                                                    --
+--   When the rexxlet is being used as a handler, the name of that handler as --
+--   specified in the Apache configuration (e.g., "markdown"); otherwise,     --
+--   the method returns .Nil.                                                 --
+--------------------------------------------------------------------------------
+
+-- When a rexxlet is being used as a handler, there are _two_ levels of
+-- redirect. We are interested in the last one.
+::Method handler
+  handler = Env("REDIRECT_REDIRECT_HANDLER")
+  If handler = "" Then Return .Nil
+  Return handler
+
+--------------------------------------------------------------------------------
+-- IS_ACTION                                                                  --
+--   Returns .True when this rexxlet has been called as a handler using an    --
+--   Action Apache directive, and .False otherwise                            --
+--------------------------------------------------------------------------------
+
+::Method is_action
+  Return self~handler \== .Nil
 
 --------------------------------------------------------------------------------
 -- METHOD                                                                     --
@@ -452,40 +579,36 @@
 
 --------------------------------------------------------------------------------
 -- PATH_INFO                                                                  --
+--   The extra path following the resource the CLIENT named -- "what you put  --
+--   after something". Set by init: for a standard rexlet it is the raw       --
+--   handler-axis tail; for an Action it is the document-axis tail, split     --
+--   from the resolved document (see the Action cut in init). A plain         --
+--   attribute getter -- the value is fully resolved at construction.         --
 --------------------------------------------------------------------------------
 
-::Method path_info
-  Expose path_info
-  Use Strict Arg
-  Return path_info
+::Attribute path_info Get
 
 --------------------------------------------------------------------------------
 -- PATH_TRANSLATED                                                            --
---   NOTE: This returns the full path and filename to the rexxlet or rsp file.--
+--   The disk path of the DOCUMENT requested -- alias of FILENAME (both       --
+--   assigned from the same resolution in init). One hop == SCRIPT_FILENAME;  --
+--   two hops it is the document, not the processor. For the processor's disk --
+--   path (the callee) use SCRIPT_FILENAME.                                   --
 --------------------------------------------------------------------------------
 
-::Method path_translated
-  Expose path_translated
-  Use Strict Arg
-  Return path_translated
+::Attribute path_translated Get
 
 --------------------------------------------------------------------------------
 -- POST_STRING                                                                --
 --------------------------------------------------------------------------------
 
-::Method post_string
-  Expose post_string
-  Use Strict Arg
-  Return post_string
+::Attribute post_string Get
 
 --------------------------------------------------------------------------------
 -- QUERY_STRING                                                               --
 --------------------------------------------------------------------------------
 
-::Method query_string
-  Expose query_string
-  Use Strict Arg
-  Return query_string
+::Attribute query_string Get
 
 --------------------------------------------------------------------------------
 -- REQUEST_METHOD                                                             --
@@ -503,19 +626,156 @@
 --   This is calculated at INIT time                                          --
 --------------------------------------------------------------------------------
 
-::Method request_uri
-  Expose request_uri
+::Attribute request_uri Get
+
+--------------------------------------------------------------------------------
+-- rawResourcePath (PRIVATE)                                                  --
+--   The RAW, pre-resolution on-disk path of the resource the client asked    --
+--   for -- an internal step in computing FILENAME, not a public accessor.    --
+--   It reconstructs the path from the URL but does NOT resolve it against    --
+--   disk: in the Action case it still carries any trailing PATH_INFO, and    --
+--   for a directory request it names the directory, not the served index.    --
+--   The init runs a SysIsFile walk over this value to split the resolved     --
+--   document from its tail; the RESULT of that walk is FILENAME, which is     --
+--   the openable, document-on-disk path callers actually want. So this is     --
+--   deliberately not exposed: it can return a value readLines cannot open     --
+--   (".../doc.mtx/x/y", ".../sub/"). Public code wanting the document reads   --
+--   ~filename, which since the v79 disk-axis reorder always names the        --
+--   document (script_filename names the PROCESSOR). Kept private, and named   --
+--   for what it is (a raw resource path), to make that contract clear.        --
+--                                                                            --
+--   For a plain rexxlet (one redirect hop) the requested resource IS the     --
+--   rexxlet, so this returns script_filename unchanged. For a rexlet used    --
+--   as an Action (two hops, e.g. a .md served through the Markdown           --
+--   renderer) the document lives elsewhere -- possibly under an Alias        --
+--   outside the docroot -- and its path is reconstructed, deterministically  --
+--   and without guessing against disk, from a pair the installer/operator    --
+--   freezes in each <Directory>:                                             --
+--     REXXHTTP_BASE     the zone's root ON DISK                              --
+--     REXXHTTP_URLBASE  the zone's URL prefix; "*" means "no prefix"         --
+--                       (docroot or a plain subdir), "/ext" means aliased.   --
+--   Apache stacks a REDIRECT_ prefix per internal redirect, so the pair for  --
+--   the RESOURCE sits at the DEEPEST populated level (see the design note    --
+--   design-rexlet-as-action.md). The rule, once the deepest pair is read:    --
+--     rel  = REQUEST_URI (query string stripped) with urlbase peeled off     --
+--     file = base || rel                                                     --
+--                                                                            --
+--   One condition is a configuration error, reported as 500 via Raise:       --
+--     - REXXHTTP_BASE present but REXXHTTP_URLBASE empty at the resource      --
+--       level: the operator wrote the base but forgot the paired urlbase      --
+--       ("*" is the docroot value; empty is never legitimate here). Because  --
+--       Value() cannot tell an unset variable from one set to "", the "*"    --
+--       sentinel is what makes this distinguishable at all.                  --
+--------------------------------------------------------------------------------
+
+::Method rawResourcePath Private
+  Expose script_filename request_uri action_request urlbase base
   Use Strict Arg
-  Return request_uri
+
+  -- No anchor at any level: nothing to reconstruct from. Fall back to the
+  -- processor's own file (the plain, pre-REXXHTTP_BASE behaviour).
+  If base == "" Then Return script_filename
+
+  -- A plain rexlet: the requested resource IS the rexlet.
+  If \action_request Then Return script_filename
+
+  -- Two hops (rexlet-as-Action). We need the full pair. An empty urlbase
+  -- here is the operator's forgotten SetEnv (docroot legitimately carries
+  -- the "*" sentinel, never "").
+  If urlbase == "" Then
+    Raise syntax 98.900 array -
+      ("rawResourcePath: REXXHTTP_BASE set without a paired REXXHTTP_URLBASE")
+
+  -- Clean original URL: REQUEST_URI without any query string.
+  requri = request_uri
+  If requri~pos("?") > 0 Then requri = requri~left(requri~pos("?") - 1)
+
+  -- Peel the URL prefix off the front, unless it is the "*" sentinel
+  -- (no prefix: docroot or plain subdir). Nested If, not a comma guard,
+  -- to stay clear of the non-short-circuit "&" and the trailing-comma trap.
+  rel = requri
+  If urlbase \== "*" Then
+    If requri~left(urlbase~length) == urlbase Then
+      rel = requri~substr(urlbase~length + 1)
+
+  Return base || rel
+
+
+--------------------------------------------------------------------------------
+-- REQUEST_URL                                                                --
+--   The self-referential URL: the client's own URL with any PATH_INFO and    --
+--   query string peeled off. Was named ~script_name until the CGI SCRIPT_NAME --
+--   (RFC 3875, resolved resource) took over that name; this is the value the  --
+--   two production clients (calendario, SQLForm) actually consumed -- a URL   --
+--   to hang return links off, NOT the CGI processor path. Computed in init.   --
+--------------------------------------------------------------------------------
+
+::Attribute request_url Get
+
+--------------------------------------------------------------------------------
+-- SCRIPT_FILENAME                                                            --
+--   The disk path of the PROCESSOR -- the rexlet Apache resolved and ran,    --
+--   the disk twin of SCRIPT_NAME. This is the callee RexxHTTP.rex Calls. One --
+--   hop: == FILENAME. Two hops: the rexlet, distinct from FILENAME/          --
+--   PATH_TRANSLATED (the document). Resolved at init.                        --
+--------------------------------------------------------------------------------
+
+::Attribute script_filename Get
 
 --------------------------------------------------------------------------------
 -- SCRIPT_NAME                                                                --
+--   The RFC 3875 SCRIPT_NAME: the URL-space path of the resource Apache      --
+--   actually resolved and ran, NOT the URL the client typed. They differ    --
+--   whenever Apache rewrites internally before reaching us:                  --
+--     - DirectoryIndex: client asks "/test/", Apache resolves it to          --
+--       "/test/index.rxl"; the RFC SCRIPT_NAME is "/test/index.rxl", but     --
+--       ~request_url returns "/test/" (the self-referential URL, useful in   --
+--       its own right, just not what CGI names SCRIPT_NAME).                 --
+--     - plain rexlet (client names it): resolved == requested, so this       --
+--       returns the same value ~request_url does, by an honest path.         --
+--                                                                            --
+--   This mirrors the reconstruction machinery of rawResourcePath. That       --
+--   method goes URL->disk (peel urlbase off REQUEST_URI, prepend base);       --
+--   here we take the resolved processor on disk (script_filename) and map     --
+--   it back into URL space: strip the on-disk base prefix, prepend the URL    --
+--   prefix. The REXXHTTP_BASE / REXXHTTP_URLBASE pair, and the                --
+--   deepest-redirect-level rule for reading it, are exactly the same.         --
+--                                                                            --
+--   Where the pair is not configured (pre-REXXHTTP_BASE deployments) it      --
+--   falls back to the stored request_url value, so nothing regresses.        --
 --------------------------------------------------------------------------------
 
 ::Method script_name
-  Expose script_name
+  Expose request_url script_filename base urlbase
   Use Strict Arg
-  Return script_name
+
+  sep = .File~separator
+
+  -- No anchor configured: fall back to the stored request_url. This keeps
+  -- pre-REXXHTTP_BASE deployments behaving exactly as before.
+  If base == "" Then Return request_url
+
+  -- The resolved PROCESSOR on disk (script_filename). On Windows it may carry
+  -- native separators; normalise to "/" so the base-strip and the emitted
+  -- URL are both in URL space.
+  file = script_filename
+  If sep == "\" Then Do
+    file = file~translate("/", sep)
+    base = base~translate("/", sep)
+  End
+
+  -- Strip the on-disk base prefix to get the resource path relative to the
+  -- zone root, then map it into URL space by prepending the URL prefix
+  -- ("*" is the no-prefix sentinel: docroot or a plain subdir).
+  rel = file
+  If file~left(base~length) == base Then
+    rel = file~substr(base~length + 1)
+
+  -- Ensure a single leading "/" between prefix and relative path.
+  If rel~left(1) \== "/" Then rel = "/"rel
+
+  If urlbase == "*" Then Return rel
+  Return urlbase || rel
 
 --------------------------------------------------------------------------------
 -- SYSTEM_VERSION                                                             --
@@ -562,10 +822,89 @@
 --   This is calculated at INIT time                                          --
 --------------------------------------------------------------------------------
 
-::Method uri
-  Expose uri
+::Attribute uri Get
+
+--------------------------------------------------------------------------------
+-- RexxHTTP_URL                                                               --
+--   URL of the RexxHTTP package, or "" if RexxHTTP is not reachable          --
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- RexxHTTP_DIR                                                               --
+--   Filesystem directory of the RexxHTTP package -- no final "/"             --
+--------------------------------------------------------------------------------
+
+::Method RexxHTTP_DIR
+  Expose base
+  Return base
+
+--------------------------------------------------------------------------------
+-- RexxHTTP_URL                                                               --
+--   URL of the RexxHTTP package, or "" if RexxHTTP is not reachable          --
+--   When it is not "", it always ends with "/" (mod_dir convention)          --
+--------------------------------------------------------------------------------
+
+::Method RexxHTTP_URL
+  Expose urlbase
+  If urlbase == "" Then Return ""       -- unreachable: no pair configured
+  If urlbase == "*" Then Return "/"     -- docroot: present, no prefix
+  Return urlbase"/"                     -- subdir: "/rexxhttp" -> "/rexxhttp/"
+
+--------------------------------------------------------------------------------
+-- DOCUMENT_URI                                                               --
+--   The URL-space path of the DOCUMENT Apache actually resolved and served,  --
+--   carrying its URL prefix (e.g. "/mtx/target.mtx", "/ali/sub/index.mtx").  --
+--   It is the disk->URL twin of ~filename, exactly as ~script_name is the    --
+--   twin of ~script_filename: filename names the served document on disk,    --
+--   document_uri names that same document in URL space.                      --
+--                                                                            --
+--   It therefore RESOLVES what ~uri leaves raw. ~uri is the client's typed   --
+--   URL minus the query string, so it keeps any extra PATH_INFO tail and,    --
+--   for a DirectoryIndex request, names the directory ("/mtx/sub/"). This    --
+--   value instead follows filename: the extra tail is gone (the document is  --
+--   named, not what came after it) and a DirectoryIndex is resolved to the   --
+--   index actually served ("/mtx/sub/index.mtx"). Under an Action it is the  --
+--   original document, not the processor -- script_name covers that axis.    --
+--                                                                            --
+--   Reconstructed with the same REXXHTTP_BASE / REXXHTTP_URLBASE pair, read  --
+--   at the deepest redirect level, that script_name and rawResourcePath use: --
+--   strip the on-disk base off filename to get the path relative to the zone --
+--   root, then prepend the URL prefix ("*" is the no-prefix sentinel). Where --
+--   the pair is not configured (pre-REXXHTTP_BASE deployments) it falls back --
+--   to the stored ~uri, so nothing regresses.                               --
+--------------------------------------------------------------------------------
+
+::Method document_uri
+  Expose uri filename base urlbase
   Use Strict Arg
-  Return uri
+
+  sep = .File~separator
+
+  -- No anchor configured: fall back to the raw ~uri (client URL, query
+  -- stripped). Keeps pre-REXXHTTP_BASE deployments behaving as before.
+  If base == "" Then Return uri
+
+  -- The served DOCUMENT on disk (filename). On Windows it may carry native
+  -- separators; normalise to "/" so the base-strip and the emitted URL are
+  -- both in URL space.
+  file = filename
+  If sep == "\" Then Do
+    file = file~translate("/", sep)
+    base = base~translate("/", sep)
+  End
+
+  -- Strip the on-disk base prefix to get the document path relative to the
+  -- zone root, then map it into URL space by prepending the URL prefix
+  -- ("*" is the no-prefix sentinel: docroot or a plain subdir).
+  rel = file
+  If file~left(base~length) == base Then
+    rel = file~substr(base~length + 1)
+
+  -- Ensure a single leading "/" between prefix and relative path.
+  If rel~left(1) \== "/" Then rel = "/"rel
+
+  If urlbase == "*" Then Return rel
+  Return urlbase || rel
 
 --------------------------------------------------------------------------------
 -- DECODEURICOMPONENT -- Percent-decode a URL component (no "+" rule)         --

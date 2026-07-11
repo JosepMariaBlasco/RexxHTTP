@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE preface PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" [
+<!ENTITY % BOOK_ENTITIES SYSTEM "rexxhttp.ent">
+%BOOK_ENTITIES;
+]>
+<!--#########################################################################
+    #
+    # Description: RexxHTTP: Serving web content with Rexx
+    #
+    # This file is part of the RexxHTTP package
+    # [See https://rexx.epbcn.com/rexxhttp/]
+    #
+    # Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     https://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+    #
+    #########################################################################
+-->
+<preface id="pref-rexxhttp-Preface">
+<title>Preface</title>
+<indexterm><primary>RexxHTTP</primary></indexterm>
+<indexterm><primary>rexxlet processor</primary></indexterm>
+<indexterm><primary>rexxlet</primary></indexterm>
+<indexterm><primary>web application</primary></indexterm>
+<indexterm><primary>CGI</primary></indexterm>
+<indexterm><primary>Apache</primary></indexterm>
+<indexterm><primary>HTTP protocol</primary></indexterm>
+<indexterm><primary>request/response model</primary></indexterm>
+<para>This book describes RexxHTTP, a rexxlet processor for writing
+web applications in &Rexx; running as CGI programs under the Apache HTTP
+server. It opens with the basic concepts behind the web and CGI, then a short,
+hands-on tutorial, covers installation and the
+writing of rexxlets, explains the request/response model at the heart of the
+design, gives a complete reference to the four classes that RexxHTTP places at
+a rexxlet's disposal, and closes with the rationale behind the design.</para>
+<para>This book is intended for people who plan to develop web applications
+in &Rexx;. It assumes familiarity with the &Rexx; language, but no prior
+experience with the web: the opening chapter introduces the HTTP and CGI
+protocols, and the way the Apache HTTP server invokes a rexxlet, from the
+ground up.</para>
+
+<xi:include href="Common_Content/Conventions.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+
+<xi:include href="Common_Content/diagrams.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+
+<xi:include href="Common_Content/help.xml" xmlns:xi="http://www.w3.org/2001/XInclude" />
+</preface>

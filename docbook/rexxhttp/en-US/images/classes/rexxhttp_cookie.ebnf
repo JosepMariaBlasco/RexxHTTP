@@ -1,0 +1,40 @@
+/* HTTP.Cookie — invocation grammar (Milestone B).
+   One production per method diagram. Receiver and result-assignment are
+   omitted from the rail, per the rexxref convention (array_at et al.):
+   each production models the message from the method name rightwards.
+   Attribute setters use the bare '=' terminal: name '=' newvalue, which
+   is the real ooRexx assignment syntax (cookie~value = newvalue). The
+   parentheses in rexxref's objectName=( ) form are NOT mandatory in the
+   language and are not used here. Leaf non-terminals (name, value, ...) are left undefined on purpose;
+   ebnf2svg renders them as placeholder boxes, the prose explains them. */
+
+/* Constructor (class method). Class-method prefix per ref-decisiones v43. */
+cookie_class_new ::= 'new(' name ( ',' value )? ')'
+
+/* Read-only attribute: no name= setter (name is fixed at creation). */
+cookie_name ::= 'name'
+
+/* Getter / setter pairs. Setter = method name, literal '=', value leaf. */
+cookie_value    ::= 'value'
+cookie_valueset ::= 'value' '=' newvalue
+
+cookie_path    ::= 'path'
+cookie_pathset ::= 'path' '=' newpath
+
+cookie_domain    ::= 'domain'
+cookie_domainset ::= 'domain' '=' newdomain
+
+cookie_max_age    ::= 'max_age'
+cookie_max_ageset ::= 'max_age' '=' newseconds
+
+cookie_secure    ::= 'secure'
+cookie_secureset ::= 'secure' '=' newflag
+
+cookie_httponly    ::= 'httponly'
+cookie_httponlyset ::= 'httponly' '=' newflag
+
+cookie_samesite    ::= 'samesite'
+cookie_samesiteset ::= 'samesite' '=' newvalue
+
+/* Serialiser. No arguments. */
+cookie_makestring ::= 'makestring'
