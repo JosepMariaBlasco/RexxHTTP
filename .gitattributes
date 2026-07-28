@@ -1,29 +1,3 @@
-# RexxHTTP line-ending policy
-#
-# Repository stores text as LF (portable, canonical). On checkout, all
-# RexxHTTP sources are materialised as CRLF, because they are edited on
-# Windows (Notepad++) via Dropbox and only travel to the Apache/Ubuntu
-# box through a mounted folder.
-#
-# Why CRLF sources are safe:
-#
-# - On Unix, RexxHTTP.rex is never exec'd directly by the kernel. Apache
-#   execs a small wrapper, which Calls RexxHTTP.rex as a sibling; reached
-#   by Call, RexxHTTP.rex's CRLF and its own shebang are inert. ooRexx
-#   reads CRLF, LF, or mixed line endings by design.
-#
-# - On Windows, Apache execs RexxHTTP.rex directly, reading its #!rexx
-#   shebang via the default ScriptInterpreterSource. CRLF is native there
-#   and causes no trouble. No wrapper is used.
-#
-# The wrapper is the one file that must be LF (Apache execs it by its
-# shebang, and a trailing CR would have the kernel look for "rexx\r"). It
-# is NOT stored here: pack.rex generates it fresh, in LF, from a
-# ::RESOURCE on every build, and .gitignore keeps it out of the repo so
-# no second copy can drift. Being generated and ignored, it never passes
-# through these attributes at all.
-
-* text=auto
-
-*.cls text eol=crlf
-*.rex text eol=crlf
+# The whole repository is LF. pack.rex enforces this at build time.
+ 
+* text=auto eol=lf
