@@ -242,7 +242,7 @@
   -- Splice in the install-time SetEnv lines (see the %SETENV% marker in the
   -- ::Resource); RexxHTTPSetEnvLines documents which variables are emitted.
   -- docRoot is the installation root the whole package was planted under.
-  conf = conf~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ")~strip("T", .endOfLine))
+  conf = conf~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ", srcRoot)~strip("T", .endOfLine))
   Call Stream tmpConf, "C", "Open Write Replace"
   Call CharOut tmpConf, conf
   Call Stream tmpConf, "C", "Close"

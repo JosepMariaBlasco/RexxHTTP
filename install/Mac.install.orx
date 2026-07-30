@@ -252,7 +252,7 @@
   -- Splice in the install-time SetEnv lines (RexxHTTPSetEnvLines documents
   -- which variables are emitted). docRoot is the installation root the whole
   -- package was planted under, where src/RexxHTTP.CommonRoutines.cls now lives.
-  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ")~strip("T", .endOfLine))
+  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ", srcRoot)~strip("T", .endOfLine))
   -- The fragment ships "ServerName localhost"; when we are on a non-default
   -- port, name the server with it so redirects and self-references use it.
   If port \== 8080 Then
