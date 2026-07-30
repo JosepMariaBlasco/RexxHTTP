@@ -20,6 +20,10 @@
      messageargs ); in Response BOTH branches operate -- get reads a header,
      set (a message ending in '=') writes one -- as the prose states. */
 
+/* ---- Class method (constructor) ---- */
+
+response_class_new ::= 'new'
+
 /* ---- Class methods (encoders; the body lives on the class) ---- */
 
 response_class_encodeform         ::= 'encodeForm(' string ')'

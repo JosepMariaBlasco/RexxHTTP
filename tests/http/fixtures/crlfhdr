@@ -1,0 +1,10 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- "0d0a"x: CRLF built in code, so the fixture file itself stays plain text.
+-- val is a separate variable (not inlined into the []= call) so the
+-- traceback frame that surfaces is "response[...] = val", matching what a
+-- real rexxlet looks like with an attacker-controlled value in a variable --
+-- not a literal string sitting in the failing source line itself.
+val = "ok"||"0d0a"x||"X-Injected: yes"
+response["X-Probe"] = val
+Say "should not reach here"

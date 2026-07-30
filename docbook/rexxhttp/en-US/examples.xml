@@ -26,30 +26,34 @@
     #
     #########################################################################
 -->
-<chapter id="examples"><title>Two Rexxlets in Production</title>
+<chapter id="examples"><title>Three Rexxlets in Production</title>
 <indexterm><primary>examples</primary></indexterm>
 <indexterm><primary>page factory</primary></indexterm>
 <indexterm><primary>Markdown renderer</primary></indexterm>
+<indexterm><primary>source viewer</primary></indexterm>
 
 <para>The rexxlets in the <xref linkend="tutorial" xrefstyle="select:title"/>
-chapter were written to teach one idea at a time. This chapter reads two that
-were written to do a job. They are not part of RexxHTTP &mdash; nothing in the
-processor depends on them &mdash; but they ship with it as
-<filename>apps/page.cls</filename> and <filename>md/index.rxl</filename>. The pair
-serves <systemitem>rexx.epbcn.com/rexxhttp</systemitem> &mdash; and, once RexxHTTP
-is installed, the same pair is very likely already running on the reader's own
+chapter were written to teach one idea at a time. This chapter reads three that
+were written to do a job. They are not part of RexxHTTP (nothing in the
+processor depends on them), but they ship with it as
+<filename>bin/HTML.Page.cls</filename>, <filename>bin/markdown.rxl</filename> and
+<filename>bin/src-viewer.rxl</filename>. Together they serve
+<systemitem>rexx.epbcn.com/rexxhttp</systemitem>. Once RexxHTTP
+is installed, the same three are very likely already running on the reader's own
 machine, since the installer plants a browsable sample site into the document root
-and these two rexxlets are what serve it. The first gives every page its shared
-frame, and the second turns the site's Markdown files into styled pages. They are
+and these rexxlets are what serve it. The first gives every page its shared
+frame, the second turns the site's Markdown files into styled pages, and the third
+serves program source as a highlighted page. They are
 worth reading precisely because they are ordinary. Each one is short, each uses
 only the API the tutorial already covered, and between them they show how little
 code a real page needs once the request and response objects are doing their share
 of the work.</para>
 
-<para>The two are also a pair by design. The renderer produces a page's
+<para>They divide the work of the site cleanly. The renderer produces a page's
 <emphasis role="italic">content</emphasis>; the factory wraps that content in the
-site's <emphasis role="italic">frame</emphasis>. Reading the factory first and the
-renderer second follows the same order the code runs in.</para>
+site's <emphasis role="italic">frame</emphasis>; the viewer is a second kind of
+content, program source instead of prose. Reading the factory first, then the two
+that lean on it, follows the same order the code runs in.</para>
 
 <section id="ex-page-factory"><title>A Page Factory</title>
 <indexterm><primary>page factory</primary><secondary>Page class</secondary></indexterm>
@@ -57,24 +61,32 @@ renderer second follows the same order the code runs in.</para>
 <indexterm><primary>document_uri</primary></indexterm>
 <indexterm><primary>RexxHTTP_URL</primary></indexterm>
 <indexterm><primary>::Resource</primary></indexterm>
-<indexterm><primary>loadPackage</primary></indexterm>
+<indexterm><primary>::Requires directive</primary></indexterm>
+<indexterm><primary>REXX_PATH</primary></indexterm>
 <indexterm><primary>stack frames</primary></indexterm>
 
 <para>Every page on a site tends to share a frame: the same
 <literal>&lt;head&gt;</literal>, the same header and footer, the same stylesheet
 links. Repeating that frame in every rexxlet is the kind of duplication that goes
-stale one copy at a time. <filename>apps/page.cls</filename> collects the frame in
-one place and exposes a small class, <classname>Page</classname>, that a rexxlet
+stale one copy at a time. <filename>bin/HTML.Page.cls</filename> collects the frame in
+one place and exposes a small class, <classname>HTML.Page</classname>, that a rexxlet
 loads and uses to emit a complete document from just a title and a body.</para>
 
-<para>A rexxlet loads the class by absolute path &mdash; anchored at the
-installation directory, which the request knows &mdash; and then, in the simplest
-case, builds a page in one line:</para>
+<para>A rexxlet loads the class with a <literal>::Requires</literal> directive
+naming the file and nothing else &mdash; the installation puts
+<filename>bin/</filename> on <envar>REXX_PATH</envar>, so the bare name resolves
+from anywhere on the site &mdash; and then, in the simplest case, builds a page in
+one line:</para>
 
-<programlisting language="rexx">.context~package~loadPackage( .request~RexxHTTP_DIR"/apps/page.cls" )
+<indexterm><primary>examples</primary>
+<secondary>building a page with the page factory</secondary></indexterm>
+<example>
+<title>Building a page with the page factory</title>
+<programlisting language="rexx">.HTML.Page~new("My title")~body("&lt;p&gt;Hello&lt;/p&gt;")~done
 
-.Page~new("My title")~body("&lt;p&gt;Hello&lt;/p&gt;")~done
+::Requires "HTML.Page.cls"
 </programlisting>
+</example>
 
 <para><methodname>new</methodname> takes the title,
 <methodname>body</methodname> sets the content, and
@@ -93,21 +105,32 @@ that reads better in a rexxlet whose body is a lump of static HTML: declare the
 body as a <literal>::Resource</literal> and let the page find it. A rexxlet can
 write</para>
 
-<programlisting language="rexx">.Page~new("My title")~done
+<indexterm><primary>examples</primary>
+<secondary>supplying the body from a resource</secondary></indexterm>
+<example>
+<title>Supplying the body from a resource</title>
+<programlisting language="rexx">.HTML.Page~new("My title")~done
 
 ::Resource BODY
 &lt;p&gt;Hello&lt;/p&gt;
 ::END
-</programlisting>
 
-<para>&mdash; no body argument at all &mdash; and the page picks up the
+::Requires "HTML.Page.cls"
+</programlisting>
+</example>
+
+<para>There is no body argument at all, and the page picks up the
 <literal>BODY</literal> resource on its own. This is the part of the class worth
 slowing down for, because of <emphasis role="italic">how</emphasis> it finds that
 resource. The resource belongs to the rexxlet that called the page, not to
-<filename>page.cls</filename>, so the class cannot simply read its own resources:
+<filename>HTML.Page.cls</filename>, so the class cannot simply read its own resources:
 it has to look back at whoever invoked it. It does that by walking the call
 stack:</para>
 
+<indexterm><primary>examples</primary>
+<secondary>choosing the body inside page.Body</secondary></indexterm>
+<example>
+<title>Choosing the body inside page.Body</title>
 <programlisting language="rexx">::Method page.Body Private
   Expose body
 
@@ -131,10 +154,11 @@ Found:
   If res \== .nil Then Return res~makeString
   Return ""
 </programlisting>
+</example>
 
 <para>An explicit body, if there was one, wins immediately. Otherwise the method
-walks the stack frames from the top, skipping its own &mdash; the frames whose
-package is <literal>myself</literal> &mdash; until it reaches the first frame from
+walks the stack frames from the top, skipping its own (the frames whose
+package is <literal>myself</literal>) until it reaches the first frame from
 a different package. That frame is the calling rexxlet, and its package is where a
 <literal>BODY</literal> resource, if the rexxlet declared one, lives. If nothing
 turns up, the page is simply empty. The whole search is a dozen lines and needs no
@@ -157,10 +181,15 @@ without knowing the mount point, and it cannot be a fixed number of
 <filename>../</filename> steps. The <methodname>done</methodname> method computes
 the right number of steps from two facts the request already carries:</para>
 
+<indexterm><primary>examples</primary>
+<secondary>computing the stylesheet prefix</secondary></indexterm>
+<example>
+<title>Computing the stylesheet prefix</title>
 <programlisting language="rexx">depth   = .request~uri~countStr("/") - ,
           .request~RexxHTTP_URL~countStr("/")
 cssPref = Copies("../", Max(depth, 0))
 </programlisting>
+</example>
 
 <para><methodname>uri</methodname> is the client's own URL, the one still showing
 in the address bar, and <methodname>RexxHTTP_URL</methodname> is the URL the
@@ -168,18 +197,22 @@ installation is mounted at; counting the slashes in each and subtracting gives t
 page's depth below the mount point, and that many <filename>../</filename> steps
 climb back to it. The URL to count is <methodname>uri</methodname> and not, say,
 <methodname>document_uri</methodname>, because the browser resolves a relative link
-against the address it is sitting at &mdash; the client's URL, any trailing
+against the address it is sitting at: the client's URL, any trailing
 <literal>PATH_INFO</literal> and all. <methodname>document_uri</methodname> names
 the document Apache resolved, with that trailing tail already stripped and a
 DirectoryIndex folded into its served file; count over it and a request carrying a
 tail (<filename>/page.md/extra/stuff</filename>) yields too few
 <filename>../</filename>, and the stylesheet link points nowhere. The
-<methodname>&Rexx; countStr</methodname> built-in does the counting; the
-<function>Max</function> keeps the count from going negative for a page sitting
+&Rexx; <methodname>countStr</methodname> method does the counting; the
+MAX function keeps the count from going negative for a page sitting
 right at the mount point. From there, <methodname>done</methodname> substitutes
 <literal>cssPref</literal> and the title into the header and footer resources and
 emits the result:</para>
 
+<indexterm><primary>examples</primary>
+<secondary>emitting the page header</secondary></indexterm>
+<example>
+<title>Emitting the page header</title>
 <programlisting language="rexx">Parse Value self~styleSheets With links "09"x options
 out~append(                             -
  .resources~page.header~makeString~     -
@@ -189,37 +222,42 @@ out~append(                             -
     changeStr("%css%",          cssPref)~ -
     changeStr("%home%",         brand  ), -
  .EndOfLine,                        -
-  self~page.Body,                   -
+  body,                             -
  .EndOfLine,                        -
  .resources~page.footer~makeString~ -
     changeStr("%css%",   cssPref)~  -
-    changeStr("%home%",  brand)     -
+    changeStr("%home%",  brand)~    -
+    changeStr("%year%",  year)      -
 )
 
 Say out~string
 </programlisting>
+</example>
 
 <para>The header and footer are held as <literal>::Resource</literal> blocks with
-<literal>%title%</literal>, <literal>%css%</literal> and <literal>%home%</literal>
-placeholders that <methodname>changeStr</methodname> fills in. Two more,
+<literal>%title%</literal>, <literal>%css%</literal>, <literal>%home%</literal> and
+<literal>%year%</literal> placeholders that <methodname>changeStr</methodname> fills in. Two more,
 <literal>%stylelinks%</literal> and <literal>%styleoptions%</literal>, take the
-tab-separated pair that <methodname>styleSheets</methodname> returns &mdash; one
+tab-separated pair that <methodname>styleSheets</methodname> returns (one
 <literal>&lt;link&gt;</literal> per highlighting theme and one
-<literal>&lt;option&gt;</literal> to match &mdash; which is why the
-<methodname>Parse Value</methodname> sits just above the append. Emitting the page
-is one <methodname>Say</methodname>, and by now that is a familiar move: it appends
+<literal>&lt;option&gt;</literal> to match), which is why the
+PARSE VALUE sits just above the append.
+<literal>body</literal> is the page body, after any text substitutions the caller
+asked for, and <literal>year</literal> the current year; both are set earlier in
+<methodname>done</methodname>, above the lines shown here. Emitting the page
+is one SAY, and by now that is a familiar move: it appends
 to the buffered body, and the processor sends the bytes when the rexxlet ends. A
 shared frame, a body found by any of two routes, and a stylesheet link that is
-correct at any depth &mdash; the whole factory is a class small enough to read in
+correct at any depth. The whole factory is a class small enough to read in
 one sitting.</para>
 
 <note>
 <para><methodname>styleSheets</methodname> builds those two lists by reading the
-<filename>rexx-<replaceable>STYLE</replaceable>.css</filename> sheets that actually
+<filename>rexx-<emphasis role="italic">STYLE</emphasis>.css</filename> sheets that actually
 sit in the <filename>css/</filename> directory: one
 <literal>&lt;link&gt;</literal> and one <literal>&lt;option&gt;</literal> per
 sheet it finds. Nothing is hard-coded, so adding a highlighting theme is just a
-file drop &mdash; the next page built picks it up.</para>
+file drop: the next page built picks it up.</para>
 </note>
 </section>
 </section>
@@ -233,12 +271,12 @@ file drop &mdash; the next page built picks it up.</para>
 <indexterm><primary>filename</primary></indexterm>
 <indexterm><primary>Rexx Parser</primary></indexterm>
 
-<para>The second rexxlet, <filename>md/index.rxl</filename>, does something a
+<para>The second rexxlet, <filename>bin/markdown.rxl</filename>, does something a
 static site cannot: it turns every <filename>*.md</filename> file on the site into
 a styled HTML page at request time. Two lines of Apache configuration route every
 <filename>.md</filename> URL through it,</para>
 
-<programlisting>Action markdown /md
+<programlisting>Action markdown /bin/markdown.rxl
 AddHandler markdown .md</programlisting>
 
 <para>so a request for <filename>/readme.md</filename> is handed to this rexxlet
@@ -248,54 +286,72 @@ section. It is short enough to read whole, and it is the clearest demonstration 
 the package of how much a rexxlet can do with the request object doing the routing
 work. Here it is, without its licence header:</para>
 
-<programlisting language="rexx">  -- Load the page factory
- .context~package~loadPackage( .request~RexxHTTP_DIR"/apps/page.cls" )
-
-  -- This servlet can be called in two different ways: when called directly,
-  -- it prints help about itself; when called indirectly, using an Apache
+<indexterm><primary>examples</primary>
+<secondary>Markdown renderer, in full</secondary></indexterm>
+<example>
+<title>The Markdown renderer, in full</title>
+<programlisting language="rexx">  -- This servlet can be called in two different ways: when called directly,
+  -- it prints its own source; when called indirectly, using an Apache
   -- Action, it works as a preprocessor for Markdown.
 
   ------------------------------------------------------------------------------
-  -- Direct request? Print some help and exit                                 --
+  -- Direct request? Print our own source                                     --
   ------------------------------------------------------------------------------
 
-  If .request~handler \== "markdown" Then Do
-   .response~content_type = "text/html; charset=utf-8"
-   .Page~new("RexxHTTP &mdash; the Markdown renderer")~body(.Resources~Help)~done
-    Exit
-  End
+  If .request~handler \== "markdown" Then Signal Direct
 
   ------------------------------------------------------------------------------
   -- Ok, we've been called as a handler:                                      --
   --                                                                          --
-  --   Action markdown /md/index.rxl                                          --
+  --   Action markdown /bin/markdown.rxl                                      --
   --                                                                          --
   -- In turn, .rxl files are also handled: by RexxHTTP.                       --
   ------------------------------------------------------------------------------
 
   -- Is pandoc actually usable?
-  Address COMMAND "pandoc -v" With Output Stem discard. Error Stem discard.
+
+  --  [Silence the probe's own trace: a missing
+  --   binary is a FAILURE, which the default Trace Normal would echo to
+  --   stderr (Apache's error.log) three lines per request even though the
+  --   degradation path below handles it. Trace(setting) pushes the new
+  --   setting and returns the previous one, so we restore it afterwards.]
+
+  savedTrace = Trace("Off")
+    Address COMMAND "pandoc -v" With  -
+      Output Stem discard.            -
+      Error  Stem discard.
+  Call Trace savedTrace
 
   -- No? Serve the file verbatim as UTF-8 plain text.
+
   If rc \== 0 Then Do
    .response~content_type = "text/plain; charset=utf-8"
-    Say .File~readChars(.request~filename)~makeString
+    Say .File~readChars(.request~filename)
     Exit
   End
 
   -- We have Pandoc: we will emit HTML
  .response~content_type = "text/html; charset=utf-8"
 
+  ------------------------------------------------------------------------------
+  -- Read the document. When the Rexx Parser is installed, pre-process its    --
+  -- ```rexx fenced blocks into highlighted HTML BEFORE handing the document  --
+  -- to Pandoc; Pandoc passes embedded HTML through untouched, so the         --
+  -- highlighted &lt;div&gt;s survive into the final page. Without the Parser we    --
+  -- skip this step and Pandoc renders the fences as plain &lt;pre&gt;&lt;code&gt;, so    --
+  -- the document is always served either way.                                --
+  ------------------------------------------------------------------------------
+
   source = .File~readLines(.request~filename)
 
-  parserBin = .request~REXX_PARSER
-  If parserBin == "" Then
-    parserAvailable = .False
-  Else
-    parserAvailable = SysFileExists(parserBin"/Rexx.Parser.cls")
+  -- See if the highlighter is reachable
 
-  If parserAvailable Then Do
-   .context~package~loadPackage( .request~REXX_PARSER"/FencedCode.cls" )
+  FencedCode.cls = .File~searchPath("FencedCode.cls",                -
+    (".",Value("REXX_PATH",,environment),VALUE("PATH",,environment)) -
+  )
+
+  If FencedCode.cls \== .Nil Then Do
+   .context~package~loadPackage( FencedCode.cls~absolutePath )
     -- "dark" is the default style for un-annotated fences; the client-side
     -- style chooser restyles those, and leaves author-styled ones alone.
     source = FencedCode( .request~filename, source, "dark" )
@@ -305,13 +361,45 @@ work. Here it is, without its licence header:</para>
   buffer = .Array~new
   Address Command "pandoc -f markdown -t html" -
     With                                       -
-      Input Using (source)                     -
+      Input  Using (source)                    -
       Output Using (buffer)
 
- .Page~new("RexxHTTP")~body(buffer~makeString)~done
+  html = buffer~makeString
+
+  -- Pick the contents of the first h1 and use it as our title
+  Parse Caseless Var html "&lt;h1" "&gt;" title "&lt;/h1"
+
+  -- We don't want inner tags
+  Do While title~contains("&lt;")
+    Parse var title before"&lt;"tag"&gt;"after
+    If tag == "" Then Leave
+    title = before after
+  End
+
+  -- Normalize CR, LF and tabs
+  title = Space( Translate(title, "","0d0a09"X) )
+
+  -- Set up default
+  If title = "" Then title = "*** missing title ***"
+
+ .HTML.Page~new(title)~body(html)~done
 
   Exit
-</programlisting>
+
+  ------------------------------------------------------------------------------
+  -- Path to follow when called directly: show our own source, the same way   --
+  -- src-viewer.rxl shows any file -- highlighted if the Parser is present,   --
+  -- plain text otherwise. The shared routine lives in src-viewer.cls.        --
+  ------------------------------------------------------------------------------
+
+Direct:
+
+  Call ShowSource .context~package~name
+
+  Exit
+
+::Requires "src-viewer.cls"</programlisting>
+</example>
 
 <para>Three things in it are worth naming.</para>
 
@@ -321,23 +409,27 @@ work. Here it is, without its licence header:</para>
 <indexterm><primary>Apache Action</primary></indexterm>
 
 <para>The same file behaves differently depending on how it was reached. Asked for
-directly &mdash; someone visits <filename>/md/</filename> &mdash; it prints a short
-help page about itself. Reached through the Action, as the handler for some
+directly (someone visits <filename>/bin/markdown.rxl</filename>), it shows its own
+source. Reached through the Action, as the handler for some
 <filename>.md</filename> file, it does the rendering. It tells the two apart by
 reading one value from the request:</para>
 
-<programlisting language="rexx">If .request~handler \== "markdown" Then ...
+<programlisting language="rexx">If .request~handler \== "markdown" Then Signal Direct
 </programlisting>
 
 <para>When Apache fires the Action, it records the name of the handler that routed
 the request. The request surfaces it as <methodname>handler</methodname>: the
 handler's name when the rexxlet was reached through an Action, or
 <literal>.Nil</literal> when it was asked for directly, with no Action in front of
-it. So the test reads as what it means &mdash; if the handler is not
+it. So the test reads as what it means: if the handler is not
 <literal>markdown</literal>, nothing routed here to render, and the rexxlet was
-reached directly and serves its help; otherwise it renders the file. A rexxlet that
-documents itself when you visit it and works when you use it is a small courtesy,
-and it costs one comparison.</para>
+reached directly, so it branches to the <literal>Direct</literal> label at the foot
+of the file and publishes itself; otherwise it renders the file. Showing its own
+source is a single call into a routine it shares with the source viewer of
+<xref linkend="ex-src-viewer" xrefstyle="select:title"/>, described in
+<xref linkend="ex-sv-shared" xrefstyle="select:title"/>. A rexxlet that shows how it
+works when you visit it and works when you use it is a small courtesy, and it costs
+one comparison.</para>
 </section>
 
 <section id="ex-md-filename"><title>The File to Render</title>
@@ -351,8 +443,8 @@ file. It asks the request:</para>
 </programlisting>
 
 <para><methodname>filename</methodname> is the file on disk that the client asked
-for &mdash; the <filename>.md</filename> document, not this rexxlet &mdash;
-resolved by the request. The routing that got here through an Apache Action, with
+for (the <filename>.md</filename> document, not this rexxlet), resolved by the
+request. The routing that got here through an Apache Action, with
 one URL standing in for another, is exactly the situation where working out the
 target file by hand is fiddly and easy to get wrong; the request has already done
 it. The renderer just reads what <methodname>filename</methodname> hands it. The
@@ -368,7 +460,7 @@ same value is used for the plain-text fallback higher up, with
 
 <para>The renderer never assumes the tools it would like are present. It checks
 for Pandoc before using it, and if Pandoc is missing it serves the raw Markdown as
-plain text rather than failing &mdash; the document is always served, one way or
+plain text rather than failing: the document is always served, one way or
 another. It treats the Rexx Parser the same way: when the Parser is installed, the
 rexxlet loads its <filename>FencedCode.cls</filename> and pre-highlights the
 <literal>```rexx</literal> fenced blocks into HTML before handing the document to
@@ -376,28 +468,183 @@ Pandoc, which passes embedded HTML through untouched; when the Parser is absent,
 that step is skipped and the fences come out as plain code. The detail that makes
 this safe is that <filename>FencedCode.cls</filename> is loaded with
 <methodname>loadPackage</methodname> at run time, not with a
-<literal>::Requires</literal> directive &mdash; a <literal>::Requires</literal> for
+<literal>::Requires</literal> directive. A <literal>::Requires</literal> for
 a file that is not there would stop the rexxlet from loading at all. Loading it
 dynamically, only after checking the Parser is present, is what lets one rexxlet
 run correctly on an install that has the Parser and on one that does not.</para>
 
-<para>None of this is much code. The whole rexxlet is under a hundred lines, most
-of them either comment or the routine business of running a command and wrapping
-its output. What carries the weight is the request object &mdash; naming the file
-to render, naming the handler that routed here &mdash; and the page factory from
+<para>None of this is much code. The whole rexxlet is a hundred-odd lines, and
+more of them are comment or blank than are code; what code there is, is mostly the
+routine business of running a command and wrapping its output. What carries the
+weight is the request object (naming the file to render, naming the handler that
+routed here) and the page factory from
 the previous section, which turns rendered HTML into a finished page. That is the
 point of reading these two together: shown the request and response doing their
 part, a genuinely useful rexxlet is a short and readable thing.</para>
 </section>
 </section>
 
+<section id="ex-src-viewer"><title>A Source Viewer</title>
+<indexterm><primary>source viewer</primary></indexterm>
+<indexterm><primary>Rexx Parser</primary></indexterm>
+<indexterm><primary>Apache Action</primary></indexterm>
+<indexterm><primary>handler</primary></indexterm>
+
+<para>The third rexxlet, <filename>bin/src-viewer.rxl</filename>, serves a
+program's source as a styled page, highlighted when the Rexx Parser is installed.
+Two lines of Apache configuration route source files through it,</para>
+
+<programlisting>Action src-viewer /bin/src-viewer.rxl
+AddHandler src-viewer .rex .rexx .cls .orx .oryx</programlisting>
+
+<para>so a request for an ordinary source URL is handed to this rexxlet, which
+reads that file and emits it as a page. This is the piece that makes the sample
+site <emphasis role="italic">self-transparent</emphasis>: follow enough links and
+you end up reading RexxHTTP's own classes, served to you by RexxHTTP. And it is the
+shortest of the three by far, because the work does not live in the rexxlet at
+all. Here is everything it does, with the licence header and the opening comment
+&mdash; which says in code what the next three sections say in prose &mdash; left
+out:</para>
+
+<indexterm><primary>examples</primary>
+<secondary>source viewer, the whole decision</secondary></indexterm>
+<example>
+<title>The source viewer, in essence</title>
+<programlisting language="rexx">  If .request~handler == "src-viewer"             -- Called as the handler?
+    Then Call ShowSource .request~filename        --   Serve the requested file
+    Else Call ShowSource .context~package~name    --   Serve our own source
+
+  Exit
+
+::Requires "src-viewer.cls"</programlisting>
+</example>
+
+<para>Everything the rexxlet does is those few lines. Both branches reduce to one
+call into <methodname>ShowSource</methodname>, the routine that does the real work;
+the rexxlet only decides <emphasis role="italic">which</emphasis> file to serve.
+The next three sections take the three things worth noticing: how one file serves
+two purposes, where the work actually lives, and why one extension is left out of
+the handler.</para>
+
+<section id="ex-sv-self"><title>Showing Its Own Source</title>
+<indexterm><primary>source viewer</primary><secondary>direct vs. handler</secondary></indexterm>
+<indexterm><primary>handler</primary></indexterm>
+
+<para>Like the renderer in <xref linkend="ex-md-two-roles" xrefstyle="select:title"/>,
+the viewer reads <methodname>handler</methodname> from the request to tell apart
+the two ways it can be reached. Routed here as the <literal>src-viewer</literal>
+handler for some source file, it serves that file. Asked for directly (someone
+visits <filename>/bin/src-viewer.rxl</filename>), the handler is not
+<literal>src-viewer</literal>, so it serves its own source instead &mdash; naming
+itself with <literal>.context~package~name</literal>, the path of the file
+currently running. The rexxlet that shows other programs' source shows its own when
+you visit it, and the same one comparison decides which.</para>
+</section>
+
+<section id="ex-sv-shared"><title>Where the Work Lives</title>
+<indexterm><primary>source viewer</primary><secondary>shared routine</secondary></indexterm>
+<indexterm><primary>Markdown renderer</primary><secondary>showing its own source</secondary></indexterm>
+
+<para>The rexxlet is a thin stub because the job of turning a file into a page
+lives in <filename>bin/src-viewer.cls</filename>, in a single public routine,
+<methodname>ShowSource</methodname>. It takes a filename, sets the response content
+type, and writes the whole response; the caller has nothing left to do but
+<literal>Exit</literal>. Putting the work there rather than in the rexxlet is what
+lets it be shared: the Markdown renderer of the previous section, when it is asked
+for directly and wants to show <emphasis role="italic">its</emphasis> own source,
+calls the very same routine. One place serves source, reused wherever source needs
+serving &mdash; two rexxlets, one implementation.</para>
+
+<para>The routine itself is short, and every line earns its place. Here it is in
+full, without its licence header:</para>
+
+<indexterm><primary>examples</primary>
+<secondary>ShowSource routine, in full</secondary></indexterm>
+<example>
+<title>The <methodname>ShowSource</methodname> routine, in full</title>
+<programlisting language="rexx">::Routine ShowSource Public
+  Use Strict Arg filename
+
+  -- Is the highlighter reachable on the Rexx search path?
+  Highlighter.cls = .File~searchPath("Highlighter.cls",              -
+    (".",Value("REXX_PATH",,environment),Value("PATH",,environment)) -
+  )
+
+  -- No Parser? Serve the raw file as plain text -- the source still arrives.
+  If Highlighter.cls == .Nil Then Do
+   .response~content_type = "text/plain; charset=utf-8"
+    Say .File~readChars(filename)
+    Return
+  End
+
+  -- We have the Parser: highlight and emit HTML.
+ .response~content_type = "text/html; charset=utf-8"
+ .context~package~loadPackage( Highlighter.cls~absolutePath )
+
+  -- Default style is "dark"; the client-side style chooser restyles it.
+  options.        = 0
+  options.style   = "dark"
+  options.mode    = "HTML"
+
+  source      = .File~readLines(filename)
+  highlighted = .Highlighter~new( filename, source, options. )~parse
+
+ .HTML.Page~new( .File~new(filename)~name ) -
+   ~body( highlighted~makeString )          -
+   ~done
+
+::Requires "HTML.Page.cls"</programlisting>
+</example>
+
+<para>The shape is the same graceful degradation the renderer showed: look for the
+tool, and take the plain path or the rich path depending on what is there. Finding
+no highlighter, it sets a plain-text content type and says the raw file, and
+returns. Finding one, it loads it, parses the source into highlighted HTML in the
+<emphasis role="italic">dark</emphasis> style, and hands the result to the page
+factory of <xref linkend="ex-page-factory" xrefstyle="select:title"/> &mdash; the
+same factory the renderer used &mdash; to come back as a finished page. Both callers
+reach all of this through the one <methodname>ShowSource</methodname> call.</para>
+</section>
+
+<section id="ex-sv-no-rxl"><title>Why <filename>.rxl</filename> Is Not Wired In</title>
+<indexterm><primary>source viewer</primary><secondary>excluded extensions</secondary></indexterm>
+<indexterm><primary>rexxlet</primary></indexterm>
+
+<para>The handler covers source extensions &mdash; <filename>.rex</filename>,
+<filename>.rexx</filename>, <filename>.cls</filename>, <filename>.orx</filename>,
+<filename>.oryx</filename>
+&mdash; but deliberately not <filename>.rxl</filename>. A <filename>.rxl</filename>
+file is a rexxlet: RexxHTTP runs it, so requesting one gets you the page it
+<emphasis role="italic">produces</emphasis>, not its source. Wiring the viewer to
+<filename>.rxl</filename> as well would put the two in conflict over the same URL.
+So a rexxlet that wants to publish its own source does not rely on the handler; it
+does what this one does, and asks <methodname>ShowSource</methodname> for it
+directly.</para>
+</section>
+
+<section id="ex-sv-degrade"><title>Highlighting When It Can</title>
+<indexterm><primary>source viewer</primary><secondary>fallbacks</secondary></indexterm>
+<indexterm><primary>Rexx Parser</primary></indexterm>
+
+<para>Like the renderer, the viewer never insists on the tool it would like.
+<methodname>ShowSource</methodname> looks for the Rexx Parser's highlighter on the
+search path; finding it, it highlights the source in the default
+<emphasis role="italic">dark</emphasis> style (the code-style chooser in the banner
+can restyle it in the browser) and emits HTML. Not finding it, it serves the raw
+file as UTF-8 plain text. The source always arrives &mdash; highlighted when it can
+be, plain when it cannot &mdash; and, as in the renderer, the highlighting class is
+reached only after the check, never named in a <literal>::Requires</literal> that
+would make its absence fatal.</para>
+</section>
+</section>
+
 <section id="ex-next"><title>Where to Go Next</title>
 
-<para>These two rexxlets lean on the request and response objects without dwelling
-on how those objects come to hold what they hold. That machinery &mdash; the
+<para>These three rexxlets lean on the request and response objects without dwelling
+on how those objects come to hold what they hold. That machinery (the
 buffered body, the environment pool a name like
 <methodname>filename</methodname> or <methodname>document_uri</methodname> resolves
-against, the single commit &mdash; is the subject of the next chapter,
+against, the single commit) is the subject of the next chapter,
 <xref linkend="reqresp" xrefstyle="select:title"/>, which is worth reading before
 building anything larger. The exhaustive, method-by-method account of the four
 classes is the <xref linkend="clsref" xrefstyle="select:title"/>.</para>

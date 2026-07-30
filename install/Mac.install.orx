@@ -25,11 +25,11 @@
 /*   - The cgid/actions modules already ship enabled in the current formula,  */
 /*     so the fragment loads them only inside <IfModule> guards, to avoid a   */
 /*     "module already loaded" error while still covering a build that didn't.*/
-/*   - As on Linux, there IS a wrapper, and it needs the execute bit; the     */
-/*     package is built on Windows and arrives without it.                    */
+/*   - As on Linux, RexxHTTP.rex is exec'd directly and needs the execute     */
+/*     bit; the package is built on Windows and arrives without it.           */
 /*                                                                            */
 /* Prerequisites the installer checks but does NOT install:                   */
-/*   - ooRexx 5.3.0 or later (out of scope; from the ooRexx project).         */
+/*   - ooRexx 5.2.0 or later (out of scope; from the ooRexx project).         */
 /*   - Homebrew itself. If absent, the installer stops with the link rather   */
 /*     than run Homebrew's remote install script unattended.                  */
 /*   - curl (ships with macOS). Used for the smoke test.                      */
@@ -75,10 +75,11 @@
   srcRoot = .File~new(.Context~package~name)~parentFile~parent
   srcDir  = srcRoot || sep"src"
 
-  -- The six files that make up a Unix installation: the five sources plus
-  -- the LF wrapper Apache execs (which Calls RexxHTTP.rex beside it).
+  -- The five files that make up a Unix installation. Apache execs
+  -- RexxHTTP.rex directly via its LF "#!/usr/bin/env rexx" shebang; there is
+  -- no wrapper (RexxHTTP.rex must be LF, which pack.rex enforces at build).
   sources = "HTTP.Request.cls HTTP.Response.cls HTTP.OutputStream.cls" -
-            "HTTP.Cookie.cls RexxHTTP.rex RexxHTTP_wrapper"
+            "HTTP.Cookie.cls RexxHTTP.rex"
 
 --------------------------------------------------------------------------------
 -- Argument parsing                                                           --
@@ -125,7 +126,7 @@
   Say "Checking ooRexx..."
   If SysCmd("rexx -v >/dev/null 2>&1") \== 0 Then Do
     Say "  ERROR: ooRexx is not installed or not in PATH."
-    Say "  RexxHTTP needs ooRexx 5.3.0 or later, from the Open Object Rexx"
+    Say "  RexxHTTP needs ooRexx 5.2.0 or later, from the Open Object Rexx"
     Say "  project: https://sourceforge.net/projects/oorexx/"
     Return 1
   End
@@ -154,7 +155,6 @@
   docRoot   = prefix"/var/www"
   confFile  = prefix"/etc/httpd/httpd.conf"
   extraConf = prefix"/etc/httpd/extra/rexxhttp.conf"
-  indexFile = docRoot"/index.rxl"
 
 --------------------------------------------------------------------------------
 -- Step 4: Stop if the httpd formula is already installed (clean-machine)      --
@@ -196,7 +196,7 @@
   Say "  - Apache (brew install httpd), listening on port 8080"
   Say "  - RexxHTTP sources -> " || cgiBinDir
   Say "  - config fragment  -> " || extraConf
-  Say "  - smoke-test rexxlet -> " || indexFile
+  Say "  - then smoke-test the landing page at http://localhost:8080/"
   Say
   If \assumeYes Then
     If \Ask("Proceed?") Then Do
@@ -229,15 +229,17 @@
       Return 1
     End
   End
-  -- As on Linux, the wrapper must be executable; it arrives without the bit.
-  Address System "chmod +x" '"'cgiBinDir'/RexxHTTP_wrapper"'
+  -- As on Linux, RexxHTTP.rex must be executable; it arrives without the bit.
+  Address System "chmod +x" '"'cgiBinDir'/RexxHTTP.rex"'
 
   -- Apache runs CGIs with a minimal PATH that need not contain rexx. On macOS
   -- a self-built ooRexx typically lives outside that PATH (e.g. under
-  -- /Users/Shared/...), so the wrapper's "#!/usr/bin/env rexx" shebang fails
+  -- /Users/Shared/...), so RexxHTTP.rex's "#!/usr/bin/env rexx" shebang fails
   -- with "env: rexx: No such file or directory". Pin the shebang to the
   -- absolute rexx we run under, rewriting only the deployed copy.
-  Call PinShebang cgiBinDir"/RexxHTTP_wrapper"
+  rexxPath = SysSearchPath("PATH", "rexx")
+  If rexxPath \== "" Then           -- unresolved: leave the env shebang in place
+    Call PinShebang cgiBinDir"/RexxHTTP.rex", "#!"rexxPath
   Say "  OK."
 
 --------------------------------------------------------------------------------
@@ -280,7 +282,15 @@
 
   If port \== 8080 Then Do
     Say "Setting Apache to listen on port" port "("confFile")..."
-    tmpConf = "/tmp/rexxhttp-httpd.tmp"
+    -- Unpredictable name: a fixed one under /tmp can be pre-created as a
+    -- symlink by another local user, and we would write through it. There is
+    -- no sudo on this path (the user owns the Homebrew prefix), so the reach
+    -- is smaller than on Linux, but the write-through is the same bug.
+    tmpConf = MakeTempFile("rexxhttp-httpd")
+    If tmpConf == "" Then Do
+      Say "  ERROR: Could not create a temporary file."
+      Return 1
+    End
     lines = .Array~new
     Do While Lines(confFile) > 0
       line = LineIn(confFile)
@@ -312,9 +322,11 @@
 --------------------------------------------------------------------------------
 -- Instead of enumerating what to deploy, copy the WHOLE package into docRoot
 -- and leave out only the scaffolding (see HtdocsExclude): install/, tests/,
--- pack.rex, and the two repo-only metadata files. Everything else becomes the
--- browsable sample web: the root index rexxlet, apps/page.cls, the stylesheets,
--- the examples/ tree with their pre-rendered .highlighted sources, src/ as a
+-- and the repo-only files (pack.rex, .gitattributes, agents.md), which are
+-- present when installing from a git clone and absent from the published zip. Everything else becomes the
+-- browsable sample web: the root index rexxlet, bin/ (page factory + the two
+-- action rexxlets), the stylesheets,
+-- the examples/ tree (sources highlighted on request by the viewer), src/ as a
 -- readable copy, the manual PDF, readme.md and LICENSE. The AddHandler in the
 -- conf fragment runs only *.rxl files as rexxlets, so
 -- every .cls/.rex/.md copied here is served as text, never executed. src/
@@ -463,7 +475,6 @@ Uninstall: Procedure
   docRoot   = prefix"/var/www"
   confFile  = prefix"/etc/httpd/httpd.conf"
   extraConf = prefix"/etc/httpd/extra/rexxhttp.conf"
-  indexFile = docRoot"/index.rxl"
 
   Say "About to remove, under the Homebrew prefix" prefix":"
   Say "  - the RexxHTTP Include line from" confFile
@@ -529,7 +540,13 @@ Uninstall: Procedure
     -- uninstalled, so there is nothing to restore there.)
     If manifestPort \== "", manifestPort \== 8080 Then Do
       Say "Restoring Apache's Listen port to 8080 ("confFile")..."
-      tmpConf = "/tmp/rexxhttp-httpd.tmp"
+      tmpConf = MakeTempFile("rexxhttp-httpd")
+      -- As on Linux: a failure here must not abort a running uninstall.
+      If tmpConf == "" Then Do
+        Say "  WARNING: Could not create a temporary file; leaving the Listen"
+        Say "  port as it is. Restore it by hand in" confFile"."
+      End
+      Else Do
       lines = .Array~new
       Do While Lines(confFile) > 0
         line = LineIn(confFile)
@@ -552,6 +569,7 @@ Uninstall: Procedure
       Address System "cp" '"'tmpConf'"' '"'confFile'"'
       Address System "rm -f" tmpConf
       Say "  OK."
+      End
     End
 
     -- Coexist path: restart httpd so it forgets the handler, and stop here.
@@ -627,43 +645,14 @@ CaptureLine:
   Return ""
 
 /******************************************************************************/
-/* PinShebang: rewrite the deployed wrapper's first line from                 */
-/* "#!/usr/bin/env rexx" to "#!<absolute rexx>", so it does not depend on     */
-/* Apache's PATH. Resolves rexx with SysSearchPath (the same rexx running     */
-/* this installer). On Homebrew the cgi-bin is user-owned, so no sudo is      */
-/* needed. If rexx cannot be resolved, leaves the wrapper untouched.          */
-/******************************************************************************/
-PinShebang: Procedure
-  Use Strict Arg wrapper
-  rexxPath = SysSearchPath("PATH", "rexx")
-  If rexxPath == "" Then Return          -- cannot resolve; leave env shebang
-
-  body = .Array~new
-  Do While Lines(wrapper) > 0
-    body~append(LineIn(wrapper))
-  End
-  Call Stream wrapper, "C", "Close"
-  If body~items == 0 Then Return
-  If body[1]~strip == "#!/usr/bin/env rexx" Then
-    body[1] = "#!"rexxPath
-
-  Call Stream wrapper, "C", "Open Write Replace"
-  Do line Over body
-    Call LineOut wrapper, line
-  End
-  Call Stream wrapper, "C", "Close"
-  Address System "chmod +x" '"'wrapper'"'
-  Return
-
-/******************************************************************************/
 /* Resources: the files this installer generates.                            */
 /******************************************************************************/
 
 -- The Include fragment. The cgid/actions modules already ship enabled in the
 -- current Homebrew formula, so they are loaded only inside <IfModule> guards:
 -- if already present, the guard is false and nothing happens; if a build ever
--- shipped them off, the guard loads them. The handler points at the wrapper
--- (Unix), and every *.rxl file in the document root is treated as a rexxlet.
+-- shipped them off, the guard loads them. The handler points straight at
+-- RexxHTTP.rex, and every *.rxl file in the document root is a rexxlet.
 ::Resource RexxHTTPConf
 # RexxHTTP drop-in configuration (macOS / Homebrew).
 # Included from httpd.conf by install/InstallMac.rex.
@@ -679,16 +668,16 @@ PinShebang: Procedure
 # determine the server's fully qualified domain name") at start/stop.
 ServerName localhost
 
-Action RexxHTTP /cgi-bin/RexxHTTP_wrapper
+Action RexxHTTP /cgi-bin/RexxHTTP.rex
 
 <Directory "%docRoot%">
-    DirectoryIndex index.rxl readme.md
-    # Route every *.md through the Markdown renderer at /md/index.rxl: it turns
+    DirectoryIndex wrapper.rxl index.rxl readme.md
+    # Route every *.md through the Markdown renderer at /bin/markdown.rxl: it turns
     # the file into a styled HTML page (via pandoc when present), or serves
-    # it verbatim as UTF-8 text when pandoc is absent. Visiting /md/ directly
-    # shows a short help page. The Action target must name the rexxlet
-    # explicitly (/md/index.rxl): Apache does not apply DirectoryIndex to it.
-    Action markdown /md/index.rxl
+    # it verbatim as UTF-8 text when pandoc is absent. Visiting the rexxlet
+    # directly (/bin/markdown.rxl) shows its own source. The Action target
+    # must name the rexxlet explicitly: Apache does not apply DirectoryIndex.
+    Action markdown /bin/markdown.rxl
     AddHandler markdown .md
     # The AddType/AddCharset below is the static fallback: if the renderer is
     # ever removed, Apache still serves .md inline as UTF-8 plain text rather
@@ -698,18 +687,19 @@ Action RexxHTTP /cgi-bin/RexxHTTP_wrapper
     # the need arises, this is where it would be handled.
     AddType text/plain .md
     AddCharset utf-8 .md
-    # Route program source through the viewer at /src-viewer/index.rxl: it
+    # Route program source through the viewer at /bin/src-viewer.rxl: it
     # highlights the file on the fly when the Rexx Parser is present, or serves
-    # it verbatim as UTF-8 text when it is absent. Visiting /src-viewer/
-    # directly shows a short help page. As with markdown, the Action target
-    # must name the rexxlet explicitly. Note .rxl is deliberately NOT listed:
+    # it verbatim as UTF-8 text when it is absent. Visiting the rexxlet
+    # directly (/bin/src-viewer.rxl) shows its own source. As with markdown,
+    # the Action target must name the rexxlet explicitly. Note .rxl is
+    # deliberately NOT listed:
     # a rexxlet is run by RexxHTTP (see below), never shown as source.
-    Action src-viewer /src-viewer/index.rxl
-    AddHandler src-viewer .rex .rexx .cls .orx
+    Action src-viewer /bin/src-viewer.rxl
+    AddHandler src-viewer .rex .rexx .cls .orx .oryx
     # Static fallback, as for .md: if the viewer is ever removed, Apache still
     # serves these inline as UTF-8 plain text rather than offering a download.
-    AddType text/plain .rex .rexx .cls .orx
-    AddCharset utf-8 .rex .rexx .cls .orx
+    AddType text/plain .rex .rexx .cls .orx .oryx
+    AddCharset utf-8 .rex .rexx .cls .orx .oryx
     # Any *.rxl file is a rexxlet: hand it to the RexxHTTP processor.
     AddHandler RexxHTTP .rxl
     # Install-time SetEnv lines are spliced in on the line below (the installer

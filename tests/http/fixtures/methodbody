@@ -1,0 +1,15 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- Probe for the PUT/DELETE body/argument contract (v99, Diseño 2). Reports the
+-- method, the parsed argument count and pairs (which for GET/PUT/DELETE come
+-- from the query string and for POST from the body), and the raw body left
+-- untouched in ~post_string. Lets a test prove that a PUT/DELETE takes its args
+-- from the query while its body stays raw and available -- and that stdin was
+-- drained (no hang).
+Say "method="request~method
+n = request~arg()
+Say "argcount="n
+Do i = 1 To n
+  Say i": "request~arg(i,"Name")"="request~arg(i,"Value")
+End
+Say "body=["request~post_string"]"

@@ -1,0 +1,12 @@
+Use Arg request, response
+-- Reproduces the double-pop bug (fixed v98): a rexxlet that calls error() -- which
+-- pops .output on its own -- and THEN fails. Before the fix, the processor's
+-- Syntax handler popped a second time, .output fell to .NIL, and the handler
+-- died on its first Say (97.1), swallowing this division-by-zero entirely:
+-- the client got a pristine 404 and error.log recorded only the secondary
+-- 97.1. After the fix the handler asks the stack (current isA OutputStream)
+-- before popping, sees the buffer is already gone, does NOT pop, and its
+-- error page -- naming THIS failure -- reaches the client and the log.
+response~error(404, "recurso ausente")
+x = 1 / 0
+Say "should not reach here"

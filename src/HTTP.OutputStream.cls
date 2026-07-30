@@ -24,7 +24,7 @@
 
 .environment~HTTP.OutputStream = .HTTP.OutputStream
 
-::Class HTTP.OutputStream SubClass Stream Public
+::Class "HTTP.OutputStream" SubClass Stream Public
 
 --------------------------------------------------------------------------------
 -- INIT                                                                       --
@@ -32,17 +32,20 @@
 
 ::Method init
 
-  Expose underlyingstream stream_name buffer state description opened datetime timestamp eol
+  Expose underlyingstream stream_name buffer state description opened datetime timestamp eol response
 
   Parse Value Date("S") Time() With y +4 m +2 d time
-  datetime  = m"-"Right(y,2)"-"d time
+  -- QUERY DATETIME answers in US format, mm-dd-yy, like a real Stream does;
+  -- QUERY TIMESTAMP in yyyy-mm-dd. (The day and the two-digit year were
+  -- transposed here until v123, so DATETIME read mm-yy-dd.)
+  datetime  = m"-"d"-"Right(y,2) time
   timestamp = y"-"m"-"d time
 
-  Use Strict Arg underlyingstream
+  Use Strict Arg underlyingstream, response
   If Arg(1)~class \= .Stream Then
     Raise Syntax 93.948 array (1,"Stream")
 
-  stream_name = "HTTP.OutputStream:1"
+  stream_name = self~class~id
 
   -- Initialize the buffer and other variables
   buffer = .MutableBuffer~new(,32768)
@@ -67,11 +70,28 @@
 
 /*******************************************************************************
 * The following are STREAM input methods                                       *
+*                                                                              *
+* INVARIANT: on the input side we answer exactly what .stdout answers. It is   *
+* write-only for the same reason we are, so it has already settled every one   *
+* of these questions, and copying it means a rexxlet meets no surprise our     *
+* own taste invented. Measured against ooRexx 5.3.0, that is three behaviours, *
+* not one:                                                                     *
+*                                                                              *
+*   chars, lines          -> 0. A count is a question with a true answer;      *
+*                            raising would break Do While stream~lines > 0.    *
+*   charin, linein        -> Raise notready. An actual read attempt fails.     *
+*   arrayin, makearray,   -> an empty collection. Nothing to read is not an    *
+*   supplier                 error, it is emptiness. (.stdout~supplier hands   *
+*                            back a StreamSupplier; we hand back a plain       *
+*                            Supplier, equally empty -- a StreamSupplier can   *
+*                            only be built over a genuinely readable stream.)  *
+*                                                                              *
+* Before v123 arrayin/makearray/supplier raised notready here. See             *
+* ref-decisiones.md.                                                           *
 *******************************************************************************/
 
 ::Method arrayin
-  Expose stream_name
-  Raise notready Additional (self) Description (stream_name) Return ""
+  Return .array~new
 
 ::Method charin
   Expose stream_name
@@ -88,12 +108,10 @@
   Return 0
 
 ::Method makearray
-  Expose stream_name
-  Raise notready Additional (self) Description (stream_name) Return .nil
+  Return .array~new
 
 ::Method supplier
-  Expose stream_name
-  Raise notready Additional (self) Description (stream_name) Return .nil
+  Return .array~new~supplier
 
 /*******************************************************************************
 * The following are STREAM methods                                             *
@@ -104,7 +122,7 @@
 --------------------------------------------------------------------------------
 
 ::Method arrayout
-  Expose buffer
+  Expose buffer eol state
 
   -- Max two args
   If Arg() > 2 Then Raise syntax 93.902 array (2)
@@ -121,26 +139,43 @@
   -- Second argument must be one of "LINES", "CHARS". If omitted, assume "LINES"
   If Arg(2,'O') Then option = "LINES"
   Else Do
-    option = Arg(2)~request("STRING")
-    If option == .nil Then Raise syntax 93.916 array(2)
-    option = option~strip~translate
-    If "LINES"~abbrev(option,1) Then option = "LINES"
-    If "CHARS"~abbrev(option,1) Then option = "CHARS"
+    option = .Validate~requestClassType(2, Arg(2), .String)
+    option = option~strip~translate~left(1)
+    If option = "" Then option = "L"
+    If "LC"~pos(option) == 0 Then
+      Raise syntax 93.914 array (2,"LC",option)
+    If option == "L" Then option = "LINES"
+    If option == "C" Then option = "CHARS"
   End
 
-  If option \== "LINES", option \== "CHARS" Then
-    Raise syntax 93.914 array ("LINES, CHARS",option)
+  -- Guard on the underlying stream's state, exactly as charout and lineout do.
+  -- Before this, arrayout was the only output method that would append to the
+  -- buffer even when the underlying stream was not READY. The class convention
+  -- is 0 on success, 1 on a state error (a uniform flag, deliberately simpler
+  -- than .Stream's residual-line count). See audit §3.8.
+  If state \== "READY" Then Return 1
 
-  arraystring = array~makestring(option~left(4))
+  -- Line separator is this class's own eol (LF, the HTTP body convention set
+  -- in init), NOT makeString's default .endOfLine, which is platform-dependent
+  -- (CRLF on Windows). A protocol stream must be deterministic across platforms,
+  -- so we supply the separator by hand and terminate the last line too, matching
+  -- lineout. This deliberately drops byte-parity with .Stream~arrayout. In CHARS
+  -- mode makeString adds no terminators and already agrees with .Stream.
+  If option == "LINES" Then Do
+    buffer~append(array~makestring("Line", eol))
+    buffer~append(eol)
+  End
+  Else
+    buffer~append(array~makestring("Char"))
 
-  buffer~append(arraystring)
+  Return 0
 
 --------------------------------------------------------------------------------
 -- CHAROUT                                                                    --
 --------------------------------------------------------------------------------
 
 ::Method charout
-  Expose buffer opened state description
+  Expose buffer state
 
   -- Max two args
   If Arg() > 2 Then Raise syntax 93.902 array (2)
@@ -152,14 +187,11 @@
     End
   Else Do
     string = Arg(1)
-    string = string~request("STRING")
-    If string == .nil Then Raise syntax 93.916 array (1)
+    string = .Validate~requestClassType(1, string, .String)
   End
 
   -- Cannot position transient streams
   If Arg(2,'E') Then Raise syntax 93.958
-
-  If \opened Then self~open("WRITE")   -- Try to open the file
 
   If state \== "READY" Then Return 1  -- There was an error
 
@@ -186,8 +218,7 @@
 ::Method command
   Use Strict Arg one
 
-  command = one~request('STRING')
-  If command == .nil Then Raise syntax 93.916 array (1)
+  command = .Validate~requestClassType(1, one, .String)
 
   command = command~space~translate
 
@@ -240,13 +271,13 @@
 --------------------------------------------------------------------------------
 
 ::Method flush
-  Expose state buffer underlyingstream
+  Expose state buffer underlyingstream response
 
   Use Strict Arg
 
   If state \== "READY" Then Return state":"
 
-  If \.response~committed Then .response~commit
+  If \response~committed Then response~commit
 
   underlyingstream~charout(buffer~string)
   underlyingstream~flush
@@ -260,7 +291,7 @@
 --------------------------------------------------------------------------------
 
 ::Method lineout
-  Expose buffer state description opened eol
+  Expose buffer state eol
 
   -- Max two args
   If Arg() > 2 Then Raise syntax 93.902 array (2)
@@ -272,8 +303,7 @@
     Return 0
     End
   Else Do
-    string = Arg(1)~request("STRING")
-    If string == .nil Then Raise syntax 93.916 array (1)
+    string = .Validate~requestClassType(1, Arg(1), .String)
   End
 
   -- Cannot position transient streams
@@ -324,8 +354,7 @@
   If Arg() > 1 Then Raise syntax 93.902 array (1)
 
   -- ...which can be converted into a string...
-  query = Arg(1)~request('STRING')
-  If query == .nil Then Raise syntax 93.916 array (1)
+  query = .Validate~requestClassType(1, Arg(1), .String)
 
   query = query~space~translate
 
@@ -368,6 +397,14 @@
   Expose state
   Use Strict Arg
   Return state
+
+--------------------------------------------------------------------------------
+-- STRING                                                                     --
+--------------------------------------------------------------------------------
+
+::Method string
+  Expose stream_name
+  Return stream_name
 
 --------------------------------------------------------------------------------
 -- UNINIT                                                                     --

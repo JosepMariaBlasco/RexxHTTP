@@ -4,10 +4,18 @@
    method name rightwards. Operative methods are derived from the RexxHTTP
    .cls (invariant 5), not from Stream's canonical signature, because the
    subclass reimplements them. Non-operative methods (the seven input
-   methods, and position/seek) carry a minimal 'method( options )' rail and
-   prose saying the call raises: the method is part of the interface but is
-   disabled at runtime. chars and supplier take no parentheses in Stream,
-   so they appear bare. Leaf non-terminals left undefined on purpose. */
+   methods, and position/seek) carry a minimal 'method( options )' rail:
+   the method is part of the interface but does not operate. On the input
+   side the class answers exactly what .stdout answers, which is three
+   different things, and the prose says which is which — chars and lines
+   return 0, charin and linein raise NOTREADY, and arrayin, makearray and
+   supplier return empty collections. chars and supplier take no
+   parentheses in Stream, so they appear bare. Leaf non-terminals left
+   undefined on purpose. */
+
+/* ---- Class method (constructor) ---- */
+
+outputstream_class_new        ::= 'new(' underlyingstream ',' response ')'
 
 /* ---- Operative methods (from the RexxHTTP code) ---- */
 
@@ -24,9 +32,11 @@ outputstream_query            ::= 'query(' option ')'
 outputstream_reset            ::= 'reset'
 outputstream_say              ::= 'say(' line? ')'
 outputstream_state            ::= 'state'
+outputstream_string           ::= 'string'
 outputstream_underlyingstream ::= 'underlyingstream'
 
-/* ---- Non-operative: the seven Stream input methods (all Raise notready) ---- */
+/* ---- Non-operative: the seven Stream input methods ---- */
+/*      chars/lines -> 0; charin/linein raise; the rest return empty.    */
 
 outputstream_arrayin   ::= 'arrayin(' options ')'
 outputstream_charin    ::= 'charin(' options ')'

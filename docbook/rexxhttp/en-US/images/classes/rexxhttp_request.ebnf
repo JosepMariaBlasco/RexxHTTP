@@ -21,6 +21,10 @@
      messageargs ); in Request only the get branch operates (a message
      with arguments raises), as the prose states. */
 
+/* ---- Class method (constructor) ---- */
+
+request_class_new ::= 'new'
+
 /* ---- Class methods (decoders; the body lives on the class) ---- */
 
 request_class_decodeuricomponent ::= 'decodeURIComponent(' string ')'
@@ -83,6 +87,12 @@ request_rexxhttp_url ::= 'RexxHTTP_URL'
 request_script_filename ::= 'script_filename'
 request_script_name     ::= 'script_name'
 request_system_version  ::= 'system_version'
+
+/* transfer_encoding: the Transfer-Encoding header. "chunked" here, with an
+   empty content_length, is what tells the processor to read the POST body
+   to EOF. Third of the three body headers, with content_length and
+   content_type. */
+request_transfer_encoding ::= 'transfer_encoding'
 
 /* The environment pool door. Only the get branch operates in Request;
    a message carrying arguments raises (the prose explains). */

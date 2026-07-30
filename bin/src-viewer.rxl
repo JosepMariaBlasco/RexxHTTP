@@ -1,0 +1,41 @@
+/******************************************************************************/
+/*                                                                            */
+/* bin/src-viewer.rxl - A source viewer with on-the-fly highlighting          */
+/* =================================================================          */
+/*                                                                            */
+/* This file is part of the RexxHTTP package                                  */
+/* [See https://rexx.epbcn.com/rexxhttp/]                                     */
+/*                                                                            */
+/* Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>  */
+/*                                                                            */
+/* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
+/*                                                                            */
+/* Version history:                                                           */
+/*                                                                            */
+/* Date     Version Details                                                   */
+/* -------- ------- --------------------------------------------------------- */
+/* 20260711    1.0  First version                                             */
+/* 20260729         Guts moved to src-viewer.cls; direct call shows source    */
+/*                                                                            */
+/******************************************************************************/
+
+  -- This servlet can be called in two different ways. Called indirectly,
+  -- through an Apache Action, it serves the requested source file. Called
+  -- directly, it shows its own source. Either way the work is the same one
+  -- call into src-viewer.cls, which highlights when the Rexx Parser is present
+  -- and falls back to plain text otherwise.
+  --
+  --   Action src-viewer /bin/src-viewer.rxl
+  --   AddHandler src-viewer .rex .rexx .cls .orx .oryx
+  --
+  -- The handler is wired to source extensions but NOT to .rxl: a .rxl is a
+  -- rexxlet, run by RexxHTTP, so a rexxlet shows its own source by asking for
+  -- it here itself -- which is exactly what the direct branch below does.
+
+  If .request~handler == "src-viewer"             -- Called as the handler?
+    Then Call ShowSource .request~filename        --   Serve the requested file
+    Else Call ShowSource .context~package~name    --   Serve our own source
+
+  Exit
+
+::Requires "src-viewer.cls"

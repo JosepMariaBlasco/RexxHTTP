@@ -66,6 +66,10 @@
     End
     When "Linux"   Then Call "Linux.install.orx"   opts
     When "MacOS"   Then Call "Mac.install.orx"     opts
+    Otherwise Do
+      Say "ERROR: unsupported platform" OSType()"."
+      Exit 1
+    End
   End
 
   Exit Result
@@ -78,14 +82,18 @@ Help:
 uninstall - Uninstaller for RexxHTTP
 
 Usage:
-  rexx uninstall [--yes] [--root PATH] [--keep-apache]
+  rexx uninstall [--yes] [--root PATH] [--keep-apache] [--user]
 
   --yes         Assume "yes" to every prompt (non-interactive).
   --keep-apache Remove RexxHTTP-related configuration from Apache but
                 do not remove Apache.
   --root P      Server root (default C:\Apache24). For --uninstall, the
                 same root the install used (Windows Only).
+  --user        Windows only: remove a user-level install (one done with
+                install --user) from under %USERPROFILE%\Apache24. Needs no
+                elevation; stops the user's own Apache and deletes the tree
+                under the home rather than touching a Windows service.
 
 ::END
 
-::Requires "InstallHelpers.cls"
+::Requires "InstallHelpers.cls"

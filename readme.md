@@ -47,7 +47,7 @@ Requirements
 - [Apache](https://httpd.apache.org/) 2.4 or later,
   with `cgid` and `actions` enabled.
 - (Optional) [Pandoc](https://pandoc.org/), to
-  [render Markdown documents](md/) nicely.
+  [render Markdown documents](bin/markdown.rxl) nicely.
   Under Windows, Pandoc should be installed for all users.
 
 Installation
@@ -95,11 +95,13 @@ code included).
 Repository layout
 -----------------
 
-- `apps/` — An [example page factory](apps/page.cls) used in this site.
+- [`bin/`](bin/) — loadable Rexx served through the site: an example page
+  factory ([`HTML.Page.cls`](bin/HTML.Page.cls)), the Pandoc-aware Markdown
+  processor ([`markdown.rxl`](bin/markdown.rxl)), and the source viewer
+  ([`src-viewer.rxl`](bin/src-viewer.rxl)).
 - `css/` — CSS style sheets.
 - [`examples/`](examples/) — the examples.
 - `install/` — Installation files.
-- [`md/`](md/) — The Pandoc-aware Markdown processor.
 - [`src/`](src/) — the processor and its classes
   ([`RexxHTTP.rex`](src/RexxHTTP.rex),
   [`HTTP.Request.cls`](src/HTTP.Request.cls),

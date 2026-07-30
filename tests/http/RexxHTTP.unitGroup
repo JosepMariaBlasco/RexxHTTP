@@ -1,0 +1,303 @@
+#!/usr/bin/env rexx
+/******************************************************************************/
+/*                                                                            */
+/* RexxHTTP.unitGroup - Pure unit tests for RexxHTTP classes                   */
+/* ========================================================================   */
+/*                                                                            */
+/* This file is part of the RexxHTTP package                                  */
+/* [See https://rexx.epbcn.com/rexxhttp/]                                     */
+/*                                                                            */
+/* Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>  */
+/*                                                                            */
+/* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
+/*                                                                            */
+/* These tests exercise RexxHTTP classes in ISOLATION -- no Apache, no curl,  */
+/* no running pipeline. They instantiate a class directly and drive it with   */
+/* injected collaborators (stubs), which is what the end-to-end HTTP suite    */
+/* cannot do: there, every object is wired through the real request pipeline. */
+/*                                                                            */
+/* This group was opened to guard the HTTP.OutputStream / .response decoupling */
+/* (todo item [21]): the stream used to read the global .response inside       */
+/* flush, which made it untestable off the pipeline. init now takes the        */
+/* response as a second argument and exposes it, so a stub response can be      */
+/* injected here. Keep these tests pure: if a test needs Apache, it belongs in  */
+/* RexxHTTP.testGroup, not here.                                               */
+/*                                                                            */
+/* Run standalone (from tests/):                                              */
+/*   PATH="framework:http:src:$PATH" rexx http/RexxHTTP.unitGroup             */
+/* or via the runner's unit mode:                                            */
+/*   rexx tests/http/RunHTTPTests.rex --unit                                 */
+/*                                                                            */
+/* Version history:                                                           */
+/*                                                                            */
+/* Date     Version Details                                                   */
+/* -------- ------- --------------------------------------------------------- */
+/* 20260729    1.0  First version: HTTP.OutputStream decoupling guard         */
+/*                                                                            */
+/******************************************************************************/
+
+parse source . . fileSpec
+group = .TestGroup~new(fileSpec)
+group~add(.RexxHTTP.unitGroup)
+group~add(.HTTP.Cookie.unitGroup)
+If group~isAutomatedTest Then
+  Return group
+Else
+  Return group~suite~execute~~print
+
+::Requires "ooTest.frm"
+::Requires "HTTP.OutputStream.cls"
+::Requires "HTTP.Cookie.cls"
+
+/******************************************************************************/
+/* StubResponse: a minimal stand-in for HTTP.Response, just enough for the     */
+/* OutputStream to talk to. It records whether flush consulted committed and    */
+/* whether it called commit, and lets a test preset the committed answer.       */
+/* This is the whole point of the decoupling: the stream now speaks to whatever */
+/* response it was handed, so a fake one is sufficient to test flush.            */
+/******************************************************************************/
+::Class StubResponse
+::Method init
+  Expose committedAnswer wasQueried wasCommitted
+  Use Strict Arg committedAnswer = .false
+  wasQueried   = .false
+  wasCommitted = .false
+::Method committed          -- what flush reads: If \response~committed ...
+  Expose committedAnswer wasQueried
+  wasQueried = .true
+  Return committedAnswer
+::Method commit             -- ... Then response~commit
+  Expose wasCommitted
+  wasCommitted = .true
+  Return
+::Attribute wasQueried   Get
+::Attribute wasCommitted Get
+
+/******************************************************************************/
+/* The unit test group.                                                        */
+/******************************************************************************/
+::Class RexxHTTP.unitGroup Subclass ooTestCase Public
+
+/* Helper: build a READY HTTP.OutputStream over a real (opened) temp .Stream,   */
+/* wired to the given stub response. Returns the OutputStream.                  */
+::Method makeStream
+  Expose tmpName
+  Use Strict Arg stub
+  tmpName = SysTempFileName("/tmp/rexxhttp-unit-????????")
+  raw = .Stream~new(tmpName)
+  raw~open("write replace")
+  Return .HTTP.OutputStream~new(raw, stub)
+
+::Method setUp
+  Expose tmpName
+  tmpName = ""
+
+::Method tearDown
+  Expose tmpName
+  If tmpName \== "" Then Call SysFileDelete tmpName
+
+--------------------------------------------------------------------------------
+-- Construction: the stream can be built with NO global .response in sight.   --
+-- Before the decoupling this object reached for .response internally; now it --
+-- only needs what it is handed.                                              --
+--------------------------------------------------------------------------------
+::Method test_builds_without_global_response
+  stub = .StubResponse~new
+  os = self~makeStream(stub)
+  self~assertIsA(os, .HTTP.OutputStream, -
+    "OutputStream constructs from an injected response, no global needed")
+  self~assertEquals("READY", os~state, -
+    "an opened underlying stream yields a READY OutputStream")
+
+--------------------------------------------------------------------------------
+-- flush talks to the INJECTED response, not a global one.                    --
+-- With committed = .false, flush must consult committed and then call commit --
+-- on the very object we handed in.                                          --
+--------------------------------------------------------------------------------
+::Method test_flush_commits_injected_response
+  stub = .StubResponse~new(.false)          -- not yet committed
+  os = self~makeStream(stub)
+  os~say("body line")
+  res = os~flush
+  self~assertEquals("READY:", res, -
+    "flush over a READY stream returns READY:")
+  self~assertTrue(stub~wasQueried, -
+    "flush consulted committed on the injected response")
+  self~assertTrue(stub~wasCommitted, -
+    "flush called commit on the injected response (it was not committed)")
+
+--------------------------------------------------------------------------------
+-- If the injected response reports ALREADY committed, flush must NOT commit  --
+-- again -- proving the guard reads the injected object's real answer.        --
+--------------------------------------------------------------------------------
+::Method test_flush_skips_commit_when_already_committed
+  stub = .StubResponse~new(.true)           -- already committed
+  os = self~makeStream(stub)
+  os~say("body line")
+  res = os~flush
+  self~assertTrue(stub~wasQueried, -
+    "flush still consulted committed on the injected response")
+  self~assertFalse(stub~wasCommitted, -
+    "flush did NOT re-commit an already-committed response")
+
+--------------------------------------------------------------------------------
+-- Two streams with two different injected responses stay independent: each   --
+-- flush hits its OWN response. This is the isolation the global .response     --
+-- made impossible.                                                          --
+--------------------------------------------------------------------------------
+::Method test_injected_responses_are_per_instance
+  stubA = .StubResponse~new(.false)
+  stubB = .StubResponse~new(.false)
+  osA = self~makeStream(stubA)
+  osB = self~makeStream(stubB)
+  osA~say("a")
+  osA~flush
+  self~assertTrue(stubA~wasCommitted, "stream A committed its own response")
+  self~assertFalse(stubB~wasCommitted, -
+    "stream B's response was untouched by stream A's flush")
+
+
+/******************************************************************************/
+/* HTTP.Cookie unit tests.                                                     */
+/*                                                                            */
+/* Cookie was never coupled to the pipeline (it is a value class: name+value  */
+/* in, Set-Cookie string out), so it needed no decoupling -- only a home for  */
+/* pure tests, which the unit route now provides. These exercise the logic    */
+/* the HTTP fixtures only reach indirectly: RFC6265 name rules, CR/LF refusal  */
+/* in values (header-splitting defence, audit-core-20260725 §2.1), the        */
+/* __Host-/__Secure- prefix constraints, SameSite=None requiring Secure, and  */
+/* the makestring composition and its memoisation.                            */
+/*                                                                            */
+/* The class raises errors via Raise syntax 93.900 at RUN time (init, the      */
+/* setters, and checkconsistency inside makestring), so the negative cases use */
+/* assertRuntimeError with the offending code as a source string.             */
+/******************************************************************************/
+::Class HTTP.Cookie.unitGroup Subclass ooTestCase Public
+
+--------------------------------------------------------------------------------
+-- Construction and makestring composition.                                   --
+--------------------------------------------------------------------------------
+::Method test_basic_makestring
+  c = .HTTP.Cookie~new("session", "abc123")
+  self~assertEquals("session=abc123", c~makestring, -
+    "a bare cookie renders as name=value with no attributes")
+
+::Method test_full_makestring_attribute_order
+  c = .HTTP.Cookie~new("sid", "xyz")
+  c~max_age  = 3600
+  c~domain   = "example.com"
+  c~path     = "/"
+  c~samesite = "Strict"
+  c~secure   = 1
+  c~httponly = 1
+  self~assertEquals( -
+    "sid=xyz; Max-Age=3600; Domain=example.com; Path=/; SameSite=Strict; Secure; HttpOnly", -
+    c~makestring, "attributes render in the documented order")
+
+::Method test_session_cookie_omits_max_age
+  c = .HTTP.Cookie~new("s", "v")
+  self~assertEquals("s=v", c~makestring, -
+    "a negative Max-Age (session cookie) omits the attribute")
+
+--------------------------------------------------------------------------------
+-- RFC6265 name rules (validatename), raised at init time.                    --
+--------------------------------------------------------------------------------
+::Method test_name_may_not_be_empty
+  self~assertRuntimeError(93.900, 'x = .HTTP.Cookie~new("", "v")')
+
+::Method test_name_may_not_start_with_dollar
+  self~assertRuntimeError(93.900, 'x = .HTTP.Cookie~new("$Version", "1")')
+
+::Method test_name_rejects_separators
+  self~assertRuntimeError(93.900, 'x = .HTTP.Cookie~new("a=b", "v")')
+
+::Method test_name_rejects_control_char
+  self~assertRuntimeError(93.900, 'x = .HTTP.Cookie~new("a"||"09"x||"b", "v")')
+
+::Method test_name_rejects_non_ascii
+  self~assertRuntimeError(93.900, 'x = .HTTP.Cookie~new("a"||"E9"x, "v")')
+
+::Method test_valid_name_is_accepted
+  c = .HTTP.Cookie~new("Session_Id.2", "v")
+  self~assertEquals("Session_Id.2=v", c~makestring, -
+    "a token-legal name with . and _ is accepted")
+
+--------------------------------------------------------------------------------
+-- CR/LF refusal in the value: header-splitting defence, at the origin call.  --
+--------------------------------------------------------------------------------
+::Method test_value_rejects_cr
+  self~assertRuntimeError(93.900, 'x = .HTTP.Cookie~new("k", "a"||"0d"x||"b")')
+
+::Method test_value_rejects_lf
+  self~assertRuntimeError(93.900, 'x = .HTTP.Cookie~new("k", "a"||"0a"x||"b")')
+
+::Method test_value_setter_also_rejects_control
+  self~assertRuntimeError(93.900, -
+    'c = .HTTP.Cookie~new("k", "ok"); c~value = "bad"||"0a"x')
+
+--------------------------------------------------------------------------------
+-- __Host- / __Secure- prefix constraints (checkconsistency, at makestring).  --
+--------------------------------------------------------------------------------
+::Method test_secure_prefix_requires_secure
+  self~assertRuntimeError(93.900, -
+    'c = .HTTP.Cookie~new("__Secure-sid", "v"); c~makestring')
+
+::Method test_secure_prefix_ok_when_secure
+  c = .HTTP.Cookie~new("__Secure-sid", "v")
+  c~secure = 1
+  self~assertEquals("__Secure-sid=v; Secure", c~makestring, -
+    "__Secure- with Secure renders")
+
+::Method test_secure_prefix_is_case_insensitive
+  self~assertRuntimeError(93.900, -
+    'c = .HTTP.Cookie~new("__SeCuRe-sid", "v"); c~makestring')
+
+::Method test_host_prefix_requires_secure
+  self~assertRuntimeError(93.900, -
+    'c = .HTTP.Cookie~new("__Host-sid", "v"); c~makestring')
+
+::Method test_host_prefix_rejects_domain
+  self~assertRuntimeError(93.900, -
+    'c = .HTTP.Cookie~new("__Host-sid", "v"); c~secure = 1; c~path = "/"; c~domain = "example.com"; c~makestring')
+
+::Method test_host_prefix_requires_root_path
+  self~assertRuntimeError(93.900, -
+    'c = .HTTP.Cookie~new("__Host-sid", "v"); c~secure = 1; c~path = "/app"; c~makestring')
+
+::Method test_host_prefix_ok_when_conformant
+  c = .HTTP.Cookie~new("__Host-sid", "v")
+  c~secure = 1
+  c~path   = "/"
+  self~assertEquals("__Host-sid=v; Path=/; Secure", c~makestring, -
+    "a conformant __Host- cookie renders")
+
+--------------------------------------------------------------------------------
+-- SameSite=None requires Secure.                                             --
+--------------------------------------------------------------------------------
+::Method test_samesite_none_requires_secure
+  self~assertRuntimeError(93.900, -
+    'c = .HTTP.Cookie~new("k", "v"); c~samesite = "None"; c~makestring')
+
+::Method test_samesite_none_ok_with_secure
+  c = .HTTP.Cookie~new("k", "v")
+  c~samesite = "None"
+  c~secure   = 1
+  self~assertEquals("k=v; SameSite=None; Secure", c~makestring, -
+    "SameSite=None with Secure renders")
+
+--------------------------------------------------------------------------------
+-- max_age= validates its argument.                                          --
+--------------------------------------------------------------------------------
+::Method test_max_age_rejects_non_whole
+  self~assertRuntimeError(93.900, -
+    'c = .HTTP.Cookie~new("k", "v"); c~max_age = "soon"')
+
+--------------------------------------------------------------------------------
+-- Memoisation: makestring caches, and a setter invalidates the cache.        --
+--------------------------------------------------------------------------------
+::Method test_setter_invalidates_cache
+  c = .HTTP.Cookie~new("k", "v1")
+  self~assertEquals("k=v1", c~makestring, "first render")
+  c~value = "v2"
+  self~assertEquals("k=v2", c~makestring, -
+    "after value= the rendered string reflects the new value (cache reset)")

@@ -1,0 +1,26 @@
+Use Arg request, response
+response~content_type = "text/plain"
+
+-- §3.8 / v110 regression guard: the three output methods of HTTP.OutputStream
+-- (charout, lineout, arrayout) must refuse to write when the underlying stream
+-- is not READY, returning 1 (the class's uniform error flag, 0 on success) and
+-- leaving the buffer untouched. arrayout was the gap v110 closed: before it, it
+-- was the only output method that appended to the buffer regardless of state.
+--
+-- A .Stream that has never been opened reports state UNKNOWN (not READY), so we
+-- do not need a broken path or permissions to force the condition: a fresh
+-- .Stream~new, unopened, is enough. HTTP.OutputStream~init copies the underlying
+-- stream's state verbatim and never re-opens, so the wrapper is born non-READY.
+raw = .Stream~new("/tmp/nrdy_never_opened")
+os  = .HTTP.OutputStream~new(raw, response)
+Say "os_state=["os~state"]"
+
+-- Each method must return 1 (error) and write nothing.
+Say "rc_charout=["os~charout("SHOULD-NOT-APPEAR")"]"
+Say "rc_lineout=["os~lineout("SHOULD-NOT-APPEAR")"]"
+Say "rc_arrayout=["os~arrayout(.array~of("NOPE","NOPE"))"]"
+
+-- flush on a non-READY stream returns "<state>:" and emits nothing to the
+-- underlying stream. "UNKNOWN:" (not "READY:") proves the buffer stayed inert
+-- end to end: nothing to drain, nothing drained.
+Say "flush_result=["os~flush"]"

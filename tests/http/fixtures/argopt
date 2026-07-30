@@ -1,0 +1,29 @@
+Use Arg request, response
+response~content_type = "text/plain"
+
+-- "Nonsense" begins with N, so both arg() and cookie() must accept it
+-- silently as "Name" -- this is the ARG() BIF convention (first letter
+-- only counts), not a validation bug. See ref-decisiones.md.
+Say "arg_nonsense_as_name=["request~arg("who","Nonsense")"]"
+Say "cookie_nonsense_as_name=["request~cookie("session","Nonsense")"]"
+
+-- A letter that matches neither "NVEO" must still be rejected, with a
+-- correctly-shaped three-argument 93.914 (not the corrupted two-argument
+-- form cookie() used to raise).
+Signal On Syntax Name argbad
+request~arg("who","Zilch")
+Say "arg_bad_letter=[no error raised, WRONG]"
+Signal argbadskip
+argbad:
+c = Condition("O")
+Say "arg_bad_letter=["c~code"|"c~message"]"
+argbadskip:
+
+Signal On Syntax Name cookiebad
+request~cookie("session","Zilch")
+Say "cookie_bad_letter=[no error raised, WRONG]"
+Signal cookiebadskip
+cookiebad:
+c = Condition("O")
+Say "cookie_bad_letter=["c~code"|"c~message"]"
+cookiebadskip:

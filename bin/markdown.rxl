@@ -1,0 +1,130 @@
+/******************************************************************************/
+/*                                                                            */
+/* bin/markdown.rxl - An example Markdown renderer                            */
+/* ===============================================                            */
+/*                                                                            */
+/* This file is part of the RexxHTTP package                                  */
+/* [See https://rexx.epbcn.com/rexxhttp/]                                     */
+/*                                                                            */
+/* Copyright (c) 2006-2026 Josep Maria Blasco <josep.maria.blasco@epbcn.com>  */
+/*                                                                            */
+/* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
+/*                                                                            */
+/* Version history:                                                           */
+/*                                                                            */
+/* Date     Version Details                                                   */
+/* -------- ------- --------------------------------------------------------- */
+/* 20260704    1.0  First version                                             */
+/* 20260729         Dual path to show own source                              */
+/*                                                                            */
+/******************************************************************************/
+
+  -- This servlet can be called in two different ways: when called directly,
+  -- it prints its own source; when called indirectly, using an Apache
+  -- Action, it works as a preprocessor for Markdown.
+
+  ------------------------------------------------------------------------------
+  -- Direct request? Print our own source                                     --
+  ------------------------------------------------------------------------------
+
+  If .request~handler \== "markdown" Then Signal Direct
+
+  ------------------------------------------------------------------------------
+  -- Ok, we've been called as a handler:                                      --
+  --                                                                          --
+  --   Action markdown /bin/markdown.rxl                                      --
+  --                                                                          --
+  -- In turn, .rxl files are also handled: by RexxHTTP.                       --
+  ------------------------------------------------------------------------------
+
+  -- Is pandoc actually usable?
+
+  --  [Silence the probe's own trace: a missing
+  --   binary is a FAILURE, which the default Trace Normal would echo to
+  --   stderr (Apache's error.log) three lines per request even though the
+  --   degradation path below handles it. Trace(setting) pushes the new
+  --   setting and returns the previous one, so we restore it afterwards.]
+
+  savedTrace = Trace("Off")
+    Address COMMAND "pandoc -v" With  -
+      Output Stem discard.            -
+      Error  Stem discard.
+  Call Trace savedTrace
+
+  -- No? Serve the file verbatim as UTF-8 plain text.
+
+  If rc \== 0 Then Do
+   .response~content_type = "text/plain; charset=utf-8"
+    Say .File~readChars(.request~filename)
+    Exit
+  End
+
+  -- We have Pandoc: we will emit HTML
+ .response~content_type = "text/html; charset=utf-8"
+
+  ------------------------------------------------------------------------------
+  -- Read the document. When the Rexx Parser is installed, pre-process its    --
+  -- ```rexx fenced blocks into highlighted HTML BEFORE handing the document  --
+  -- to Pandoc; Pandoc passes embedded HTML through untouched, so the         --
+  -- highlighted <div>s survive into the final page. Without the Parser we    --
+  -- skip this step and Pandoc renders the fences as plain <pre><code>, so    --
+  -- the document is always served either way.                                --
+  ------------------------------------------------------------------------------
+
+  source = .File~readLines(.request~filename)
+
+  -- See if the highlighter is reachable
+
+  FencedCode.cls = .File~searchPath("FencedCode.cls",                -
+    (".",Value("REXX_PATH",,environment),VALUE("PATH",,environment)) -
+  )
+
+  If FencedCode.cls \== .Nil Then Do
+   .context~package~loadPackage( FencedCode.cls~absolutePath )
+    -- "dark" is the default style for un-annotated fences; the client-side
+    -- style chooser restyles those, and leaves author-styled ones alone.
+    source = FencedCode( .request~filename, source, "dark" )
+  End
+
+  -- Run Pandoc and transform the output into a nice page
+  buffer = .Array~new
+  Address Command "pandoc -f markdown -t html" -
+    With                                       -
+      Input  Using (source)                    -
+      Output Using (buffer)
+
+  html = buffer~makeString
+
+  -- Pick the contents of the first h1 and use it as our title
+  Parse Caseless Var html "<h1" ">" title "</h1"
+
+  -- We don't want inner tags
+  Do While title~contains("<")
+    Parse var title before"<"tag">"after
+    If tag == "" Then Leave
+    title = before after
+  End
+
+  -- Normalize CR, LF and tabs
+  title = Space( Translate(title, "","0d0a09"X) )
+
+  -- Set up default
+  If title = "" Then title = "*** missing title ***"
+
+ .HTML.Page~new(title)~body(html)~done
+
+  Exit
+
+  ------------------------------------------------------------------------------
+  -- Path to follow when called directly: show our own source, the same way   --
+  -- src-viewer.rxl shows any file -- highlighted if the Parser is present,   --
+  -- plain text otherwise. The shared routine lives in src-viewer.cls.        --
+  ------------------------------------------------------------------------------
+
+Direct:
+
+  Call ShowSource .context~package~name
+
+  Exit
+
+::Requires "src-viewer.cls"

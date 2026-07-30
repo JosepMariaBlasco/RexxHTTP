@@ -23,9 +23,12 @@
   If .RexxInfo~platform~caselessStartsWith("Windows") Then
     Return "Windows"
 
-  Address COMMAND "uname" With Output Stem uname.
-
-  If uname.1 == "Darwin" Then Return "MacOS"
+  -- SysVersion() returns "<sysname> <release>"; its first word is the
+  -- struct utsname sysname field straight from uname(2) -- the very same
+  -- source the external `uname` command reads -- so this is exactly what
+  -- an `Address COMMAND "uname"` call would report, minus the child
+  -- process. On macOS sysname is "Darwin".
+  If Word(SysVersion(), 1) == "Darwin" Then Return "MacOS"
 
   Return "Linux"
 
@@ -190,6 +193,65 @@ BadArg:
   opts~valid    = 0
   opts~errorMsg = message
   Return opts
+
+/******************************************************************************/
+/* MakeTempFile: create a temporary file with an unpredictable name and mode  */
+/* 600, and return its path ("" if it could not be created).                  */
+/*                                                                            */
+/* The installers build files in a temporary location and then install them   */
+/* into root-owned destinations. A FIXED name under /tmp is unsafe on a        */
+/* multi-user machine: any local user can pre-create that exact path as a      */
+/* symlink, the installer then writes THROUGH the link, and the privileged     */
+/* copy that follows plants attacker-controlled content in a root-owned file   */
+/* (CWE-377 / CWE-59). mktemp(1) creates the file itself, atomically, with an  */
+/* unguessable suffix and no world access, which closes the window: there is   */
+/* nothing to pre-create and nothing to race.                                  */
+/*                                                                            */
+/* Note the mode: the file is 600, so a plain 'cp' that CREATES its            */
+/* destination would carry that mode over. Callers whose destination must be   */
+/* world-readable install it explicitly with 'install -m 644' rather than      */
+/* 'cp' -- see the call sites. Callers that overwrite an EXISTING file are     */
+/* unaffected, since cp keeps the destination's own mode.                      */
+/******************************************************************************/
+::Routine MakeTempFile Public
+  Use Strict Arg prefix
+  out = .Array~new
+  Address System "mktemp" '"/tmp/'prefix'.XXXXXXXX"' With Output Using (out) Error Stem Discard.
+  If RC \== 0 Then Return ""
+  If out~items == 0 Then Return ""
+  Return out[1]~strip
+
+/******************************************************************************/
+/* PinShebang: rewrite the first line of the DEPLOYED processor from the Unix */
+/* env shebang "#!/usr/bin/env rexx" to <newShebang>, in place. Only the copy */
+/* passed in is touched, never the canonical source, and only if its first    */
+/* line IS that exact env shebang -- so it is idempotent (a file already      */
+/* pinned, or with no env shebang, is left untouched). The caller supplies    */
+/* what to pin to: an absolute "#!<rexx>" on Unix (env may not resolve rexx   */
+/* on Apache's minimal PATH), a bare "#!rexx" on Windows (the ooRexx shebang  */
+/* association keys off the token, not a path).                               */
+/*                                                                            */
+/* This is the common core shared by the Windows and Mac installers, which    */
+/* both own their cgi-bin and can write it in place. The LINUX installer does */
+/* NOT call this: its cgi-bin is root-owned, so it needs the same logic but a */
+/* privileged write (temp file + sudo install), and keeps its own PinShebang. */
+/* If the installer is ever made to run elevated as a whole, Linux could fold */
+/* into this routine too.                                                     */
+/*                                                                            */
+/* EOL: writeLines re-emits each line with the platform's native terminator,  */
+/* exactly as the old LineOut loop did -- LF on Unix (byte-transparent to the */
+/* LF source pack.rex enforces), CRLF on Windows (accepted: ooRexx runs the   */
+/* CGI either way, and only the cgi-bin copy is touched).                     */
+/******************************************************************************/
+::Routine PinShebang Public
+  Use Strict Arg script, newShebang
+  envShebang = "#!/usr/bin/env rexx"
+  body = .File~readLines(script)
+  If body~items > 0, body[1]~strip == envShebang Then Do
+    body[1] = newShebang
+    .File~writeLines(script, body, "Replace")
+  End
+  Return
 
 /******************************************************************************/
 /* SysCmd: run a command, return its exit code.                               */
@@ -437,6 +499,13 @@ BadArg:
   ordered = dirs~makeArray~sortWith(.DescendingLengthComparator~new)
   Do d Over ordered
     -- Walk up from each recorded directory towards docRoot, pruning empties.
+    -- The stop test is exact string equality against docRoot. This is safe
+    -- because `current` and `d` both come from `~absolutePath` (via parentFile),
+    -- and callers pass an already-normalised docRoot: the two are produced by
+    -- the same normalisation, so they compare equal at the boundary. ACCEPTED,
+    -- not hardened: normalising docRoot here would touch the uninstall's
+    -- directory-pruning path (the most destructive in the installer) with no
+    -- e2e coverage on Win/Mac, for a mismatch the callers do not produce.
     current = d
     Do While current \== "", current \== docRoot
       f = .File~new(current)
@@ -464,7 +533,7 @@ BadArg:
 -- deploy, the installer copies the WHOLE package into the document root and
 -- leaves out only these top-level entries: the installer itself, the test
 -- suite, the packer, and the two repo-only metadata files. Everything else
--- (apps/, css/, examples/ with their .highlighted sources, src/ as a readable
+-- (bin/, css/, examples/, src/ as a readable
 -- copy, the manual PDF, readme.md, LICENSE, and the root index) becomes the
 -- browsable sample web. Matched by basename at the package root only; nothing
 -- inside a kept directory is filtered. One list, shared by all three
@@ -474,6 +543,20 @@ BadArg:
 -- by extension (see IsPackagingArtifact), because a user who unzips the
 -- downloaded rexxhttp-latest.zip and runs the install from that folder leaves
 -- the .zip sitting in the package root -- it must not be copied into htdocs.
+--
+-- Some entries below no longer travel in the published zip at all: pack.rex
+-- excludes ITSELF from the archive it builds (it is a build utility, not part
+-- of what users download), and .gitattributes never made it in either, since
+-- "zip -r ... *" leaves top-level dotfiles out. They stay on this list on
+-- purpose: the installer takes its source root from its own location, so it
+-- runs just as well from a git clone, where all three files DO exist and must
+-- still be kept out of the document root.
+--
+-- agents.md is the opposite case and belongs here for its own reason: it DOES
+-- travel in the zip (it is plain text, useful to anyone who downloads the
+-- package meaning to contribute), but it is project guidance, not part of the
+-- sample web -- so it ships, and it is not served. Shipping and serving are
+-- separate decisions; this list only governs the second.
 ::Routine HtdocsExclude Public
   Return "install tests docbook pack.rex .gitattributes agents.md"
 
@@ -539,7 +622,9 @@ BadArg:
   -- Build the list of top-level package entries to copy (exclusions removed):
   -- named exclusions (HtdocsExclude) plus any packaging artefact by extension.
   roots = .Array~new
-  Do entry Over .File~new(srcRoot)~listFiles
+  entries = .File~new(srcRoot)~listFiles
+  If entries == .nil Then Return planted   -- srcRoot unreadable: nothing to plant
+  Do entry Over entries
     If exclude~hasItem(entry~name) Then Iterate
     If IsPackagingArtifact(entry~name) Then Iterate
     roots~append(entry)
@@ -606,32 +691,61 @@ BadArg:
 -- Locate the Rexx Parser's bin/ directory in the user's environment at install
 -- time, or "" when it cannot be found. This runs where we DO see the user's
 -- environment (unlike Apache's child at runtime), so the result can be frozen
--- into the Apache config via SetEnv REXX_PARSER (see RexxHTTPSetEnvLines).
+-- into the Apache config (SetEnv REXX_PATH; see RexxHTTPSetEnvLines).
 --
--- Search order, first hit wins (decided with JMB, the standard Rexx search
--- order): current directory, then REXX_PATH, then PATH. The anchor is the file
--- Rexx.Parser.cls. From the file we return its PARENT directory (the bin/),
--- because REXX_PARSER points at bin/ (confirmed with JMB, v69), not at the file.
+-- Search order, first hit wins: current directory, then REXX_PATH, then PATH.
+-- The anchor is the file Rexx.Parser.cls. From the file we return its PARENT
+-- directory.
+--
+-- When srcRoot is supplied (the RexxHTTP package root being installed), we also
+-- consider a Parser checked out as a SIBLING of RexxHTTP: <srcRoot>/../rexx-parser
+-- /bin. Convention -- rexxhttp/ and rexx-parser/ side by side under a common
+-- parent -- so one ".." hop off srcRoot lands on the sibling; .File normalizes
+-- it. This catches the common developer checkout even when the sibling bin/ is
+-- on no search variable. The sibling is folded into the standard order by
+-- TEMPORARILY prepending it to PATH for the probe, then restoring PATH (measured
+-- in ooRexx 5.3.0: SysSearchPath does see a variable set in-process via
+-- Call Value ..."ENVIRONMENT"). PATH is restored on every exit path.
 --
 -- SysSearchPath takes the NAME of an environment variable (not its value) and
 -- returns the absolute path of the first matching file, or "" if none; a
 -- missing variable yields "" without error. We probe the current directory
--- separately with SysFileExists so the cwd->REXX_PATH->PATH order is explicit
+-- separately with .File~exists so the cwd->REXX_PATH->PATH order is explicit
 -- and does not depend on SysSearchPath's internal handling of ".".
 ::Routine ParserBin Public
+  Use Strict Arg srcRoot = ""
   anchor = "Rexx.Parser.cls"
 
   -- 1. Current directory.
   cwdHit = .File~new(anchor)
   If cwdHit~exists Then Return cwdHit~parentFile~absolutePath
 
-  -- 2. REXX_PATH, then 3. PATH.
-  Do var Over .Array~of("REXX_PATH", "PATH")
-    hit = SysSearchPath(var, anchor)
-    If hit \== "" Then Return .File~new(hit)~parentFile~absolutePath
+  -- Temporarily fold a sibling rexx-parser/bin into PATH, if srcRoot was given
+  -- and the sibling directory resolves. Saved for restoration below.
+  savedPath = .Nil
+  If srcRoot \== "" Then Do
+    sep     = .File~separator
+    sibling = .File~new(srcRoot || sep || ".." || sep || "rexx-parser" || sep || "bin")~absolutePath
+    If .File~new(sibling)~exists Then Do
+      savedPath = Value("PATH", , "ENVIRONMENT")
+      Call Value "PATH", sibling || .File~pathSeparator || savedPath, "ENVIRONMENT"
+    End
   End
 
-  Return ""                                -- not found; the rexxlet degrades
+  -- 2. REXX_PATH, then 3. PATH (with the sibling prepended, if any).
+  found = ""
+  Do var Over .Array~of("REXX_PATH", "PATH")
+    hit = SysSearchPath(var, anchor)
+    If hit \== "" Then Do
+      found = .File~new(hit)~parentFile~absolutePath
+      Leave
+    End
+  End
+
+  -- Restore PATH no matter what (only touched if we prepended above).
+  If savedPath \== .Nil Then Call Value "PATH", savedPath, "ENVIRONMENT"
+
+  Return found                             -- "" => not found; rexxlet degrades
 
 -- Produce the SetEnv lines the Apache config fragment needs for point 17, as a
 -- single string of complete lines (native line terminators). Three variables,
@@ -647,34 +761,57 @@ BadArg:
 --                     install always lands at the document root, so this is
 --                     the "*" sentinel (no prefix). Emitted together with
 --                     BASE so the pair is never half-configured (BASE without
---                     URLBASE makes the rexlet 500). A subdirectory (aliased)
+--                     URLBASE makes the rexxlet 500). A subdirectory (aliased)
 --                     deployment is manual config, outside this installer.
---   REXX_PARSER       the Parser's bin/, located by ParserBin. Written ONLY
---                     when the Parser was found; when absent we emit nothing
---                     and the rexlet degrades honestly (no Parser -> plain
---                     output).
+--   REXX_PATH         the package's own bin/ (<docRoot>/bin), so a rexxlet can
+--                     resolve ::Requires "HTML.Page.cls" (and the other loadable
+--                     classes that live there) no matter which directory the
+--                     rexxlet itself sits in -- PLUS the Parser's bin/ when found.
+--                     Apache prefixes REXX_PATH to REDIRECT_REXX_PATH across
+--                     the Action; RexxHTTP.rex reinjects it before calling the
+--                     rexxlet, and ooRexx reads it at ::Requires time (and
+--                     markdown.rxl at searchPath time). The package bin/ is in
+--                     the slash form the Apache config uses; entries are joined
+--                     with the platform list separator.
+--
+-- srcRoot is the RexxHTTP package root being installed FROM (the source tree),
+-- distinct from docRoot (the install TARGET). Passed through to ParserBin so a
+-- Parser checked out as a sibling of RexxHTTP is detected. Optional: when
+-- omitted, sibling detection is simply skipped.
 --
 -- Returned as text so each installer can splice it into the fragment it writes,
 -- wherever that installer puts SetEnv directives. Empty variables are never
 -- emitted (an empty REXXHTTP_BASE would be a bug in the caller; guard anyway).
 ::Routine RexxHTTPSetEnvLines Public
-  Use Strict Arg docRoot, indent = ""
+  Use Strict Arg docRoot, indent = "", srcRoot = ""
   eol = .endOfLine
   out = .MutableBuffer~new
+
+  -- Locate the Parser once (sibling detection uses srcRoot when given).
+  -- The Parser half of REXX_PATH derives from this single probe.
+  parserBin = ParserBin(srcRoot)
 
   If docRoot \== "" Then Do
     out~append(indent, "SetEnv REXXHTTP_BASE """docRoot"""", eol)
     -- A clean-machine install always lands at the document root: no URL
     -- prefix, so the URLBASE half of the pair is the "*" sentinel. Emitting
     -- it here keeps BASE and URLBASE together -- never half a pair, which
-    -- would make the rexlet 500 (BASE set, URLBASE empty). A subdirectory
+    -- would make the rexxlet 500 (BASE set, URLBASE empty). A subdirectory
     -- deployment (RexxHTTP hung off an alias) is a manual-config scenario,
     -- outside this clean-machine installer's scope.
     out~append(indent, "SetEnv REXXHTTP_URLBASE *", eol)
+    -- REXX_PATH: the package's own bin/ (so ::Requires in a rexxlet resolves
+    -- regardless of the rexxlet's own directory), plus the Parser's bin/ when
+    -- found -- markdown.rxl locates FencedCode.cls by scanning REXX_PATH, and the
+    -- Parser classes live outside <docRoot>/bin (in the separate rexx-parser
+    -- package), so without this entry highlighting silently stays off even with
+    -- the Parser installed. docRoot is already in the slash form the Apache
+    -- config wants, so "/bin" is glued with "/"; entries are joined with the
+    -- platform list separator.
+    rexxPath = docRoot"/bin"
+    If parserBin \== "" Then
+      rexxPath = rexxPath || .File~pathSeparator || parserBin
+    out~append(indent, "SetEnv REXX_PATH """rexxPath"""", eol)
   End
-
-  parserBin = ParserBin()
-  If parserBin \== "" Then
-    out~append(indent, "SetEnv REXX_PARSER """parserBin"""", eol)
 
   Return out~string

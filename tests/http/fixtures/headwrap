@@ -1,0 +1,34 @@
+Use Arg request, response
+
+-- Wrapper that ALWAYS delivers the same file (headwrap.data, sitting next to
+-- this servlet on disk) plus some housekeeping. This is the "particular case"
+-- where the servlet KNOWS its response ahead of generating the body, so it can
+-- answer HEAD cheaply: do the housekeeping, set the headers from the file's
+-- known size, and skip the body read. GET does the full read; HEAD stops after
+-- the headers.
+
+-- Derive the payload path from our own on-disk path (~filename), so it works
+-- wherever the fixture is deployed, without depending on DOCUMENT_ROOT.
+myPath      = request~filename
+payloadFile = myPath~left(myPath~lastPos("/"))"headwrap.data"
+
+-- Housekeeping that must run for BOTH methods -- the point of the example:
+-- HEAD is not a no-op, it still does the side work. We prove it ran by writing
+-- a marker header the test observes on the HEAD response.
+response["X-Housekeeping"] = "done"
+
+-- Echo the query string so the same fixture proves HEAD passes it through.
+response["X-Query"] = request~query_string
+
+-- Headers set WITHOUT reading the body: Content-Type is fixed, Content-Length
+-- comes from the file size via stat, not from the payload bytes.
+size = Stream(payloadFile,"C","QUERY SIZE")
+response~content_type   = "text/plain"
+response~content_length = size
+
+If request~method == "HEAD" Then
+  Return                                    -- headers only, no body
+
+-- GET (and anything else with a body): stream the file out.
+s = .stream~new(payloadFile)
+Say s~charin(1, size)

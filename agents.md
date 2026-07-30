@@ -15,10 +15,12 @@ A rexxlet receives a `request` and a `response` object (also available
 as `.request` and `.response` in the environment) and produces its body
 with `Say` or `CharOut`.
 
-The pipeline, end to end: Apache routes a request to a one-line wrapper,
-which `Call`s `RexxHTTP.rex`; the processor builds the request/response
-objects, runs the rexxlet, and flushes the response. The response is
-buffered, which is what makes *lazy headers* possible — see below.
+The pipeline, end to end: Apache invokes `RexxHTTP.rex` directly (via its
+`#!` shebang — on Unix pinned to an absolute path if Apache's `PATH` does
+not see `rexx`, on Windows through the `#!rexx` token); the processor
+builds the request/response objects, runs the rexxlet, and flushes the
+response. The response is buffered, which is what makes *lazy headers*
+possible — see below.
 
 The full specification is the manual in [`rexxhttp.pdf`](rexxhttp.pdf).
 **The manual is the spec; the code is the state.** When they disagree,
@@ -34,6 +36,8 @@ All in [`src/`](src/):
 - `HTTP.Response.cls` — the response class.
 - `HTTP.OutputStream.cls` — the buffered output stream (lazy headers).
 - `HTTP.Cookie.cls` — the cookie class.
+- `RexxHTTP.CommonRoutines.cls` — reserved home for routines shared across
+  rexxlets. Empty by design; loaded by `loadPackage` from `REXXHTTP_BASE`.
 
 Invariants — do not break these
 -------------------------------
@@ -50,15 +54,84 @@ a proof.
    unchanged against any new version. Do not narrow or rename any of this.
 
 2. **`request~unknown` resolution is contract, not detail.**
-   `request~whatever` resolves against the environment-variable pool
-   (HTTP_* direct; `_var` with a REDIRECT_ fallback; otherwise a direct
-   `Value` lookup, cached). Rexxlets depend on this. Do not narrow it.
+   `request~whatever` resolves against the environment-variable pool by a
+   **single branch** with a **single cache**: a direct `Value` lookup and,
+   if that comes back empty, a fallback to `REDIRECT_`*name*. There are no
+   per-prefix branches. Neither the underscore nor `HTTP_` is a special
+   namespace: a client header and an operator-defined variable resolve by
+   the same path, with or without a prefix (the `_var` branch was dropped
+   in v19; the `HTTP_*` one in v113 — measured: Apache never fabricates
+   `REDIRECT_HTTP_*`, so the fallback is inert for those names). Rexxlets
+   depend on this. Do not narrow it.
 
 3. **Lazy headers is the thesis of the design.** Body content can be
    written before the headers are fixed; the commit emits the headers on
    the first flush (whether the rexxlet calls `flush` for an early
    partial response, or the processor flushes automatically at the end).
    Any refactor of the OutputStream must preserve this exactly.
+
+The request/response contract
+-----------------------------
+
+Details a rexxlet author relies on that the manual does not yet cover.
+These are behaviour, not implementation notes: hold them frozen like the
+invariants above.
+
+### HTTP methods and where arguments come from
+
+Version 1.0 supports **GET, POST, PUT and DELETE**. Argument source is
+asymmetric on purpose:
+
+- **GET, PUT and DELETE** take their arguments from the **query string**.
+- **POST** takes them from the **body**.
+
+PUT and DELETE bodies are read (they must be drained, or the request
+hangs Apache waiting on stdin) but **not parsed** as arguments: the raw
+body is left untouched in `request~post_string` for the rexxlet to
+interpret however it likes — JSON, binary, an opaque resource. Parsing a
+PUT body as form arguments would fire the strict arg-policy with a bogus
+400 on a JSON payload, so it is deliberately left raw. (`chunked` bodies
+are handled too; the raw body still lands in `post_string`.)
+
+### HEAD
+
+HEAD is supported, and there are two ways it plays out:
+
+- **Default** — a rexxlet that does not branch on the method runs in
+  full under HEAD, and **Apache prunes the body** on the way back. Its
+  side effects execute exactly as they would under GET; only the emitted
+  body is discarded. The query string reaches it just like GET. The
+  framework deliberately does **not** intercept HEAD: in plain CGI there
+  is no general way to produce a rexxlet's headers without running it
+  (lazy headers, invariant 3), so a real `Content-Length` requires
+  executing the body and letting Apache prune it.
+- **Optimised** — a rexxlet that already knows its answer may branch on
+  `request~method == "HEAD"`, set its headers (e.g. from a file `stat`),
+  and `Return` without writing a body, to skip the body work. The
+  `headwrap` fixture is the canonical example.
+
+One caveat: the response `Content-Length` is governed by **Apache, not
+the rexxlet**. `mod_cgi` recomputes it from the actual body emitted and
+ignores whatever the script declares; on an optimised HEAD, with no body
+to measure, Apache emits no `Content-Length` at all. So the optimised
+HEAD is cheap but arrives without a `Content-Length` — an unavoidable
+trade-off against the default (which has the length but runs the body).
+
+### Header-key normalisation on the response
+
+`response[key]`, `response[key] = value`, and the attribute forms
+(`response~content_type`, `response~content_type = ...`) all resolve to
+the **same key**. Word separators are interchangeable: hyphen, underscore
+and space are equivalent, so `response["Content-Type"]`,
+`response["Content_Type"]` and `response["Content Type"]` are one key.
+Matching is caseless. Outer whitespace is trimmed and interior runs are
+collapsed, so `response["  content   type  "]` is still `Content-Type` —
+the key is robust to sloppy spacing.
+
+A **quoted** message with a space (`response~"Content type" = ...`) is a
+distinct, valid path that converges too: `response~"Content type"`,
+`response~content_type`, and the three bracket forms above are all the
+same key.
 
 Environment
 -----------
@@ -69,12 +142,15 @@ Environment
 Line endings
 ------------
 
-The repository stores text as LF, but `*.rex` and `*.cls` are
-materialised as **CRLF** on checkout (see `.gitattributes`). This is
-intentional: the sources are edited on Windows, and ooRexx reads CRLF,
-LF, or mixed line endings by design. Do **not** "normalise" line endings
-or rewrite `::Requires` over this. When editing a source, check its
-line-ending convention per file and preserve it — never assume by folder.
+The whole tree is **LF**. This is enforced: `pack.rex` walks the tree
+before packaging and aborts (Exit 1) if any editable file carries a `CR`.
+The check is a blacklist, not a whitelist of extensions — it excludes
+`*.svg` (ebnf2svg generates them CRLF on purpose), `*.css` (refreshed by
+pack from the Parser), `*.pdf`, `*.zip`, `*trace.xml`, and `pack.rex`
+itself; everything else must be LF. When editing or adding a source, keep
+it LF — a stray CRLF will fail the pack. (Historical note: the sources
+used to be materialised as CRLF on checkout via `.gitattributes`, for
+editing on Windows; that was retired and the tree migrated to LF.)
 
 A claude.ai-specific note: that interface translates the first `.` in an
 uploaded filename to `_`, so `HTTP.Request.cls` may arrive as

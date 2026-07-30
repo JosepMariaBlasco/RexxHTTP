@@ -39,7 +39,7 @@
   committed  = .false
   committing = .false
 
-  output = .HTTP.OutputStream~new(.output~current)
+  output = .HTTP.OutputStream~new(.output~current, self)
 
 --------------------------------------------------------------------------------
 -- [] Method                                                                  --
@@ -50,10 +50,9 @@
 
   Use Strict Arg headername
 
-  headername = headername~request("STRING")
-  If headername == .nil Then Raise syntax 93.916 array (1)
+  headername = .Validate~requestClassType(1, headername, .String)
 
-  Return headers[headername~translate]
+  Return headers[headername~space~upper~translate("--","_ ")]
 
 --------------------------------------------------------------------------------
 -- []= Method                                                                 --
@@ -68,12 +67,12 @@
 
   Use Strict Arg headervalue, headername
 
-  headervalue = headervalue~request("STRING")
-  If headervalue == .nil Then Raise syntax 93.916 array (1)
-  headername  = headername~request("STRING")
-  If headername  == .nil Then Raise syntax 93.916 array (2)
+  headervalue = .Validate~requestClassType(1, headervalue, .String)
+  headername  = .Validate~requestClassType(2, headername,  .String)
 
-  headers[headername~translate] = headervalue
+  self~rejectControlChars("Header '"headername"' value", headervalue)
+
+  headers[headername~space~upper~translate("--","_ ")] = headervalue
 
 --------------------------------------------------------------------------------
 -- ADDCOOKIE method                                                           --
@@ -192,6 +191,35 @@
     parts[i] = w~left(1)~upper || w~substr(2)~lower
   End
   Return parts~makeString("Line","-")
+
+--------------------------------------------------------------------------------
+-- REJECTCONTROLCHARS -- Fail fast on CR/LF (or any control char) at the       --
+-- origin, before a value reaches headers/cookies/commit.                     --
+--------------------------------------------------------------------------------
+--
+-- Measured against Apache 2.4.58 (audit-core-20260725.md §2.1): a CR/LF pair
+-- in a header value, a redirect location, or a cookie value/path/domain is
+-- NOT filtered by Apache. A single CRLF injects an extra header; a double
+-- CRLF closes the header block early and lets the attacker supply the body
+-- (and, via a smuggled Content-Type, run arbitrary HTML/JS in the app's own
+-- origin). Rejecting here -- at the exact rexxlet line that set the bad
+-- value -- rather than centrally in commit is deliberate (JMB, v98): a
+-- central check would still catch it, but the traceback would point at
+-- commit, not at the offending Say/response[...]=/redirect(...) call, which
+-- is what actually needs debugging. Same control-character test already used
+-- by HTTP.Cookie~validatename, for one rule across the package.
+--
+
+::Method rejectControlChars Private
+  Use Strict Arg label, s
+  Do i = 1 To s~length
+    c = s~substr(i,1)
+    If c~c2d < 32 | c~c2d == 127 Then
+      Raise syntax 93.900 array (-
+        label "contains a control character (CR, LF, or other; 0x"c~c2x")" -
+        "at position" i "-- rejected to prevent HTTP response splitting")
+  End
+  Return
 
 --------------------------------------------------------------------------------
 -- STATUSREASON -- Reason phrase for an HTTP status code                      --
@@ -350,7 +378,8 @@
 --
 
 ::Method error
-  Expose output headers
+  Expose output headers committed
+
   Use Strict Arg status, detail = ""
 
   If self~committed Then
@@ -365,7 +394,8 @@
   reason = self~statusReason(status)
   title  = status reason
 
- .output~destination(.StdOut)
+  If .output~current~isA( .HTTP.OutputStream ) Then
+   .output~destination
 
   Say "Content-type: text/html; charset=utf-8"
   Say "Status:" status reason
@@ -392,6 +422,7 @@
   Say "</body>"
   Say "</html>"
 
+  committed = .True
   Return 0
 
 --------------------------------------------------------------------------------
@@ -421,6 +452,8 @@
     Raise syntax 93.900 array (-
       "Cannot redirect: the response is already committed")
 
+  self~rejectControlChars("Redirect location", location)
+
   reason = self~statusReason(status)
 
   output~reset
@@ -445,11 +478,11 @@
     If committed Then
       Raise syntax 93.900 array (-
         "Cannot set a header: the response is already committed")
-    headername = message~left(message~length-1)~translate("-","_")
+    headername = message~left(message~length-1)~space~upper~translate("--","_ ")
     If args~dimension(1) < 1 Then Raise syntax 93.901 array (1)
     If args~dimension(1) > 1 Then Raise syntax 93.902 array (1)
-    headervalue = args[1]~request("STRING")
-    If headervalue == .nil Then Raise syntax 93.916 array (1)
+    headervalue = .Validate~requestClassType(1, args[1], .String)
+    self~rejectControlChars("Header '"headername"' value", headervalue)
     headers[headername] = headervalue
     Return
   End
@@ -458,4 +491,4 @@
 
   If args~dimension(1) > 0 Then Raise syntax 93.902 array (0)
 
-  Return headers[message~translate("-","_")]
+  Return headers[message~space~upper~translate("--","_ ")]

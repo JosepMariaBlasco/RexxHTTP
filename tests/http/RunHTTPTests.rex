@@ -12,27 +12,28 @@
 /* License: Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)  */
 /*                                                                            */
 /* Checks prerequisites (ooRexx, Apache, modules), deploys the five RexxHTTP  */
-/* sources plus a one-line wrapper, configures and starts Apache, deploys the */
-/* fixture rexxlets with their whitelist, runs the HTTP test suite, then      */
-/* stops Apache and cleans up whatever it created.                            */
+/* sources, configures and starts Apache, deploys the fixture rexxlets with   */
+/* their whitelist, runs the HTTP test suite, then stops Apache and cleans    */
+/* up whatever it created.                                                    */
 /*                                                                            */
-/* This script targets rexxlet (including WSL): it uses apt-get and Apache    */
+/* This script targets Linux (including WSL): it uses apt-get and Apache      */
 /* paths specific to Debian/Ubuntu.                                           */
 /*                                                                            */
-/* Montage note: the Action points at a one-line LF wrapper that Calls        */
-/* RexxHTTP.rex, NOT at RexxHTTP.rex directly. This mirrors the production    */
-/* deployment and sidesteps the CRLF-shebang exec problem (RexxHTTP.rex is    */
-/* materialised CRLF; reached via Call, its shebang stays an inert comment).  */
-/* The real production montage may differ in detail; when setup.md is         */
-/* rewritten to the real deployment, align the VirtualHost/Wrapper            */
-/* resources below.                                                           */
+/* Montage note: the Action points straight at RexxHTTP.rex, which is LF      */
+/* with a "#!/usr/bin/env rexx" shebang, so the kernel execs it directly.     */
+/* This mirrors the production deployment. The real production montage may    */
+/* differ in detail; when setup.md is rewritten to the real deployment,       */
+/* align the VirtualHost/conf resources below.                                */
 /*                                                                            */
 /* Usage:                                                                     */
-/*   rexx tests/http/RunHTTPTests.rex [--setup-only] [--no-stop]              */
+/*   rexx tests/http/RunHTTPTests.rex [--setup-only] [--no-stop] [--unit]     */
 /*                                                                            */
 /*   --setup-only   Check/install prerequisites and configure Apache, deploy  */
 /*                  sources and fixtures, but do not run the tests.           */
 /*   --no-stop      Do not stop Apache after running the tests.               */
+/*   --unit         Run only the pure unit tests (RexxHTTP.unitGroup): no     */
+/*                  Apache, no fixtures, no root. Classes are loaded from      */
+/*                  src/ and driven with injected stubs.                       */
 /*                                                                            */
 /* Version history:                                                           */
 /*                                                                            */
@@ -46,7 +47,7 @@
   sep = .File~separator
 
   If .RexxInfo~platform \== "LINUX" Then Do
-    Say "ERROR: RunHTTPTests.rex requires rexxlet (including WSL)."
+    Say "ERROR: RunHTTPTests.rex requires Linux (including WSL)."
     Say "Current platform:" .RexxInfo~platform
     Return 1
   End
@@ -63,24 +64,42 @@
 
   setupOnly = 0
   noStop    = 0
+  unitOnly  = 0
 
   Do i = 1 To Arg(1)~words
     option = Arg(1)~word(i)
     Select Case Lower(option)
       When "--setup-only" Then setupOnly = 1
       When "--no-stop"    Then noStop    = 1
+      When "--unit"       Then unitOnly  = 1
       Otherwise Do
         Say "Unknown option:" option
-        Say "Usage: rexx RunHTTPTests.rex [--setup-only] [--no-stop]"
+        Say "Usage: rexx RunHTTPTests.rex [--setup-only] [--no-stop] [--unit]"
         Return 1
       End
     End
   End
 
+  -- Unit mode: run the pure (non-HTTP) unit groups and exit. These need no
+  -- Apache, no fixtures, no root: they load the classes from src/ straight
+  -- into this process and drive them with injected stubs. REXX_PATH points
+  -- ::Requires at src/; the framework dir goes on PATH like the HTTP run.
+  If unitOnly Then Do
+    Say "Running RexxHTTP unit tests (no Apache)..."
+    Say "=========================================="
+    Say
+    savedDir = Directory()
+    Call Directory testsDir
+    unitEnv = 'REXX_PATH="'srcDir'" PATH="framework:http:$PATH"'
+    Address System unitEnv 'rexx http/RexxHTTP.unitGroup'
+    unitRC = RC
+    Call Directory savedDir
+    Return unitRC
+  End
+
   -- Deployment locations. These mirror the wired paths inside RexxHTTP.rex.
   deployDir   = "/var/www/html/RexxHTTP"
   testDir     = "/var/www/html/test"
-  wrapperFile = deployDir || "/wrapper"
   confFile    = "/etc/apache2/conf-available/rexx-cgi.conf"
 
   -- The five sources that must be deployed together.
@@ -89,12 +108,14 @@
 
   -- The fixture rexxlets, in whitelist order.
   fixtures = "hola multi qs check setck readck setckopts badck" -
-             "late partial boom htmltype polstrict polbad badnm arrout" -
+             "late partial boom htmltype polstrict polbad badnm bsnm arrout" -
              "commitfail flushcrash addckfail" -
              "setpair readpair readname dupck" -
              "err404 errgen errescape errreset rdr rdr301 rdr303"  -
              "envpool enc" -
-             "urlprobe urlnobar urlremap"
+             "urlprobe urlnobar urlremap" -
+             "crlfhdr crlfrdr crlfck" -
+             "errthenfail chunkecho methodbody ctnorm ctnormsp ctnormqm ctnormws argopt arroutopt headwrap nrdy"
 
   -- Per-fixture SetEnv lines for the .htaccess block. Each entry is an
   -- array of "NAME value" strings; under the Action sub-request Apache
@@ -103,7 +124,11 @@
   setEnvFor = .directory~new
   setEnvFor["polstrict"] = .array~of("REXXHTTP_ARGPOLICY Strict")    -- caseless; honoured
   setEnvFor["polbad"]    = .array~of("REXXHTTP_ARGPOLICY disparate") -- unknown -> 500
-  setEnvFor["envpool"]   = .array~of("MYPLAIN plainvalue", "_MYVAR underscored")
+  -- REDIRECT_HTTP_FAKE is deliberately named as the fallback of ~http_fake.
+  -- Under the Action sub-request Apache stacks its own prefix and it lands
+  -- as REDIRECT_REDIRECT_HTTP_FAKE, so it must NOT be reachable (v113).
+  setEnvFor["envpool"]   = .array~of("MYPLAIN plainvalue", "_MYVAR underscored", -
+                                     "REDIRECT_HTTP_FAKE fallbackvalue")
   -- request_url / script_name probe (v76 swap+rename). Three deployments of
   -- the same fixture code, each with a different .htaccess, exercise the
   -- swap's contract in a one-hop request (fixtures deploy under testDir,
@@ -184,7 +209,7 @@
   Say "  OK."
 
 --------------------------------------------------------------------------------
--- Step 4: Deploy the five sources + wrapper                                  --
+-- Step 4: Deploy the five sources                                  --
 --------------------------------------------------------------------------------
 
   Say "Deploying RexxHTTP sources to" deployDir"..."
@@ -197,18 +222,6 @@
     End
   End
   Address System "sudo chmod 755" deployDir"/RexxHTTP.rex"
-
-  -- The one-line wrapper. It is exec'd by the kernel, so it must be LF.
-  Say "Creating wrapper" wrapperFile"..."
-  tmpWrap = "/tmp/rexxhttp-wrapper.tmp"
-  wrapper = .Resources~Wrapper~makeString("L", "0A"x)
-  wrapper = wrapper~changeStr("%deployDir%", deployDir)
-  Call Stream tmpWrap, "C", "Open Write Replace"
-  Call CharOut tmpWrap, wrapper
-  Call Stream tmpWrap, "C", "Close"
-  Address System "sudo cp" tmpWrap wrapperFile
-  Address System "rm -f" tmpWrap
-  Address System "sudo chmod 755" wrapperFile
   Say "  OK."
 
 --------------------------------------------------------------------------------
@@ -221,12 +234,19 @@
   If RC == 0 Then
     Say "  Already exists (left as is)."
   Else Do
-    tmpConf = "/tmp/rexx-cgi.conf.tmp"
+    tmpConf = MakeTempFile("rexx-cgi.conf")
+    If tmpConf == "" Then Do
+      Say "  ERROR: Could not create a temporary file."
+      Return 1
+    End
     conf = .Resources~ApacheConf~makeString("L", "0A"x)
     Call Stream tmpConf, "C", "Open Write Replace"
     Call CharOut tmpConf, conf
     Call Stream tmpConf, "C", "Close"
-    Address System "sudo cp" tmpConf confFile
+    -- install -m 644, not cp: MakeTempFile leaves the staging file 600 and
+    -- this destination is created here, so cp would hand Apache a config it
+    -- cannot read.
+    Address System "sudo install -m 644" tmpConf confFile
     Address System "rm -f" tmpConf
     Address System "sudo a2enconf rexx-cgi > /dev/null 2>&1"
     createdConf = 1
@@ -243,9 +263,19 @@
     Address System "sudo cp" '"'fixturesDir || sep || fx'"' testDir
   End
 
+  -- The headwrap fixture serves a FIXED file next to itself on disk. Its
+  -- payload is a plain document (NOT a rexxlet: it stays out of the whitelist
+  -- below, so Apache serves it statically). The 63-byte count is contract --
+  -- the HEAD/GET wrapper tests lean on the fixed content.
+  Address System 'printf "FIXED PAYLOAD LINE 1\nFIXED PAYLOAD LINE 2\nFIXED PAYLOAD LINE 3\n" | sudo tee' testDir"/headwrap.data > /dev/null"
+
   -- Whitelist .htaccess: only the listed files are rexxlets; the rest are
   -- served statically.
-  tmpHt = "/tmp/rexxhttp-htaccess.tmp"
+  tmpHt = MakeTempFile("rexxhttp-htaccess")
+  If tmpHt == "" Then Do
+    Say "  ERROR: Could not create a temporary file."
+    Return 1
+  End
   Call Stream tmpHt, "C", "Open Write Replace"
   Do fx Over fixtures~makeArray(" ")
     Call LineOut tmpHt, "<Files" fx">"
@@ -257,7 +287,9 @@
     Call LineOut tmpHt, "</Files>"
   End
   Call Stream tmpHt, "C", "Close"
-  Address System "sudo cp" tmpHt testDir"/.htaccess"
+  -- install -m 644: Apache reads this .htaccess as www-data, and cp would
+  -- carry over the staging file's 600.
+  Address System "sudo install -m 644" tmpHt testDir"/.htaccess"
   Address System "rm -f" tmpHt
   Say "  OK."
 
@@ -285,11 +317,19 @@
 --------------------------------------------------------------------------------
 
   Say "Smoke test (curl http://127.0.0.1/test/hola)..."
+  -- Unpredictable name here too. Nothing privileged is copied out of this
+  -- file, but the shell redirect below would still follow a symlink left
+  -- at a fixed path by another local user.
+  tmpSmoke = MakeTempFile("http-smoke")
+  If tmpSmoke == "" Then Do
+    Say "  ERROR: Could not create a temporary file."
+    Return 1
+  End
   Address System "curl -s -o /dev/null -w '%{http_code}'" ,
-    "--noproxy 127.0.0.1 http://127.0.0.1/test/hola > /tmp/http-smoke.tmp 2>&1"
-  smoke = LineIn("/tmp/http-smoke.tmp")
-  Call Stream "/tmp/http-smoke.tmp", "C", "Close"
-  Address System "rm -f /tmp/http-smoke.tmp"
+    "--noproxy 127.0.0.1 http://127.0.0.1/test/hola >" tmpSmoke "2>&1"
+  smoke = LineIn(tmpSmoke)
+  Call Stream tmpSmoke, "C", "Close"
+  Address System "rm -f" tmpSmoke
   If smoke~strip \== "200" Then Do
     Say "  WARNING: smoke test returned" smoke~strip "(expected 200)."
     Say "  The tests may fail. Check the Apache configuration and error log."
@@ -369,11 +409,12 @@ Ask:
 /*   - docroot zone at /var/www/html/mtx, served in URL space at /mtx         */
 /*   - aliased zone at /opt/rexxhttp-matrix, served at /ali (Alias)           */
 /* Within each zone the same cgivars probe is deployed under the names each   */
-/* resolution needs, giving the "rexlet vs DirectoryIndex" and "one vs two    */
+/* resolution needs, giving the "rexxlet vs DirectoryIndex" and "one vs two    */
 /* hops" axes:                                                                */
-/*   probe.rxl        rexlet named directly           -> one hop              */
+/*   probe.rxl        rexxlet named directly           -> one hop              */
 /*   target.mtx       served by Action -> probe.rxl    -> two hops            */
 /*   index.rxl        DirectoryIndex of the zone root  -> one hop             */
+/*   wrapper.rxl      DirectoryIndex of the zone root  -> one hop             */
 /*   sub/index.mtx    DirectoryIndex -> Action          -> two hops            */
 /* The "with/without extra path" axis is exercised by the test URLs, not by   */
 /* deployment. DirectoryIndex + extra path is the impossible cell (Apache     */
@@ -396,36 +437,58 @@ DeployMatrix:
   Do zone Over .Array~of(docZone, aliZone)
     Address System "sudo mkdir -p" zone
     Address System "sudo mkdir -p" zone"/sub"
-    -- One hop, rexlet named:            probe.rxl
-    -- Two hops, rexlet as Action:       target.mtx (a plain file, run via Action)
+    -- One hop, rexxlet named:            probe.rxl
+    -- Two hops, rexxlet as Action:       target.mtx (a plain file, run via Action)
     -- One hop, DirectoryIndex:          index.rxl
     -- Two hops, DirectoryIndex->Action: sub/index.mtx
     Address System "sudo cp" '"'probe'"' zone"/probe.rxl"
     Address System "sudo cp" '"'probe'"' zone"/index.rxl"
     Address System 'printf "matrix target\n" | sudo tee' zone"/target.mtx > /dev/null"
     Address System 'printf "matrix index\n"  | sudo tee' zone"/sub/index.mtx > /dev/null"
+    -- v99: an Action document whose NAME needs percent-encoding (a space),
+    -- to prove rawResourcePath decodes REQUEST_URI before hitting disk. Only
+    -- meaningful in the docroot zone's Action path, but harmless in both.
+    Address System 'printf "spaced doc\n" | sudo tee "'zone'/spaced doc.mtx" > /dev/null'
   End
 
   -- Write the zone config from the MatrixConf resource and enable it.
-  tmpConf = "/tmp/rexxhttp-matrix.conf.tmp"
+  tmpConf = MakeTempFile("rexxhttp-matrix.conf")
+  If tmpConf == "" Then Return
   conf = .Resources~MatrixConf~makeString("L", "0A"x)
   Call Stream tmpConf, "C", "Open Write Replace"
   Call CharOut tmpConf, conf
   Call Stream tmpConf, "C", "Close"
-  Address System "sudo cp" tmpConf "/etc/apache2/conf-available/rexxhttp-matrix.conf"
+  Address System "sudo install -m 644" tmpConf "/etc/apache2/conf-available/rexxhttp-matrix.conf"
   Address System "rm -f" tmpConf
   Address System "sudo a2enconf rexxhttp-matrix > /dev/null 2>&1"
 
   Return
 
 /******************************************************************************/
+/* MakeTempFile: create a temporary file with an unpredictable name and mode  */
+/* 600, and return its path ("" if it could not be created).                  */
+/*                                                                            */
+/* Same routine as the installers carry in InstallHelpers.cls, repeated here  */
+/* because this runner deliberately has no ::Requires on install/ -- it must  */
+/* run against a plain checkout. A fixed name under /tmp can be pre-created   */
+/* as a symlink by any local user, and the sudo copies that follow would then */
+/* plant that content in Apache's configuration (CWE-377 / CWE-59). mktemp(1) */
+/* creates the file atomically with an unguessable suffix and no world access.*/
+/*                                                                            */
+/* The file is mode 600, so call sites whose destination must be readable by  */
+/* Apache install it with "install -m 644" rather than "cp".                   */
+/******************************************************************************/
+MakeTempFile: Procedure
+  Use Strict Arg prefix
+  out = .Array~new
+  Address System "mktemp" '"/tmp/'prefix'.XXXXXXXX"' With Output Using (out) Error Stem Discard.
+  If RC \== 0 Then Return ""
+  If out~items == 0 Then Return ""
+  Return out[1]~strip
+
+/******************************************************************************/
 /* Resources: the files this script generates.                               */
 /******************************************************************************/
-
-::Resource Wrapper
-#!/usr/bin/env rexx
-Call "%deployDir%/RexxHTTP.rex"
-::END
 
 ::Resource ApacheConf
 ServerName localhost
@@ -438,10 +501,9 @@ ServerName localhost
 
 ScriptAlias /RexxHTTP/ /var/www/html/RexxHTTP/
 
-# Action points at the wrapper (one-line LF Rexx that Calls RexxHTTP.rex),
-# not at RexxHTTP.rex directly: the wrapper's LF shebang keeps the kernel
-# happy, and RexxHTTP.rex is reached via Call so its CRLF shebang is inert.
-Action RexxHTTPCGI /RexxHTTP/wrapper
+# Action points straight at RexxHTTP.rex: it is LF with a
+# "#!/usr/bin/env rexx" shebang, so the kernel execs it directly.
+Action RexxHTTPCGI /RexxHTTP/RexxHTTP.rex
 
 <Directory "/var/www/html/test">
     AllowOverride All

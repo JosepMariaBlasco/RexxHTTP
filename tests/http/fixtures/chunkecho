@@ -1,0 +1,12 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- Probe for the chunked POST body reading (design-post-body-reading.md).
+-- Reports the transfer_encoding discriminator and the args parsed from the
+-- body, so a test can prove the body was read to EOF (no CONTENT_LENGTH) and
+-- reassembled in order.
+Say "transfer_encoding="request~transfer_encoding
+n = request~arg()
+Say "count="n
+Do i = 1 To n
+  Say i": "request~arg(i,"Name")"="request~arg(i,"Value")
+End

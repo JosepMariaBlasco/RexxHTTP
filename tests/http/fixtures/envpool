@@ -20,3 +20,25 @@ Say "plain_bracket=["request["myplain"]"]"
 -- REDIRECT_ fallback).
 Say "under_msg=["request~_myvar"]"
 Say "under_bracket=["request["_myvar"]"]"
+
+-- v113: the HTTP_ pool is gone. A client header resolves through the SAME
+-- single branch as everything else, both ways. Asserted non-empty rather
+-- than by value, so the test does not pin curl's version string.
+Say "hdr_msg=["request~http_user_agent"]"
+Say "hdr_bracket=["request["HTTP_USER_AGENT"]"]"
+
+-- The case the merge newly exposes: HTTP_ names now reach the REDIRECT_
+-- fallback too. It must stay inert -- Apache materialises HTTP_* only in
+-- the final request, so REDIRECT_HTTP_* exists in no topology.
+Say "hdr_absent=["request~http_x_never_sent"]"
+
+-- ...and inert even when the operator DEFINES the fallback name: the
+-- SetEnv REDIRECT_HTTP_FAKE in this fixture's .htaccess block arrives as
+-- REDIRECT_REDIRECT_HTTP_FAKE, because the Action sub-request stacks its
+-- own prefix on it. So it can never be picked up as ~http_fake's fallback.
+Say "hdr_fake=["request~http_fake"]"
+
+-- Control for the line above: the SetEnv DID arrive, under the stacked name.
+-- Without this the hdr_fake assertion would silently pass if the SetEnv were
+-- ever dropped from the .htaccess block, turning that test into a no-op.
+Say "hdr_fake_stacked=["request~redirect_redirect_http_fake"]"

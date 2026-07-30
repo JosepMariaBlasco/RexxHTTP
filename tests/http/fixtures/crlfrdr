@@ -1,0 +1,7 @@
+Use Arg request, response
+-- Double CRLF plus a smuggled Content-Type: the worst-case escalation
+-- measured in the audit (audit-core-20260725.md, section 2.1, "Escalon 3").
+loc = "/destino"||"0d0a"x||"Content-Type: text/html"||"0d0a0d0a"x||-
+      "<script>alert(1)</script>"
+response~redirect(loc)
+Say "should not reach here"

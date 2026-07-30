@@ -6,3 +6,7 @@
 <!ENTITY EDITION "2026.07.10">
 
 <!ENTITY Rexx "ooRexx">
+
+<!ENTITY nil   "<literal>.nil</literal>">
+<!ENTITY true  "<literal>.true</literal>">
+<!ENTITY false "<literal>.false</literal>">

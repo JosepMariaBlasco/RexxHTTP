@@ -47,6 +47,14 @@
   -- Validate the name against the RFC6265 token rules.
   self~validatename(name)
 
+  -- Same control-character rule as the name (see rejectcontrolchars): a
+  -- cookie value with an unencoded CR/LF is as capable of splitting the
+  -- Set-Cookie header as an unvalidated response header (audit-core-
+  -- 20260725.md §2.1). The class comment above says encoding is the
+  -- caller's job; this does not encode anything, it only refuses the one
+  -- byte range that can corrupt the response, at the line that set it.
+  self~rejectcontrolchars("Cookie value", value)
+
   -- Defaults: a session cookie (no Max-Age), not secure, not HttpOnly,
   -- no Path, no Domain, no SameSite emitted.
   path     = ""
@@ -77,9 +85,9 @@
     Error("Cookie name may not begin with '$'")
 
   -- Separators forbidden by RFC6265, plus control chars and whitespace.
-  -- The double-quote (22x) is one of them; built via x2c to keep the
-  -- literal below unambiguous.
-  separators = "()<>@,;:" || "22"x || "/[]?={}" || " " || "09"x
+  -- Both the double-quote (22x) and the backslash (5Cx) are among them;
+  -- built via x2c to keep the literal below unambiguous.
+  separators = "()<>@,;:" || "22"x || "/[]?={}" || "5C"x || " " || "09"x
   Do i = 1 To n~length
     c = n~substr(i,1)
     If c~c2d < 32 | c~c2d == 127 Then
@@ -93,8 +101,21 @@
   Return
 
 --------------------------------------------------------------------------------
--- Simple attribute getters/setters                                           --
+-- REJECTCONTROLCHARS (Private)                                              --
+-- Fail at the origin -- the setter/init call that received the bad value --  --
+-- not centrally at makestring, so the traceback points at the rexxlet line   --
+-- that set it. Same test as validatename's control-character check, applied  --
+-- to value/path/domain, which validatename does not cover.                   --
 --------------------------------------------------------------------------------
+
+::Method rejectcontrolchars Private
+  Use Strict Arg label, s
+  Do i = 1 To s~length
+    c = s~substr(i,1)
+    If c~c2d < 32 | c~c2d == 127 Then
+      Error(label "contains a control character (0x"c~c2x") at position" i)
+  End
+  Return
 
 ::Method name
   Expose name
@@ -107,6 +128,7 @@
 ::Method "value="
   Expose value cachedstring
   Use Strict Arg value
+  self~rejectcontrolchars("Cookie value", value)
   cachedstring = .nil
   Return
 
@@ -117,6 +139,7 @@
 ::Method "path="
   Expose path cachedstring
   Use Strict Arg path
+  self~rejectcontrolchars("Cookie path", path)
   cachedstring = .nil
   Return
 
@@ -127,6 +150,7 @@
 ::Method "domain="
   Expose domain cachedstring
   Use Strict Arg domain
+  self~rejectcontrolchars("Cookie domain", domain)
   cachedstring = .nil
   Return
 

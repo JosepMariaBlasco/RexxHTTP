@@ -29,34 +29,32 @@
 <chapter id="rationale"><title>Rationale</title>
 <indexterm><primary>rationale</primary></indexterm>
 
-<para>This chapter explains the design &mdash; not what RexxHTTP does, which the
-rest of the manual covers, but why it does it that way. The shape of the 1.0 is
-the result of a few decisions, most of them inherited from the 2006 original and
-kept because they are still right, a couple of them new and made by
-subtraction.</para>
+<para>The 1.0 rests on a small number of design decisions. Most are inherited
+from the 2006 original and kept because they remain correct. The rest are new,
+and each removes a choice rather than adding one.</para>
 
-<para>The largest decision is one of those subtractions, and the rest of this
-chapter reads more clearly once it is on the table. The 2006 RexxHTTP tried to be
-portable along three axes at once: it ran under both CGI and mod_rexx, on OS/2 and
-Windows as well as Unix, and aimed at Microsoft IIS beside Apache. Much of the
-original rationale was the bookkeeping of holding those axes together &mdash;
-reconciling the variables CGI provided with the ones mod_rexx provided, working
-around an OS/2 Object Rexx that lacked a <classname>MutableBuffer</classname>, and
-so on. The 1.0 keeps one point in that space: CGI, on Apache, on a current
-&Rexx;. mod_rexx is no longer maintained upstream, IIS and OS/2 are not targets
-anyone is asking for, and committing to a single gateway is what lets the rest of
-the design be simple. Several of the decisions below were originally compromises
-between two gateways; with only one gateway left, they reduce to a single clear
-answer, and this chapter states the answer rather than the old negotiation.</para>
+<para>The largest of those removals is the range of supported targets. The 2006
+RexxHTTP was portable along three axes at once: it ran under both CGI and
+mod_rexx, on OS/2 and Windows as well as Unix, and targeted Microsoft IIS beside
+Apache. Much of the original rationale was the bookkeeping of holding those axes
+together: reconciling the variables CGI provided with the ones mod_rexx
+provided, working around an OS/2 Object Rexx that lacked a
+<classname>MutableBuffer</classname>, and so on. The 1.0 keeps one point in that
+space: CGI, on Apache, on a current &Rexx;. mod_rexx is no longer maintained
+upstream, and IIS and OS/2 are not current targets. Committing to a single
+gateway is what allows the rest of the design to stay simple. Several of the
+decisions below began as compromises between two gateways. With one gateway
+left, each reduces to a single answer, and the sections below state that answer
+rather than the negotiation behind it.</para>
 
-<para>That wider original is not lost: it is described, in full, by the manual
-that shipped with it &mdash; Josep Maria Blasco,
+<para>The wider original design is described in full by the manual that shipped
+with it: Josep Maria Blasco,
 <emphasis role="italic">RexxHttp: Servlet programming in Rexx</emphasis>,
 version 0.1, 2 November 2006, available at
 <ulink url="https://www.epbcn.com/pdf/josep-maria-blasco/2006-11-02-RexxHttp-Servlet-programming-in-Rexx.pdf">https://www.epbcn.com/pdf/josep-maria-blasco/2006-11-02-RexxHttp-Servlet-programming-in-Rexx.pdf</ulink>.
-It remains the record of the portable, multi-gateway design; this manual
-documents the narrower 1.0 that grew out of it, and the decisions below are the
-ones that narrowing settled.</para>
+That manual remains the record of the portable, multi-gateway design. The
+present manual documents the narrower 1.0 that grew out of it, and the decisions
+below are the ones that narrowing settled.</para>
 <indexterm><primary>history</primary></indexterm>
 
 <section id="rationale-handler"><title>Associating Rexx Files with a Handler</title>
@@ -68,23 +66,22 @@ ones that narrowing settled.</para>
 <para>A rexxlet is an ordinary &Rexx; file, and the web server has to be told to
 run it through RexxHTTP rather than serve it or execute it directly. Apache's
 <literal>Action</literal> directive is the mechanism: it binds a handler name to
-the RexxHTTP processor, and a small wrapper invokes that handler for the rexxlet
-files it is given. This is the same approach the 2006 manual described, and it
-has aged well precisely because it asks nothing unusual of Apache &mdash;
-<literal>Action</literal> is a stock directive, and the routing is data in the
-configuration rather than logic in the processor.</para>
+the RexxHTTP processor, and Apache invokes the processor for the rexxlet files
+that fall under that handler. The 2006 manual described the same approach. It
+asks nothing unusual of Apache, because <literal>Action</literal> is a stock
+directive and the routing is data in the configuration rather than logic in the
+processor.</para>
 
-<para>What has changed is the disposition. In 2006 the natural move was to map
-broad extensions &mdash; <literal>.htm</literal>, <literal>.html</literal>,
-<literal>.rsp</literal> &mdash; to the handler, because the point was to run whole
-trees of pages, some of them compiled, through one gateway. The 1.0 has no page
-compilers and no such ambition, and the
-<xref linkend="installation" xrefstyle="select:title"/> chapter recommends the
-opposite default: a whitelist, so that only the files explicitly marked are run
-as rexxlets and everything else is served as a static file. On infrastructure that
-has served tens of thousands of URLs for years, <quote>run as code only what is
-named</quote> is the conservative and correct default; opening an extension to the
-handler is the exception, made deliberately.</para>
+<para>What has changed is the recommended default. In 2006, broad extensions
+(<literal>.htm</literal>, <literal>.html</literal>, <literal>.rsp</literal>) were
+mapped to the handler, because the aim was to run whole trees of pages, some of
+them compiled, through one gateway. The 1.0 has no page compilers and no such
+aim. The <xref linkend="installation" xrefstyle="select:title"/> chapter
+recommends the opposite default: a whitelist, so that only the files explicitly
+marked are run as rexxlets and everything else is served as a static file. On
+infrastructure that has served tens of thousands of URLs for years, running as
+code only what is named is the conservative default. Opening an extension to the
+handler is the exception, and is made deliberately.</para>
 
 </section>
 
@@ -93,110 +90,111 @@ handler is the exception, made deliberately.</para>
 <indexterm><primary>environment pool</primary></indexterm>
 <indexterm><primary>request</primary></indexterm>
 
-<para>CGI delivers a request as a set of environment variables, and RexxHTTP takes
-that literally: the request object answers any message it does not recognise with
-the value of the like-named environment variable. This is the single most
-Rexx-like decision in the design. &Rexx; programs reach their world through
-<literal>Value</literal> and through variables; making
-<computeroutput>request~remote_addr</computeroutput> resolve to the
-<literal>REMOTE_ADDR</literal> the server set means a rexxlet author touches the
-CGI environment the same way they touch everything else, without a lookup table or
-an import step. The mechanics are in the Class Reference under
-<xref linkend="cls-req-envpool" xrefstyle="select:title"/>; the reason is that the
-request object should feel like Rexx, not like a wrapper bolted over Rexx.</para>
+<para>CGI delivers a request as a set of environment variables, and RexxHTTP
+takes that literally: the request object answers any message it does not
+recognise with the value of the like-named environment variable. &Rexx; programs
+reach their world through <literal>Value</literal> and through variables.
+Resolving <computeroutput>request~remote_addr</computeroutput> to the
+<literal>REMOTE_ADDR</literal> the server set means a rexxlet author reaches the
+CGI environment the same way as everything else, without a lookup table or an
+import step. The mechanics are in the Class Reference under
+<xref linkend="cls-req-envpool" xrefstyle="select:title"/>.</para>
 
-<para>This convenience raises one question. If
-<computeroutput>request~anything</computeroutput> can name an environment variable,
-then a variable could share a name with a method &mdash; present or future &mdash;
-and the author needs a predictable answer to which one wins. The 2006 manual
-settled it by carving out a namespace: operator-set variables had to begin with an
-underscore, where no method would ever live. It worked, but it asked the author to
-remember a naming rule, and the variables that motivated it &mdash; timezone hints
-for the old Netscape-style cookies, settings for the page compilers &mdash; are all
-gone from the 1.0. So the rule went with them, in favour of something plainer: two
-doors instead of one reserved name. <computeroutput>request~name</computeroutput>
-is the library's view, where a method wins when one exists, exactly as &Rexx;
-method lookup already works; <computeroutput>request["name"]</computeroutput> is the
-raw variable underneath, which always reaches the environment pool and never a
-method. An operator-set variable is then just an ordinary variable &mdash;
+<para>This raises one question. If
+<computeroutput>request~anything</computeroutput> can name an environment
+variable, then a variable can share a name with a method, present or future, and
+the author needs a predictable answer to which one wins. The 2006 manual settled
+it by carving out a namespace: operator-set variables had to begin with an
+underscore, where no method would ever live. That rule required the author to
+remember a naming convention, and the variables that motivated it (timezone
+hints for the old Netscape-style cookies, settings for the page compilers) are
+gone from the 1.0. The rule went with them, in favour of two forms of access
+instead of one reserved name.
+<computeroutput>request~name</computeroutput> is the library's view, where a
+method wins when one exists, exactly as &Rexx; method lookup already works.
+<computeroutput>request["name"]</computeroutput> is the raw variable underneath,
+which always reaches the environment pool and never a method. An operator-set
+variable is then an ordinary variable, requiring no underscore:
 <computeroutput>SetEnv MYAPP_MODE production</computeroutput> is
-<computeroutput>request~myapp_mode</computeroutput>, no underscore required &mdash;
-and if a future method ever shadowed it, the bracket form reaches it regardless.
-The collision question is answered not by reserving names but by giving the author
-a way to ask for either side of one.</para>
+<computeroutput>request~myapp_mode</computeroutput>. If a future method ever
+shadowed it, the bracket form would still reach it. The collision question is
+answered by giving the author access to either side of a name, not by reserving
+names.</para>
 
 </section>
 
 <section id="rationale-request-values"><title>The Problem of Request Values</title>
 <indexterm><primary>request values</primary></indexterm>
 
-<para>The trickiest part of the 2006 rationale was titled <quote>the problem of
-request values,</quote> and the problem was real: what Apache actually invokes is
-the RexxHTTP processor, not the rexxlet, so the raw CGI variables describe the
-processor's invocation, not the request the rexxlet means to read. On top of that,
-the CGI specification is in places ambiguous or self-contradictory, and the 2006
-system had to paper over differences between what CGI reported and what mod_rexx
-reported for the same notion.</para>
+<para>The 2006 rationale gave the title <quote>the problem of request
+values</quote> to a real difficulty: what Apache invokes is the RexxHTTP
+processor, not the rexxlet, so the raw CGI variables describe the processor's
+invocation rather than the request the rexxlet means to read. The CGI
+specification is also ambiguous or self-contradictory in places, and the 2006
+system had to reconcile what CGI reported with what mod_rexx reported for the
+same notion.</para>
 
-<para>With mod_rexx gone, the second half of that problem evaporates: there is one
-gateway, so there is nothing to reconcile. What remains is the first half &mdash;
-reconstructing the values a rexxlet <emphasis role="italic">should</emphasis> see
-from the values the processor is <emphasis role="italic">handed</emphasis> &mdash;
-and a commitment the 2006 design made and the 1.0 keeps: where CGI is inconsistent,
-RexxHTTP is consistent, and it documents what its methods mean rather than passing
-the server's quirks through. Three cases from the original are worth keeping,
-because the methods still behave as described and the reasoning is still the
-cleanest account of why:</para>
+<para>With mod_rexx gone, the second half of that problem no longer arises:
+there is one gateway, so there is nothing to reconcile. What remains is the
+first half, reconstructing the values a rexxlet
+<emphasis role="italic">should</emphasis> see from the values the processor is
+<emphasis role="italic">handed</emphasis>. The 2006 design made a commitment
+here that the 1.0 keeps: where CGI is inconsistent, RexxHTTP is consistent, and
+it documents what its methods mean rather than passing the server's quirks
+through. Three cases from the original still describe how the methods behave:</para>
 
-<para><methodname>path_translated</methodname> always answers the full filesystem
-path of the rexxlet file, whether or not there is extra path information after it.
-The CGI specification's own definition of this variable is incoherent &mdash; it
-promises a <quote>translated version</quote> of the extra path info, which by
-construction has no physical mapping &mdash; and Apache, left to itself, returns
-something useless. RexxHTTP picks the meaning that is actually useful and holds to
-it.</para>
+<para><methodname>path_translated</methodname> always answers the full
+filesystem path of the document being served, whether or not there is extra path
+information after it. The CGI specification's definition of this variable is
+incoherent: it promises a <quote>translated version</quote> of the extra path
+info, which by construction has no physical mapping. Apache, left to itself,
+returns a value of no use here. RexxHTTP answers the useful meaning and holds to
+it. Where the client names a rexxlet directly the document and the processor are
+one file; where an Action routes the request they are two, and
+<methodname>script_filename</methodname> names the processor.</para>
 
 <para><methodname>script_name</methodname> always answers the virtual path that
-locates the rexxlet, with any extra path information stripped &mdash; what is needed
-for building self-referential URLs &mdash; and <methodname>path_info</methodname>
-answers that extra path, decoded, or the null string when there is none. The split
-between the two is clean by design, so a rexxlet can always ask <quote>where am
-I?</quote> and <quote>what came after me?</quote> as separate questions.</para>
+locates the rexxlet, with any extra path information stripped, which is what
+building self-referential URLs requires.
+<methodname>path_info</methodname> answers that extra path, decoded, or the null
+string when there is none. The split between the two is deliberate, so that a
+rexxlet can ask where it is and what followed it as separate questions.</para>
 
 <para><methodname>request_uri</methodname> (with its alias
-<methodname>unparseduri</methodname>) answers the request URI exactly as the client
-sent it, still encoded; <methodname>uri</methodname> answers the decoded path with
-the query string removed. Naming both, with stable meanings, spares the rexxlet
-author from guessing which encoding and which trimming a given server happened to
-apply.</para>
+<methodname>unparseduri</methodname>) answers the request URI exactly as the
+client sent it, still encoded. <methodname>uri</methodname> answers the decoded
+path with the query string removed. Naming both, with stable meanings, removes
+any need to determine which encoding and which trimming a given server
+applied.</para>
 
-<para>The thread through all three is the same: the request object is a
-<emphasis role="italic">specification</emphasis> the rexxlet can rely on, not a thin
-pass-through of whatever the gateway felt like reporting.</para>
+<para>All three follow the same principle: the request object is a
+<emphasis role="italic">specification</emphasis> a rexxlet can rely on, not a
+pass-through of what the gateway reported.</para>
 
 </section>
 
 <section id="rationale-strict"><title>Strict by Default</title>
 <indexterm><primary>strict by default</primary></indexterm>
 
-<para>The 1.0 parses GET and POST arguments under a single, default, and currently
-only argument policy, <literal>strict</literal>: every parameter must be a genuine
-<replaceable>name</replaceable><literal>=</literal><replaceable>value</replaceable>
-pair, the name must be a usable &Rexx; symbol and must be unique caselessly, and a
-request that breaks any of these is answered <literal>400 Bad Request</literal>
-before the rexxlet runs at all. The mechanics are in
-<xref linkend="cls-req-argpolicy" xrefstyle="select:title"/>; the decision is to
-make this the default rather than an opt-in.</para>
+<para>The 1.0 parses GET and POST arguments under a single, default, and
+currently only argument policy, <literal>strict</literal>. Every parameter must
+be a genuine
+<emphasis role="italic">name</emphasis><literal>=</literal><emphasis role="italic">value</emphasis>
+pair, the name must be a usable &Rexx; symbol, and the name must be unique
+caselessly. A request that breaks any of these is answered
+<literal>400 Bad Request</literal> before the rexxlet runs at all. The mechanics
+are in <xref linkend="cls-req-argpolicy" xrefstyle="select:title"/>. The decision
+is to make this the default rather than an opt-in.</para>
 
-<para>The reasoning is specific to the kind of service RexxHTTP exists to run. For
-a public site with a large, stable set of URLs &mdash; the case RexxHTTP was
-extracted from &mdash; malformed argument input is not a case to be handled
-gracefully; it is a request that cannot have come from the site's own pages, and
-the safe, predictable response is to reject it at the door. Strict-by-default turns
-a class of ambiguous input into a clear <literal>400</literal>, and in exchange
-every rexxlet downstream gets to assume that each argument it sees has a name and a
-value, and that a name names exactly one argument. The strictness is a feature paid
-for once, at the boundary, so that no rexxlet has to pay for it again.</para>
+<para>The reasoning is specific to the kind of service RexxHTTP exists to run.
+For a public site with a large, stable set of URLs, which is the case RexxHTTP
+was extracted from, malformed argument input cannot have come from the site's
+own pages, and the predictable response is to reject it before the rexxlet runs.
+Strict-by-default turns a class of ambiguous input into a
+<literal>400</literal>. In exchange, every rexxlet downstream can assume that
+each argument it sees has a name and a value, and that a name names exactly one
+argument. The check is made once, at the boundary, so that no rexxlet has to
+repeat it.</para>
 
 </section>
 </chapter>

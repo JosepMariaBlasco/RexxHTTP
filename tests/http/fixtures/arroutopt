@@ -1,0 +1,23 @@
+Use Arg request, response
+response~content_type = "text/plain"
+
+-- "LINEAS" begins with L, so it must now be accepted silently as LINES --
+-- same first-letter convention as arg()/cookie() (ref-decisiones.md).
+-- Before this fix, arrayout used abbrev() on the full word and REJECTED
+-- this (not a prefix of "LINES"); that stricter check is gone now that
+-- arrayout follows the same rule as arg()/cookie().
+os = response~output
+os~arrayout(.array~of("uno","dos"), "LINEAS")
+Say "lineas_accepted=[ok]"
+
+-- A letter matching neither L nor C must still be rejected, with a
+-- well-formed three-argument 93.914 (the old two-argument call put the
+-- word list where the argnum belongs and corrupted the message).
+Signal On Syntax Name arraybad
+os~arrayout(.array~of("uno","dos"), "xoop")
+Say "arrayout_bad_letter=[no error raised, WRONG]"
+Signal arraybadskip
+arraybad:
+c = Condition("O")
+Say "arrayout_bad_letter=["c~code"|"c~message"]"
+arraybadskip:

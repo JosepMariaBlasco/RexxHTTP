@@ -1,4 +1,4 @@
-#!rexx
+#!/usr/bin/env rexx
 /******************************************************************************/
 /*                                                                            */
 /* RexxHTTP.rex - A ooRexx rexxlet processor                                  */
@@ -28,9 +28,12 @@
   -- If RexxHTTP.rex is called directly, simulate a 404 Not Found error
   If Direct() Then Signal NotFound
 
+  REXX_PATH = Env("REDIRECT_REXX_PATH")
+  Call Value "REXX_PATH", REXX_PATH, "ENVIRONMENT"
+
   -- Create the request and response objects
- .environment~request  = .HTTP.Request~new()
- .environment~response = .HTTP.Response~new()
+ .local~request  = .HTTP.Request~new()
+ .local~response = .HTTP.Response~new()
   -- The response object creates a buffered output stream
   bufferedOutput       = .response~output
 
@@ -50,14 +53,27 @@
     Else                        Signal BadRequest    -- client error:   400
   End
 
-  -- Set the buffered output stream as the default output stream
-  originalOutput = .output~destination(bufferedOutput)
+  -- Set the buffered output stream as the default output stream.
+  -- NOTE: .output~destination is a STACK, not a setter -- with an argument it
+  -- PUSHES a new destination, without one it POPS back to the previous. The
+  -- return value is NOT the previous destination (it is the one just pushed),
+  -- so there is nothing worth keeping.
+  --
+  -- We keep NO bookkeeping flag for "did we push?". The single source of truth
+  -- is the stack itself: .output~current is the destination on top, and it is
+  -- our buffer if and only if it isA HTTP.OutputStream. Both this normal path
+  -- and the Syntax handler decide whether to pop by asking that question --
+  -- so error(), which pops on its own, can never desynchronise a flag from
+  -- the real stack state (the v97 double-pop bug). current is a READ, not a
+  -- pop, and on an un-redirected stack it returns STDOUT (a .Stream), never
+  -- .NIL, so the test is safe to ask in any state.
+ .output~destination(bufferedOutput)
     -- Call our rexxlet!
-    Call (callee) .request, .response
-  -- Restore the previous output stream
- .output~destination(originaloutput)
-
-  Drop originaloutput
+    Call (callee) .request, .response, bufferedOutput
+  -- Restore the previous output stream, but only if our buffer is still on
+  -- top: a rexxlet that called error()/404() already popped it, and popping
+  -- again would empty the stack and leave .output on .NIL.
+  If .output~current~isA(.HTTP.OutputStream) Then .output~destination
 
   -- Flush the response. This will write the headers if necessary
  .response~flush
@@ -67,7 +83,20 @@
 
 --------------------------------------------------------------------------------
 
-Direct: Return Env(request_uri)~caselessContains("RexxHTTP.rex") > 0
+-- Direct: is RexxHTTP.rex being invoked DIRECTLY by URL, rather than reached
+-- through the Action that dispatches a rexxlet to us? A direct hit has no
+-- document to run, so it is a 404.
+--
+-- The discriminator is REDIRECT_HANDLER: Apache sets it (to the Action's
+-- handler name) on every Action dispatch -- one hop or two -- and leaves it
+-- empty on a direct URL hit. Measured across the direct, one-hop and two-hop
+-- topologies. The old test searched REQUEST_URI for the substring "RexxHTTP.rex"
+-- unanchored, which false-positived on any request whose QUERY STRING merely
+-- mentioned the name (e.g. ?doc=RexxHTTP.rex returned a spurious 404 over a
+-- valid rexxlet). We do not care about the handler's NAME, only whether ANY
+-- Action redirect brought us here, so an emptiness test is exactly right and
+-- is immune to the query string. See ref-decisiones.md "v99 -- Direct()".
+Direct: Return Env("REDIRECT_HANDLER") == ""
 
 --------------------------------------------------------------------------------
 -- Env: Return the value of an environment variable                           --
@@ -161,8 +190,17 @@ Syntax:
 
   Signal off syntax                               -- Avoid loops
 
-  -- Restore STDOUT if necessary
-  If Var("originalOutput") Then .output~destination --(originalOutput)
+  -- Pop the buffered stream off .output's destination stack, but only if it
+  -- is actually on top. Popping an empty stack leaves .output on .NIL, and
+  -- .NIL does not understand SAY -- the error page below would die with a
+  -- 97.1 instead of reaching the client. We ask the stack itself
+  -- (.output~current isA HTTP.OutputStream) rather than trusting a flag, so
+  -- a rexxlet that already popped -- e.g. via error() -- is handled correctly:
+  -- current is then STDOUT, the test is false, and we do NOT pop again. This
+  -- is the fix for the v97 double-pop (error() + this handler both popping).
+  -- The pop call takes NO argument on purpose: that is what asks for a pop
+  -- (an argument would push again). current is a read, never a pop.
+  If .output~current~isA(.HTTP.OutputStream) Then .output~destination
 
   If error~code == 98.900 Then Do
     -- 98.900 is our internal signal: a configuration condition a method
@@ -210,6 +248,20 @@ Syntax:
     -- the response is committed (or mid-commit), the headers are already
     -- on the wire and setting them now would raise (committed) or corrupt
     -- a half-written response (committing). commit itself is idempotent.
+    --
+    -- KNOWN AND ACCEPTED: if the rexxlet called ~commit itself and THEN
+    -- failed, the client gets the status that commit already emitted --
+    -- typically "200 OK" -- with this error page as the body, and the
+    -- body the rexxlet had buffered before the failure is lost (commit
+    -- writes the headers straight to the underlying stream; only ~flush
+    -- drains the body buffer, and we Exit before reaching it).
+    -- Not worth fixing: the status cannot be recalled once it is on the
+    -- wire, so a ~flush here would not make the response truthful -- it
+    -- would only append the partial body ahead of the trace, at the cost
+    -- of more code on the most delicate path in the processor. The error
+    -- and its failing line DO reach the client, so nothing fails silently,
+    -- and a rexxlet that commits by hand has already opted out of the
+    -- buffered model. See ref-decisiones.md (v95).
     If \.response~committed, \.response~committing Then Do
      .response~content_type = "text/plain; charset=utf-8"
      .response~status       = "500 Internal Server Error"

@@ -34,14 +34,14 @@
 
 <para>RexxHTTP runs as a CGI program under Apache. There are two ways to
 install it. The package ships with an installer that does the whole job in one
-command &mdash; it fetches or installs Apache, deploys RexxHTTP, and leaves a
+command: it fetches or installs Apache, deploys RexxHTTP, and leaves a
 complete installation you can open in a browser and explore, welcome page and
 worked examples included. That is the recommended route, and it
 is the one described first, in
 <xref linkend="install-installer" xrefstyle="select:title"/>. It should work on a
-machine where Apache is not yet set up; if it does not fit your situation &mdash;
-you already run Apache, or you want to understand and place each piece yourself
-&mdash; <xref linkend="install-manual" xrefstyle="select:title"/> is the manual
+machine where Apache is not yet set up; if it does not fit your situation (you already run Apache, or you want to
+understand and place each piece yourself),
+<xref linkend="install-manual" xrefstyle="select:title"/> is the manual
 recipe, from the prerequisites through the directives that turn a file into a
 rexxlet.</para>
 
@@ -53,12 +53,12 @@ rexxlet.</para>
 <para>The package includes an installer that sets up a complete, working
 RexxHTTP installation. It installs Apache, deploys the RexxHTTP sources, plants a
 welcome page and a set of example rexxlets, and finishes by checking that the
-result actually serves a request &mdash; everything a first working install
+result actually serves a request: everything a first working install
 needs, ready to open in a browser and explore.</para>
 
 <para>It is written for the clean-machine case. If it finds that Apache is
 already installed, it stops without changing anything and points to the manual
-recipe &mdash; placing RexxHTTP onto an Apache that already exists, or that you
+recipe. Placing RexxHTTP onto an Apache that already exists, or that you
 would rather configure yourself, is what
 <xref linkend="install-manual" xrefstyle="select:title"/> is for.</para>
 
@@ -74,16 +74,16 @@ the unpacked package and run:</para>
 rexx install
 </programlisting>
 
-<para>It first checks the prerequisites &mdash; that the &Rexx; interpreter is
-version 5.2.0 or later, and that the tools it needs are present &mdash; then
+<para>It first checks the prerequisites (that the &Rexx; interpreter is
+version 5.2.0 or later, and that the tools it needs are present), then
 shows what it is about to do and asks for confirmation before changing anything.
 When the installation is finished, it prints an address for you to open and
 confirm the result works. On Linux and Windows that is
 <literal>http://localhost/</literal>; on macOS, where the Homebrew Apache serves
 on port 8080 so that it needs no administrator rights, it is
 <literal>http://localhost:8080/</literal>. Opening that address shows the welcome
-page, which is itself a rexxlet &mdash; if it appears, the processor is working
-&mdash; and links to the bundled examples.</para>
+page, which is itself a rexxlet (if it appears, the processor is working) and
+links to the bundled examples.</para>
 
 <para>A few options adjust its behaviour: <literal>--yes</literal> answers every
 prompt in advance, for an unattended run; on Windows, <literal>--root</literal>
@@ -98,26 +98,26 @@ listens on, described further below. Running
 administrator rights at all, the case of a student, or any machine where
 nobody is going to hand out that access. Under <literal>--user</literal> the
 default root becomes <filename>%USERPROFILE%\Apache24</filename> rather than
-<filename>C:\Apache24</filename> &mdash; still overridable with
-<literal>--root</literal> &mdash; and nothing is registered as a Windows
+<filename>C:\Apache24</filename>, still overridable with
+<literal>--root</literal>, and nothing is registered as a Windows
 service. Apache is started instead from a <filename>start.cmd</filename> left
 at the root of the server tree, which opens the server in its own window and
 hands the console back; closing that window stops the server, and unlike a
-service it does not start again on its own after a reboot &mdash; reopening
+service it does not start again on its own after a reboot; reopening
 <filename>start.cmd</filename> does. How to remove a <literal>--user</literal>
 install is covered below, alongside the rest of uninstallation.</para>
 
 <para><literal>--port</literal> changes the port Apache listens on. Unlike the
 options above it applies on every platform. Left alone, the installer uses the
-platform's own default &mdash; the same one behind the address it prints to open
+platform's own default, the same one behind the address it prints to open
 at the end: 80 on Linux and Windows, 8080 on macOS. Passing
 <command>--port</command> with a number from 1 to 65535 puts Apache on that port
 instead, and the closing address is adjusted to match. This matters most when
 the default port is already taken: before it changes anything, the installer
 checks whether the port it means to use is free, and if it is not, it stops and
 suggests trying again with another <literal>--port</literal> rather than
-disturbing whatever already holds it. The uninstaller needs no such option
-&mdash; it restores the original port on its own, so <literal>--port</literal>
+disturbing whatever already holds it. The uninstaller needs no such option: it restores the original port on its
+own, so <literal>--port</literal>
 is an install-time choice only.</para>
 
 <para>To reverse the installation, a companion uninstaller removes what was put
@@ -133,7 +133,7 @@ by platform. On <emphasis role="bold">Linux</emphasis> and
 the Apache tree, in a per-machine location that stays put no matter where Apache
 itself was installed: by default
 <filename>C:\ProgramData\rexxhttp</filename>. There it takes the form of a
-launcher you run by its full path from an elevated console &mdash; by default
+launcher you run by its full path from an elevated console, by default
 <command>C:\ProgramData\rexxhttp\rexxhttp-uninstall.cmd</command>. You need not
 memorise it: the installer prints the exact path when it finishes. A
 <literal>--user</literal> install is the exception: having never had
@@ -145,8 +145,8 @@ time).</para>
 
 <para>By default the uninstaller is symmetric with the install: it removes
 RexxHTTP and the Apache the installer had added, returning the machine to its
-earlier state. To keep Apache and retire only RexxHTTP &mdash; the case where
-RexxHTTP was a guest on a server used for other things too &mdash; add
+earlier state. To keep Apache and retire only RexxHTTP (the case where
+RexxHTTP was a guest on a server used for other things too), add
 <literal>--keep-apache</literal>. On Windows this leaves the Apache service
 registered and running, merely reloaded without the RexxHTTP handler; on Linux
 and macOS it likewise leaves the running Apache untouched beyond dropping the
@@ -168,8 +168,8 @@ changes.</para>
 Parser</application>,<footnote><para><ulink url="https://rexx.epbcn.com/rexx-parser/">https://rexx.epbcn.com/rexx-parser/</ulink></para></footnote>
 a separate &Rexx; package. What matters is that the Parser be reachable
 <emphasis role="italic">at install time</emphasis>: the installer looks for it
-then &mdash; in the current directory, in <envar>REXX_PATH</envar>, and in
-<envar>PATH</envar> &mdash; and, if it finds it, records its location in the
+then (in the current directory, in <envar>REXX_PATH</envar>, and in
+<envar>PATH</envar>) and, if it finds it, records its location in the
 Apache configuration. It does not have to be on the system <envar>PATH</envar>
 permanently; it only has to be findable while RexxHTTP is being installed.</para>
 
@@ -181,7 +181,8 @@ location is recorded and listings are simply served uncoloured; installing the
 Parser and reinstalling RexxHTTP enables highlighting later.</para>
 
 <para>On some distributions the Parser is already present and reachable out of
-the box &mdash; the <application>net-oo-rexx</application> bundle, for instance,
+the box: the
+<application>net-oo-rexx</application><footnote><para><ulink url="https://github.com/RexxLA/net-oo-rexx/tree/main">https://github.com/RexxLA/net-oo-rexx/tree/main</ulink></para></footnote> bundle, for instance,
 ships it ready to use, so highlighting works with no extra setup.</para>
 </section>
 
@@ -189,8 +190,8 @@ ships it ready to use, so highlighting works with no extra setup.</para>
 <indexterm><primary>installation</primary><secondary>manual</secondary></indexterm>
 
 <para>The rest of this chapter is the other route: setting up RexxHTTP by hand,
-one piece at a time. It is the route to take when the installer does not fit
-&mdash; when Apache is already running and the installer steps aside rather than
+one piece at a time. It is the route to take when the installer does not fit: when Apache is
+already running and the installer steps aside rather than
 touch it, or when the machine is not one of the three the installer knows, or
 simply when it is worth seeing what the installer does on your behalf. Nothing
 here depends on the installer having run; the two routes reach the same working
@@ -240,9 +241,9 @@ depending on the build: <literal>cgid</literal> on the multi-threaded servers
 usual on Linux and macOS, and plain <literal>cgi</literal> on the default Windows
 build. The two are interchangeable as far as RexxHTTP is concerned; each platform
 below names the one that applies to it. This section installs Apache and enables
-both modules on Linux, macOS and Windows. Each platform reaches the same place
-&mdash; a running server ready for the RexxHTTP-specific configuration that
-follows &mdash; by the route that is idiomatic for it, so the commands differ even
+both modules on Linux, macOS and Windows. Each platform reaches the same place (a running server ready for the
+RexxHTTP-specific configuration that follows) by the route that is idiomatic
+for it, so the commands differ even
 though the destination does not. A reader who already has Apache 2.4 with the CGI
 module and <literal>actions</literal> enabled can move on to the next
 section.</para>
@@ -273,7 +274,7 @@ with the two modules enabled by their <literal>LoadModule</literal> lines under
 <command>a2enmod</command>.</para>
 
 <para>These same instructions apply unchanged inside the Windows Subsystem for
-Linux (WSL), running a Debian or Ubuntu distribution &mdash; a route many Windows
+Linux (WSL), running a Debian or Ubuntu distribution, a route many Windows
 users find easier than a native Windows install. The server is reached the same
 way as a native one: from a browser on the Windows side, it answers at
 <literal>http://localhost/</literal>, exactly as if Apache had been installed
@@ -281,8 +282,8 @@ directly under Windows.</para>
 </section>
 
 <section id="install-apache-macos"><title>macOS (Homebrew)</title>
-<para>The Apache that ships inside macOS is awkward to rely on &mdash; Apple has
-been retiring it &mdash; so the practical route is the
+<para>The Apache that ships inside macOS is awkward to rely on, because Apple has
+been retiring it, so the practical route is the
 <application>Homebrew</application> build, installed as the formula
 <literal>httpd</literal>:</para>
 
@@ -294,7 +295,7 @@ processor: on Apple Silicon the prefix is
 <filename>/opt/homebrew</filename>, on older Intel Macs it is
 <filename>/usr/local</filename>. The command <command>brew --prefix</command>
 prints the right one; the configuration file is then
-<filename><replaceable>PREFIX</replaceable>/etc/httpd/httpd.conf</filename>. Open
+<filename><emphasis role="italic">PREFIX</emphasis>/etc/httpd/httpd.conf</filename>. Open
 it in an editor. The two <literal>LoadModule</literal> lines for the modules
 RexxHTTP needs are present but commented out in the module section; remove the
 leading <literal>#</literal> from each:</para>
@@ -303,8 +304,8 @@ leading <literal>#</literal> from each:</para>
 LoadModule actions_module lib/httpd/modules/mod_actions.so
 </programlisting>
 
-<para>Start the server &mdash; and restart it after any change to
-<filename>httpd.conf</filename> &mdash; with:</para>
+<para>Start the server, and restart it after any change to
+<filename>httpd.conf</filename>, with:</para>
 
 <programlisting>brew services start httpd
 </programlisting>
@@ -321,7 +322,7 @@ add the <literal>:8080</literal> accordingly.</para>
 </section>
 
 <section id="install-apache-windows"><title>Windows (Apache Lounge)</title>
-<para>On Windows, Apache is installed as a ready-to-run binary &mdash; there is
+<para>On Windows, Apache is installed as a ready-to-run binary; there is
 nothing to compile. The build used here comes from
 <application>Apache Lounge</application><footnote><para><ulink url="https://www.apachelounge.com/download/">https://www.apachelounge.com/download/</ulink></para></footnote>,
 which has supplied Windows binaries for many years and ships Apache on its own,
@@ -331,9 +332,9 @@ building anything.</para>
 
 <para>The reason a third-party build is needed at all is that the Apache Software
 Foundation itself publishes only source code, not official Windows binaries, so a
-ready-to-run server comes from a distributor. Several are well established &mdash;
-<application>XAMPP</application> is the best known, bundling Apache with PHP and a
-database &mdash; and Apache Lounge is a trustworthy one; it is worth knowing only
+ready-to-run server comes from a distributor. Several are well established (<application>XAMPP</application> is the best
+known, bundling Apache with PHP and a database) and Apache Lounge is a
+trustworthy one; it is worth knowing only
 that it is a community distributor, not the Foundation itself.</para>
 
 <para>Apache Lounge builds are compiled with Microsoft's Visual C++ tools
@@ -344,7 +345,7 @@ redistributable is linked from the Apache Lounge download page, in a 64-bit and 
 32-bit form; install the one that matches the build chosen below, before going
 further.</para>
 
-<para>Then download the Apache ZIP &mdash; the Win64 build on a 64-bit Windows,
+<para>Then download the Apache ZIP: the Win64 build on a 64-bit Windows,
 the Win32 build on the rare 32-bit one. The archive already contains a folder
 named <filename>Apache24</filename>; place that folder at the root of a drive, so
 the result is <filename>C:\Apache24</filename> and not a doubled
@@ -387,9 +388,9 @@ stops it and leaves nothing behind. The default page is meanwhile at
 <literal>http://localhost/</literal>, on the ordinary port 80.</para>
 
 <para>For a permanent setup, Apache can instead be installed as a Windows
-service &mdash; <command>httpd.exe -k install</command> from an
+service, with <command>httpd.exe -k install</command> from an
 <emphasis role="italic">Administrator</emphasis> prompt, then started with
-<command>httpd.exe -k start</command> &mdash; but that is more than a test
+<command>httpd.exe -k start</command>, but that is more than a test
 montage needs, and the service keeps running across reboots until removed with
 <command>httpd.exe -k uninstall</command>.</para>
 
@@ -404,20 +405,18 @@ just the same.</para>
 <section id="install-sources"><title>Installing the Sources</title>
 <indexterm><primary>sources</primary></indexterm>
 <indexterm><primary>::Requires directive</primary></indexterm>
-<indexterm><primary>wrapper</primary></indexterm>
+<indexterm><primary>shebang</primary></indexterm>
 
 <para>A RexxHTTP installation is five files: the processor,
-<filename>RexxHTTP.rex</filename>, and the four classes it requires &mdash;
+<filename>RexxHTTP.rex</filename>, and the four classes it requires:
 <filename>HTTP.Request.cls</filename>, <filename>HTTP.Response.cls</filename>,
 <filename>HTTP.OutputStream.cls</filename> and
 <filename>HTTP.Cookie.cls</filename>. They are distributed together in the
 download, at
-<ulink url="https://rexx.epbcn.com/rexxhttp/rexxhttp-latest.zip">https://rexx.epbcn.com/rexxhttp/rexxhttp-latest.zip</ulink>,
-along with a sixth file used only on Unix, the wrapper
-<filename>RexxHTTP_wrapper</filename>.</para>
+<ulink url="https://rexx.epbcn.com/rexxhttp/rexxhttp-latest.zip">https://rexx.epbcn.com/rexxhttp/rexxhttp-latest.zip</ulink>.</para>
 
-<para>Copy the six files &mdash; everything in the download's
-<filename>src/</filename> directory &mdash; to the server's
+<para>Copy the five files (everything in the download's
+<filename>src/</filename> directory) to the server's
 <filename>cgi-bin</filename> directory. Where that is depends on the Apache
 installed in <xref linkend="install-apache" xrefstyle="select:title"/>: on Debian
 or Ubuntu it is
@@ -426,19 +425,31 @@ or Ubuntu it is
 <filename>/opt/homebrew/var/www/cgi-bin/</filename> on Apple Silicon or
 <filename>/usr/local/var/www/cgi-bin/</filename> on Intel; on the Windows Apache
 Lounge build, <filename>C:\Apache24\cgi-bin\</filename>. Keeping the files together
-is what lets the processor find its classes and, on Unix, lets the wrapper find the
-processor.</para>
+is what lets the processor find its classes.</para>
 
-<para>On Unix &mdash; both Linux and macOS &mdash; there is one more step: make
-the wrapper executable.</para>
+<para>On Unix, both Linux and macOS, there is one more step: make
+the processor executable.</para>
 
-<programlisting>chmod +x RexxHTTP_wrapper</programlisting>
+<programlisting>chmod +x RexxHTTP.rex</programlisting>
 
 <para>The download is packaged on Windows, which does not carry a Unix execute
-permission, so the wrapper arrives without it whichever Unix unpacks it; Apache
-will not run a CGI program it cannot execute. The step is the same on Linux and
-macOS. It does not apply on Windows, where Apache runs
-<filename>RexxHTTP.rex</filename> directly and the wrapper is unused.</para>
+permission, so <filename>RexxHTTP.rex</filename> arrives without it whichever Unix
+unpacks it; Apache will not run a CGI program it cannot execute. The step is the
+same on Linux and macOS. It does not apply on Windows, which does not use the
+execute bit.</para>
+
+<para><filename>RexxHTTP.rex</filename> begins with the Unix shebang
+<literal>#!/usr/bin/env rexx</literal>, and how it is resolved is the one thing
+that differs by platform. On Unix, Apache runs the file directly, so
+<literal>env</literal> must be able to find <literal>rexx</literal> on the
+<literal>PATH</literal> Apache hands the CGI; if that <literal>PATH</literal> does
+not include it (a minimal service environment often does not), the
+remedy is to pin the shebang to the interpreter by absolute path, such as
+<literal>#!/usr/bin/rexx</literal>. On Windows, the ooRexx shebang association
+keys off the <literal>rexx</literal> token itself rather than a path, so a bare
+<literal>#!rexx</literal> is what that platform expects. The bundled installers
+make this adjustment automatically; installing by hand, it is the first thing to
+check if the processor is found but will not run.</para>
 </section>
 
 <section id="install-handler"><title>Telling Apache Which Files Are Rexxlets</title>
@@ -458,42 +469,34 @@ instead of to the file the request names. Second, the files that are meant to be
 rexxlets must be marked as such, so that everything else is served as ordinary
 static content. Everything below is one tested way to satisfy those two
 requirements; it is not the only way. A reader who already runs Apache will see
-where to vary it, and the only point RexxHTTP genuinely imposes is that on Unix
-the handler must reach the processor through the wrapper, not run it directly. The
-rest &mdash; which directory, which URL prefix, where the directives live &mdash;
-is open to local taste.</para>
+where to vary it. The rest (which directory, which URL prefix, where the
+directives live) is open to local taste.</para>
 
 <para>The sample configuration puts the sources in the server's standard
 <filename>cgi-bin</filename> directory, which spares one directive: the
 prepackaged Apache builds already alias <filename>cgi-bin</filename> as executable
 CGI, so no <literal>ScriptAlias</literal> of one's own is needed. The handler,
-named <literal>RexxHTTP</literal>, is bound to the program Apache executes. This is
-the one line that differs between platforms, and it differs only in what it points
-at:</para>
-
-<programlisting>Action RexxHTTP /cgi-bin/RexxHTTP_wrapper</programlisting>
-
-<para>on Unix, where Apache runs the wrapper and the wrapper reaches
-<filename>RexxHTTP.rex</filename> beside it; and</para>
+named <literal>RexxHTTP</literal>, is bound to the processor Apache executes, and
+the line is the same on every platform:</para>
 
 <programlisting>Action RexxHTTP /cgi-bin/RexxHTTP.rex</programlisting>
 
-<para>on Windows, where Apache runs <filename>RexxHTTP.rex</filename> directly and
-no wrapper is involved. Either way, <literal>Action</literal> names the handler
-<literal>RexxHTTP</literal> and binds it to the processor. Nothing under
-<filename>cgi-bin</filename> is meant to be requested by the public &mdash; it is
+<para>Apache runs <filename>RexxHTTP.rex</filename> directly; the
+<literal>Action</literal> directive names the handler <literal>RexxHTTP</literal>
+and binds it to the processor. Nothing under
+<filename>cgi-bin</filename> is meant to be requested by the public; it is
 only the address the handler dispatches through.</para>
 
 <para>With the handler declared, the configuration marks which files are
-rexxlets. The recommended model &mdash; the reasoning is in the
-<xref linkend="rationale" xrefstyle="select:title"/> chapter &mdash; is a
+rexxlets. The recommended model (the reasoning is in the
+<xref linkend="rationale" xrefstyle="select:title"/> chapter) is a
 <emphasis role="bold">whitelist</emphasis>: a file is a rexxlet only when it is
 marked so explicitly, and everything else is served straight off disk. A file is
 whitelisted by handing it to the handler with <literal>SetHandler</literal>,
 scoped to the directory the rexxlets live in.</para>
 
-<para>That directory is the server's <emphasis role="italic">document root</emphasis>
-&mdash; the folder Apache serves web pages from, the one a bare
+<para>That directory is the server's <emphasis role="italic">document root</emphasis>: the folder Apache serves web
+pages from, the one a bare
 <literal>http://localhost/</literal> maps to. It is <emphasis role="italic">not</emphasis>
 the <filename>cgi-bin</filename> directory where the sources were copied a moment ago:
 <filename>cgi-bin</filename> holds the processor, and the document root holds the
@@ -503,7 +506,7 @@ the document root depends on the Apache installed in
 macOS it is typically <filename>/var/www/html</filename>; on the Windows Apache Lounge
 build it is <filename>htdocs</filename> under the server root. If a given Apache uses
 some other location, its <literal>DocumentRoot</literal> line in the configuration is
-what names it. The block below goes in that directory &mdash; on Linux and macOS:</para>
+what names it. The block below goes in that directory, on Linux and macOS:</para>
 
 <programlisting>&lt;Directory "/var/www/html"&gt;
     Options +ExecCGI
@@ -529,8 +532,8 @@ what names it. The block below goes in that directory &mdash; on Linux and macOS
 <para>This whitelists a rexxlet named <filename>index</filename> and, with
 <literal>DirectoryIndex</literal>, makes it the file Apache serves when a
 directory is requested by its path alone. A request for that directory now runs
-the rexxlet; everything beside it &mdash; templates, images, stylesheets &mdash;
-is served as static content. The pattern rewards a tidy layout: give each area its
+the rexxlet; everything beside it (templates, images, stylesheets) is served as static
+content. The pattern rewards a tidy layout: give each area its
 own directory with an <filename>index</filename> rexxlet inside, and the URL
 structure simply mirrors the directory structure, with no filenames trailing in
 the path. Each additional rexxlet is one more <literal>&lt;Files&gt;</literal>
@@ -552,12 +555,126 @@ Apache way, with <literal>SetEnv</literal>, and read them back through the
 request object as <xref linkend="reqresp" xrefstyle="select:title"/> describes.</para>
 </section>
 
+<section id="install-geometry"><title>Where RexxHTTP Sits: <literal>BASE</literal> and <literal>URLBASE</literal></title>
+<indexterm><primary>REXXHTTP_BASE</primary></indexterm>
+<indexterm><primary>REXXHTTP_URLBASE</primary></indexterm>
+<indexterm><primary>installation geometry</primary></indexterm>
+<indexterm><primary>Alias directive</primary></indexterm>
+<indexterm><primary>URL prefix</primary></indexterm>
+
+<para>The configuration so far serves rexxlets from the document root, which is
+the common case and needs nothing more. When a rexxlet is reached as an action
+&mdash; the processor handling a resource that lives elsewhere, rather than the
+rexxlet being the resource &mdash; RexxHTTP has to reconstruct the path of the
+resource that was actually requested. It does this without guessing against disk,
+from a pair of environment values the operator freezes with
+<literal>SetEnv</literal>:</para>
+
+<variablelist>
+<varlistentry>
+<term><literal>REXXHTTP_BASE</literal></term>
+<listitem><para>The zone's root <emphasis role="italic">on disk</emphasis>: the
+directory the served files actually live under.</para></listitem>
+</varlistentry>
+<varlistentry>
+<term><literal>REXXHTTP_URLBASE</literal></term>
+<listitem><para>The zone's <emphasis role="italic">URL prefix</emphasis>: the part
+of the request path that sits in front of everything RexxHTTP serves. The
+sentinel <literal>*</literal> means <emphasis role="italic">no prefix</emphasis>
+&mdash; the zone is served from the document root, or from a plain subdirectory
+whose own name is already part of the disk path. A value like
+<literal>/ext</literal> means the request path carries that prefix in front of the
+disk layout.</para></listitem>
+</varlistentry>
+</variablelist>
+
+<para>The tempting question when setting these is <quote>is there an
+<literal>Alias</literal>?</quote>, and it is the wrong one. An
+<literal>Alias</literal> is one way a URL prefix appears, but not the only one, so
+keying on it misconfigures the cases where a prefix is present without an alias.
+The question that decides <literal>URLBASE</literal> is this:
+<emphasis role="bold">does the request URL repeat a prefix that
+<literal>BASE</literal> does not already include?</emphasis> If the served files
+sit at the document root and the URLs have no prefix in front of them, there is no
+repetition, and <literal>URLBASE</literal> is the <literal>*</literal> sentinel.
+If a prefix rides in front of the URLs &mdash; whether an
+<literal>Alias</literal> put it there, or the zone is a subdirectory with
+<literal>BASE</literal> pointing inside it &mdash; that prefix is what
+<literal>URLBASE</literal> must carry.</para>
+
+<table id="install-geometry-table" frame="all" pgwide="1">
+<title>Three installation geometries</title>
+<tgroup cols="4">
+<colspec colname="c1" colwidth="1.7*"/>
+<colspec colname="c2" colwidth="2.3*"/>
+<colspec colname="c3" colwidth="1.4*"/>
+<colspec colname="c4" colwidth="1.3*"/>
+<thead>
+<row>
+<entry>Geometry</entry>
+<entry>What the operator did</entry>
+<entry><literal>BASE</literal></entry>
+<entry><literal>URLBASE</literal></entry>
+</row>
+</thead>
+<tbody>
+<row>
+<entry>Document root</entry>
+<entry>Files served from the docroot; URLs have no prefix.</entry>
+<entry>the docroot on disk</entry>
+<entry><literal>*</literal></entry>
+</row>
+<row>
+<entry>Subdirectory, no alias</entry>
+<entry>Files in a subdirectory of the docroot; <literal>BASE</literal> points
+inside it, and the subdirectory's name shows up in every URL.</entry>
+<entry>the subdirectory on disk</entry>
+<entry>that subdirectory's URL prefix</entry>
+</row>
+<row>
+<entry>Aliased</entry>
+<entry>An <literal>Alias</literal> maps a URL prefix to a disk location outside
+the docroot.</entry>
+<entry>the aliased directory on disk</entry>
+<entry>the aliased URL prefix</entry>
+</row>
+</tbody>
+</tgroup>
+</table>
+
+<para>The middle row is the one the <quote>is there an
+<literal>Alias</literal>?</quote> shortcut gets wrong, and it is not a corner
+case: <systemitem>rexx.epbcn.com</systemitem> serves RexxHTTP from the subdirectory
+<filename>/rexxhttp</filename> with no alias at all. <literal>BASE</literal> points
+at that subdirectory on disk, and because every URL under it begins with
+<filename>/rexxhttp</filename> &mdash; a prefix the disk <literal>BASE</literal>
+does not repeat &mdash; <literal>URLBASE</literal> is <literal>/rexxhttp</literal>.
+An operator who reached for the alias question would have found none and wrongly
+left the prefix out.</para>
+
+<para>One combination is a configuration error, and RexxHTTP reports it rather than
+guess: <literal>BASE</literal> set with an empty <literal>URLBASE</literal> at the
+resource level. The document root's legitimate <quote>no prefix</quote> value is
+the <literal>*</literal> sentinel, never the empty string, so an empty
+<literal>URLBASE</literal> is read as a forgotten half of the pair and answered with
+a 500. Set the sentinel explicitly for a document-root zone; do not leave
+<literal>URLBASE</literal> blank.</para>
+
+<para>Adjusting these on a server that already runs other things is the domain of
+whoever administers that Apache, not of the installer: the automated installer of
+<xref linkend="install-installer" xrefstyle="select:title"/> sets the pair for the
+layouts it builds, and the guidance here is for the reader configuring RexxHTTP by
+hand into an existing site.</para>
+</section>
+
 <section id="install-smoke-test"><title>Smoke Test</title>
 <indexterm><primary>smoke test</primary></indexterm>
 
 <para>A minimal rexxlet confirms the montage end to end. Put this in a file
 named <filename>index</filename> in the whitelisted document root:</para>
 
+<indexterm><primary>examples</primary>
+<secondary>minimal rexxlet</secondary></indexterm>
 <example id="ex.smoke">
 <title>A Minimal Rexxlet</title>
 <programlisting language="rexx">.response~content_type = "text/plain"
@@ -578,10 +695,11 @@ and visit the server's root:</para>
 
 <para>The page should read <literal>Hola, mundo</literal>. That means all the
 moving parts line up: Apache routed the request through the handler, the processor
-&mdash; reached through the wrapper on Unix &mdash; built the request and response
-objects, ran the rexxlet, and flushed the body back. If instead the browser shows
-an error page, on Unix the first place to look is the wrapper's line endings and
-the path it <literal>Call</literal>s; if the page shows the rexxlet's source text
+built the request and response objects, ran the rexxlet, and flushed the body
+back. If instead the browser shows an error page, on Unix the first place to look
+is whether Apache can execute <filename>RexxHTTP.rex</filename> at all: that it
+carries the execute bit and that its shebang resolves to an interpreter on
+Apache's <literal>PATH</literal>. If the page shows the rexxlet's source text
 rather than its output, the file was served statically and is missing from the
 whitelist.</para>
 

@@ -33,9 +33,9 @@
 
 ::Method init
 
-  Expose http env envvars args_processed cookies_processed,
+  Expose env envvars args_processed cookies_processed,
     rexxletFilename filename script_filename,
-    content_length content_type,
+    content_length content_type transfer_encoding,
     path_info path_translated,
     post_string query_string,
     request_method request_uri request_url uri arg_violation,
@@ -67,9 +67,9 @@
   -- Separator: "/" for unix, "\" for windows
   sep = .File~separator
 
-  -- The HTTP_ pool and the general environment pool, kept separate
+  -- The environment pool cache: one directory for every variable name,
+  -- HTTP_* included (see ~unknown for why they need no pool of their own).
 
-  http                  = .directory~new
   envvars               = .directory~new
 
   -- Retrieve environment variables
@@ -77,6 +77,13 @@
   content_length        = Env(content_length)
   content_type          = Env(content_type  )
   request_method        = Env(request_method)
+
+  -- Transfer-Encoding arrives as an HTTP_ header, so the bare-name trick
+  -- (uninitialised symbol -> its own uppercase name) would read the wrong
+  -- variable; pass the HTTP_-prefixed literal explicitly. Needed to tell a
+  -- chunked POST (no CONTENT_LENGTH, body read to EOF) apart from a POST
+  -- with no body. See design-post-body-reading.md.
+  transfer_encoding     = Env("HTTP_TRANSFER_ENCODING")
 
   -- Variables PATH_INFO, PATH_TRANSLATED, POST_STRING, QUERY_STRING,
   -- SCRIPT_NAME have to be calculated manually
@@ -113,16 +120,16 @@
     End
   End
 
-  -- SCRIPT_FILENAME is the disk path of the PROCESSOR: the rexlet Apache
+  -- SCRIPT_FILENAME is the disk path of the PROCESSOR: the rexxlet Apache
   -- resolved. RexxHTTP.rex reads it as the callee it Calls, and ~script_name
   -- maps it back to URL space -- it is the execution/processor axis and must
-  -- stay the rexlet.
+  -- stay the rexxlet.
   script_filename = rexxletFilename
 
   -- FILENAME / PATH_TRANSLATED are the disk path of the DOCUMENT the client
   -- asked for -- the disk twin of REQUEST_URL. Nothing executes them (the
   -- callee is script_filename), so they name the document. One hop: requested
-  -- == processor, so the rexlet (final value here). Two hops: reassigned to the
+  -- == processor, so the rexxlet (final value here). Two hops: reassigned to the
   -- document after the Action cut below.
   filename = rexxletFilename
   path_translated = rexxletFilename
@@ -136,7 +143,14 @@
   -- path_translated. This value was historically named script_name, hence the
   -- "SCRIPT_NAME" wording that survives in the length-clamp note below.
 
-  requri = self~decodeForm(request_uri)
+  -- Decode as a URI path, NOT as form data: in a URL path "+" is a literal
+  -- plus (RFC 3986), not a space. decodeForm applies the form-urlencoded
+  -- "+"->space rule, which mangles a document at e.g. /notas/c++.md into
+  -- "/notas/c  .md". decodeURIComponent does the %xx-decoding without the "+"
+  -- rule -- the correct decoder for a path -- and already lives in this class.
+  -- ~uri and request_url are both built from requri, so both were affected.
+  -- See ref-decisiones.md "v99 -- decodeForm en el path".
+  requri = self~decodeURIComponent(request_uri)
   -- REQUEST_URL (the self-referential URL: the client's own URL, PATH_INFO and
   -- query string peeled off) is built BELOW, after the Action document/tail cut
   -- has resolved path_info to its final document-axis, tail-only value. It must
@@ -149,7 +163,7 @@
   If requri~pos("?") == 0 Then uri = requri
   Else uri = requri~left(requri~pos("?")-1)
 
-  -- Action document/tail cut. For a rexlet used as an Action (two hops) the
+  -- Action document/tail cut. For a rexxlet used as an Action (two hops) the
   -- handler-axis walk near the top left path_info holding the whole client
   -- request (document + tail fused) -- Apache's PATH_INFO smuggling. Re-run the
   -- same SysIsFile walk on the document axis (rawResourcePath) to split the
@@ -181,7 +195,7 @@
   End
 
   -- FILENAME / PATH_TRANSLATED for an Action (two hops): the document on disk.
-  -- The callee is script_filename (the rexlet), so both may name the document.
+  -- The callee is script_filename (the rexxlet), so both may name the document.
   -- action_document holds the requested resource, resolved via rawResourcePath
   -- (REQUEST_URI + BASE/URLBASE) -- the honest, Alias-aware disk path. When it
   -- is a regular file it IS the document (target.mtx, any /x/y tail already
@@ -190,7 +204,7 @@
   -- the index basename to the tail of the raw PATH_TRANSLATED; graft that
   -- basename onto the directory to name the index file actually served
   -- (.../sub/ + index.mtx). One hop leaves action_document empty and both keep
-  -- their rexlet value.
+  -- their rexxlet value.
   If action_document \== "" Then Do
     If SysIsFile(action_document) Then
       filename = action_document
@@ -203,13 +217,19 @@
   -- extra PATH_INFO and query string peeled off, in ONE hop and in TWO. Built
   -- here, after the Action cut, because path_info is now the document-axis,
   -- tail-only value: a genuine suffix of REQUEST_URI in every cell of the
-  -- matrix (docroot/Alias x rexlet/DirectoryIndex x one/two hops x with/without
+  -- matrix (docroot/Alias x rexxlet/DirectoryIndex x one/two hops x with/without
   -- extra path). Reading the RAW handler-axis path_info here instead would fuse
   -- processor+document under an Action, make PATH_INFO longer than REQUEST_URI,
   -- drive the length negative and empty request_url out (the two-hop bug). With
   -- the doctored suffix the subtraction is always non-negative; the Max(0,...)
   -- guard stays only as a belt-and-braces against a decode length mismatch.
-  pathinfolen = self~decodeForm(path_info)~length
+  -- These two feed only the LENGTH arithmetic below, and the two decoders are
+  -- length-identical (they differ only in "+"->space vs literal "+", a
+  -- one-for-one substitution), so the clamp is decode-invariant either way.
+  -- path_info is a PATH -> decodeURIComponent (matching requri). query_string
+  -- genuinely IS form data -> decodeForm is the honest decoder there; it is
+  -- used only for its length, so the "+" difference never reaches a value.
+  pathinfolen = self~decodeURIComponent(path_info)~length
   querylen = self~decodeForm(query_string)~length
   If querylen > 0 Then querylen = querylen + 1
   request_url = requri~left(Max(0, requri~length - pathinfolen - querylen))
@@ -259,16 +279,47 @@
 
   If args_processed Then Return
 
-  -- Read the POST body eagerly (see ref-decisiones, v6): the old lazy
-  -- parsing existed only because mod_rexx's wwwGetArgs committed the
-  -- response. With mod_rexx gone, reading stdin does not commit stdout,
-  -- so we read and validate up front, before the rexxlet runs.
-  If self~method == "POST" Then post_string = CharIn(,,self~content_length)
+  -- Read the request body eagerly: the old lazy parsing existed only because
+  -- mod_rexx's wwwGetArgs committed the response. With mod_rexx gone, reading
+  -- stdin does not commit stdout, so we read up front, before the rexxlet runs.
+  --
+  -- POST, PUT and DELETE can all carry a body, and Apache frames all three
+  -- identically (MEASURED): CONTENT_LENGTH for a fixed-length body, chunked with
+  -- CONTENT_LENGTH empty, or no body at all. We must DRAIN stdin for every one of
+  -- them: an unread body leaves Apache blocked waiting for the CGI to consume it
+  -- (the same stall the POST drain fixed in v5). So the body read below is keyed
+  -- on "carries a body", not on POST alone.
+  --
+  -- Reading strategy, per the v96 measurements (design-post-body-reading.md):
+  --   CONTENT_LENGTH present -> one blocking read (fast path).
+  --   CONTENT_LENGTH absent + Transfer-Encoding: chunked -> read to EOF (Apache
+  --     unwraps the chunks but cannot fill CONTENT_LENGTH mid-receive).
+  --   neither -> empty body.
+  -- The chunked branch folded into "no body" was rejected in v96: it turns a
+  -- legitimate chunked request into silent data loss.
+  --
+  -- Where the ARGUMENTS come from is a SEPARATE decision (see below), and it is
+  -- NOT symmetric with the body read: only POST parses the body as arguments.
+  If self~carriesBody Then Do
+    If self~content_length \== "" Then
+      post_string = CharIn(,,self~content_length)
+    Else If self~transfer_encoding~caselessEquals("chunked") Then
+      post_string = self~readBodyToEOF
+    Else
+      post_string = ""
+  End
 
   args = .stem~new
 
-  If self~request_method = "GET" Then query = self~query_string
-  Else                                query = post_string
+  -- Argument source (v99 decision, PUT/DELETE): GET takes args from the query
+  -- string and POST from the body, as before. PUT and DELETE take args from the
+  -- QUERY STRING too, and leave their body untouched as raw bytes in
+  -- ~post_string for the rexxlet to interpret (it may be JSON, a binary
+  -- resource, anything -- there is no universal convention that a PUT/DELETE
+  -- body is form-urlencoded, so we do not presume to parse it). Only POST reads
+  -- its arguments from the body. See ref-decisiones.md "v99 -- PUT/DELETE".
+  If self~method == "POST" Then query = post_string
+  Else                          query = self~query_string
 
   args[]  = ""
   nargs   = 0
@@ -328,9 +379,48 @@
   Return
 
 --------------------------------------------------------------------------------
+-- READBODYTOEOF                                                              --
+--   Read stdin to EOF in 8 K blocks. Used only for a chunked POST, where     --
+--   Apache hands us the reassembled body but no CONTENT_LENGTH.              --
+--                                                                            --
+--   Two ooRexx facts govern this (both MEASURED, see                         --
+--   design-post-body-reading.md):                                            --
+--     - ~chars returns 0 on a pipe even with data pending, so it is useless  --
+--       as a loop guard here.                                                --
+--     - CharIn(,,n) blocks until n bytes OR EOF; it never returns short on a --
+--       slow sender. So a short read IS a reliable EOF signal.               --
+--   Blocks of 8 K match the single-read speed (0.06 s for 10 MB); byte by    --
+--   byte would be ~240x slower.                                              --
+--------------------------------------------------------------------------------
+
+::Method readBodyToEOF private
+  bufsize = 8192
+  mb = .MutableBuffer~new
+  Do Forever
+    blk = CharIn(,,bufsize)
+    If blk == "" Then Leave
+    mb~append(blk)
+    If blk~length < bufsize Then Leave    -- short read = EOF (see above)
+  End
+  Return mb~string
+
+--------------------------------------------------------------------------------
+-- CARRIESBODY (private): whether this method can carry a request body that we  --
+--   must drain from stdin. POST, PUT and DELETE do; GET (and everything else)  --
+--   does not. Draining is mandatory for all three even when we do not parse    --
+--   the body as arguments -- an unread body stalls Apache (v5 stdin drain).    --
+--   "|" does not short-circuit in ooRexx, but there is no guard dependency     --
+--   here (three independent equality tests), so it is correct and clear.       --
+--------------------------------------------------------------------------------
+
+::Method carriesBody private
+  m = self~method
+  Return m == "POST" | m == "PUT" | m == "DELETE"
+
+--------------------------------------------------------------------------------
 
 ::Method process_cookies private
-  Expose http cookies ncookies cookies_processed
+  Expose cookies ncookies cookies_processed
 
   If cookies_processed Then Return
 
@@ -388,8 +478,7 @@
 
   Use Strict Arg entryname
 
-  name = entryname~request("STRING")
-  If name == .nil Then Raise syntax 93.914 array (entryname)
+  name = .Validate~requestClassType(1, entryname, .String)
 
   name = Upper(name)~translate("_","-")
 
@@ -423,17 +512,15 @@
 
   If Arg() > 2  Then Raise syntax 93.902 array (2)
 
-  n = Arg(1)~request("STRING")
-  If n == .nil Then Raise syntax 93.916 array (1,Arg(1))
+  n = .Validate~requestClassType(1, Arg(1), .String)
 
   If Arg(2,'o') Then option = "V"
   Else Do
-    option = Arg(2)~request("STRING")
-    If option == .nil Then Raise syntax 93.916 array (2,Arg(2))
+    option = .Validate~requestClassType(2, Arg(2), .String)
     option = option~translate~strip~left(1)
     If option = "" Then option = "V"
     If "NVEO"~pos(option) == 0 Then
-      Raise syntax 93.914 array (2,"Name Value Exists Omitted",option)
+      Raise syntax 93.914 array (2,"NVEO",option)
   End
 
   If n~datatype("w"), n > 0 Then Do
@@ -473,6 +560,15 @@
 ::Attribute content_type Get
 
 --------------------------------------------------------------------------------
+-- TRANSFER_ENCODING                                                          --
+--   The HTTP_TRANSFER_ENCODING header, read at init. "chunked" here (with an --
+--   empty CONTENT_LENGTH) is the discriminator that tells process_args to    --
+--   read the POST body to EOF. See design-post-body-reading.md.              --
+--------------------------------------------------------------------------------
+
+::Attribute transfer_encoding Get
+
+--------------------------------------------------------------------------------
 -- COOKIE                                                                     --
 --                                                                            --
 --   Syntax:    (n is an integer, s a string                                  --
@@ -496,22 +592,15 @@
 
   If Arg() > 2  Then Raise syntax 93.902 array (2)
 
-  n = Arg(1)~request("STRING")
-  If n == .nil Then Raise syntax 93.916 array (1,Arg(1))
+  n = .Validate~requestClassType(1, Arg(1), .String)
 
   If Arg(2,'o') Then option = "V"
   Else Do
-    option = Arg(2)~request("STRING")
-    If option == .nil Then Raise syntax 93.916 array (2,Arg(2))
-    option = option~translate~strip
-    Select
-      When option == ""               Then option = "V"
-      When "NAME"~abbrev(option,1)    Then option = "N"
-      When "VALUE"~abbrev(option,1)   Then option = "V"
-      When "EXISTS"~abbrev(option,1)  Then option = "E"
-      When "OMITTED"~abbrev(option,1) Then option = "O"
-      Otherwise Raise syntax 93.914 array ("NAME VALUE EXISTS OMITTED",option)
-    End
+    option = .Validate~requestClassType(2, Arg(2), .String)
+    option = option~translate~strip~left(1)
+    If option = "" Then option = "V"
+    If "NVEO"~pos(option) == 0 Then
+      Raise syntax 93.914 array (2,"NVEO",option)
   End
 
   If n~datatype("w"), n > 0 Then Do
@@ -538,7 +627,7 @@
 --------------------------------------------------------------------------------
 -- FILENAME                                                                   --
 --   The disk path of the DOCUMENT the client requested -- the file on disk    --
---   of what was asked for. One hop: the rexlet (requested == processor). Two  --
+--   of what was asked for. One hop: the rexxlet (requested == processor). Two  --
 --   hops: the document served through the processor (target.mtx), or the      --
 --   resolved DirectoryIndex file for a requested directory. Always a genuine  --
 --   file; any trailing PATH_INFO is excluded. Alias of PATH_TRANSLATED. The   --
@@ -580,7 +669,7 @@
 --------------------------------------------------------------------------------
 -- PATH_INFO                                                                  --
 --   The extra path following the resource the CLIENT named -- "what you put  --
---   after something". Set by init: for a standard rexlet it is the raw       --
+--   after something". Set by init: for a standard rexxlet it is the raw       --
 --   handler-axis tail; for an Action it is the document-axis tail, split     --
 --   from the resolved document (see the Action cut in init). A plain         --
 --   attribute getter -- the value is fully resolved at construction.         --
@@ -645,7 +734,7 @@
 --   for what it is (a raw resource path), to make that contract clear.        --
 --                                                                            --
 --   For a plain rexxlet (one redirect hop) the requested resource IS the     --
---   rexxlet, so this returns script_filename unchanged. For a rexlet used    --
+--   rexxlet, so this returns script_filename unchanged. For a rexxlet used    --
 --   as an Action (two hops, e.g. a .md served through the Markdown           --
 --   renderer) the document lives elsewhere -- possibly under an Alias        --
 --   outside the docroot -- and its path is reconstructed, deterministically  --
@@ -656,7 +745,7 @@
 --                       (docroot or a plain subdir), "/ext" means aliased.   --
 --   Apache stacks a REDIRECT_ prefix per internal redirect, so the pair for  --
 --   the RESOURCE sits at the DEEPEST populated level (see the design note    --
---   design-rexlet-as-action.md). The rule, once the deepest pair is read:    --
+--   design-rexxlet-as-action.md). The rule, once the deepest pair is read:    --
 --     rel  = REQUEST_URI (query string stripped) with urlbase peeled off     --
 --     file = base || rel                                                     --
 --                                                                            --
@@ -676,10 +765,10 @@
   -- processor's own file (the plain, pre-REXXHTTP_BASE behaviour).
   If base == "" Then Return script_filename
 
-  -- A plain rexlet: the requested resource IS the rexlet.
+  -- A plain rexxlet: the requested resource IS the rexxlet.
   If \action_request Then Return script_filename
 
-  -- Two hops (rexlet-as-Action). We need the full pair. An empty urlbase
+  -- Two hops (rexxlet-as-Action). We need the full pair. An empty urlbase
   -- here is the operator's forgotten SetEnv (docroot legitimately carries
   -- the "*" sentinel, never "").
   If urlbase == "" Then
@@ -698,6 +787,17 @@
     If requri~left(urlbase~length) == urlbase Then
       rel = requri~substr(urlbase~length + 1)
 
+  -- Decode the relative path before joining it to the on-disk base: REQUEST_URI
+  -- is %-encoded, but the disk path is not, so a document at "docs/mi
+  -- documento.md" arrives as "docs/mi%20documento.md" and the SysIsFile walk in
+  -- init would never find it (-> a garbled ~filename and a 500). Decode as a
+  -- PATH (decodeURIComponent: "+" is a literal plus, %xx decoded), matching the
+  -- requri decode in init. The urlbase peel above runs on the RAW prefix, which
+  -- an operator's SetEnv never percent-encodes, so peeling before decoding is
+  -- safe and keeps the prefix comparison exact. See ref-decisiones.md
+  -- "v99 -- rawResourcePath".
+  rel = self~decodeURIComponent(rel)
+
   Return base || rel
 
 
@@ -714,9 +814,9 @@
 
 --------------------------------------------------------------------------------
 -- SCRIPT_FILENAME                                                            --
---   The disk path of the PROCESSOR -- the rexlet Apache resolved and ran,    --
+--   The disk path of the PROCESSOR -- the rexxlet Apache resolved and ran,    --
 --   the disk twin of SCRIPT_NAME. This is the callee RexxHTTP.rex Calls. One --
---   hop: == FILENAME. Two hops: the rexlet, distinct from FILENAME/          --
+--   hop: == FILENAME. Two hops: the rexxlet, distinct from FILENAME/          --
 --   PATH_TRANSLATED (the document). Resolved at init.                        --
 --------------------------------------------------------------------------------
 
@@ -731,7 +831,7 @@
 --       "/test/index.rxl"; the RFC SCRIPT_NAME is "/test/index.rxl", but     --
 --       ~request_url returns "/test/" (the self-referential URL, useful in   --
 --       its own right, just not what CGI names SCRIPT_NAME).                 --
---     - plain rexlet (client names it): resolved == requested, so this       --
+--     - plain rexxlet (client names it): resolved == requested, so this       --
 --       returns the same value ~request_url does, by an honest path.         --
 --                                                                            --
 --   This mirrors the reconstruction machinery of rawResourcePath. That       --
@@ -757,19 +857,23 @@
 
   -- The resolved PROCESSOR on disk (script_filename). On Windows it may carry
   -- native separators; normalise to "/" so the base-strip and the emitted
-  -- URL are both in URL space.
+  -- URL are both in URL space. normBase is a LOCAL copy: translating the
+  -- Exposed `base` in place would mutate the instance variable, so a later
+  -- ~RexxHTTP_DIR (and rawResourcePath, which reads `base`) would see "/"
+  -- where the native separator belongs. Windows only. See §3.5.
   file = script_filename
+  normBase = base
   If sep == "\" Then Do
     file = file~translate("/", sep)
-    base = base~translate("/", sep)
+    normBase = base~translate("/", sep)
   End
 
   -- Strip the on-disk base prefix to get the resource path relative to the
   -- zone root, then map it into URL space by prepending the URL prefix
   -- ("*" is the no-prefix sentinel: docroot or a plain subdir).
   rel = file
-  If file~left(base~length) == base Then
-    rel = file~substr(base~length + 1)
+  If file~left(normBase~length) == normBase Then
+    rel = file~substr(normBase~length + 1)
 
   -- Ensure a single leading "/" between prefix and relative path.
   If rel~left(1) \== "/" Then rel = "/"rel
@@ -791,16 +895,21 @@
 --------------------------------------------------------------------------------
 
 ::Method unknown
-  Expose http envvars
+  Expose envvars
 
   Use arg message, args
   If args~dimension(1) > 0 Then Raise syntax 93.902 array (0)
 
-  If message~left(5) = "HTTP_"     Then Do
-    If \http~hasindex(message) Then http[message] = Env(message)
-    Return http[message]
-  End
-
+  -- ONE branch for the whole pool: read the variable directly and, if it
+  -- comes back empty, retry it REDIRECT_-prefixed. Client headers (HTTP_*)
+  -- used to have a branch of their own, without the fallback. They no longer
+  -- need one: measured against Apache 2.4.58 at one and at two redirect
+  -- levels, HTTP_* always arrive DIRECT and no REDIRECT_HTTP_* variable
+  -- exists in any topology. The reason is structural -- Apache prefixes what
+  -- was in the PREVIOUS request's subprocess_env, and HTTP_* are not
+  -- materialised until the CGI handler runs, i.e. only in the final request.
+  -- So for an HTTP_* name the fallback looks up a name Apache never creates,
+  -- and one branch behaves exactly as two did. See ref-decisiones "v113".
   If \envvars~hasindex(message) Then Do
     val = Env(message)
     If val = "" Then val = Env("REDIRECT_"message)
@@ -886,19 +995,23 @@
 
   -- The served DOCUMENT on disk (filename). On Windows it may carry native
   -- separators; normalise to "/" so the base-strip and the emitted URL are
-  -- both in URL space.
+  -- both in URL space. normBase is a LOCAL copy: translating the Exposed
+  -- `base` in place would mutate the instance variable, so a later
+  -- ~RexxHTTP_DIR (and rawResourcePath, which reads `base`) would see "/"
+  -- where the native separator belongs. Windows only. See §3.5.
   file = filename
+  normBase = base
   If sep == "\" Then Do
     file = file~translate("/", sep)
-    base = base~translate("/", sep)
+    normBase = base~translate("/", sep)
   End
 
   -- Strip the on-disk base prefix to get the document path relative to the
   -- zone root, then map it into URL space by prepending the URL prefix
   -- ("*" is the no-prefix sentinel: docroot or a plain subdir).
   rel = file
-  If file~left(base~length) == base Then
-    rel = file~substr(base~length + 1)
+  If file~left(normBase~length) == normBase Then
+    rel = file~substr(normBase~length + 1)
 
   -- Ensure a single leading "/" between prefix and relative path.
   If rel~left(1) \== "/" Then rel = "/"rel

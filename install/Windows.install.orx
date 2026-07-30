@@ -26,7 +26,7 @@
 /* Apache the user set up for something else.                                 */
 /*                                                                            */
 /* Prerequisites the installer checks but does NOT install:                   */
-/*   - ooRexx 5.3.0 or later (out of scope; from the ooRexx project).         */
+/*   - ooRexx 5.2.0 or later (out of scope; from the ooRexx project).         */
 /*   - The Visual C++ Redistributable (x64, the 14.x "2015-2022" family).     */
 /*     Apache Lounge binaries will not start without it; its absence shows up */
 /*     as a missing VCRUNTIME140.dll. The installer detects it and, if it is  */
@@ -71,6 +71,9 @@
 
   -- The five sources. On Windows the wrapper is NOT used: Apache runs
   -- RexxHTTP.rex directly via its shebang, so the wrapper is not deployed.
+  -- The canonical file ships the Unix "#!/usr/bin/env rexx" shebang; the
+  -- deployed copy is rewritten to "#!rexx" at deploy time (see Step 11,
+  -- PinShebang), the form the ooRexx shebang association on Windows expects.
   sources = "HTTP.Request.cls HTTP.Response.cls HTTP.OutputStream.cls" -
             "HTTP.Cookie.cls RexxHTTP.rex"
 
@@ -129,11 +132,10 @@
   docRoot    = serverRoot"\htdocs"
   confFile   = serverRoot"\conf\httpd.conf"
   extraConf  = serverRoot"\conf\extra\rexxhttp.conf"
-  indexFile  = docRoot"\index.rxl"
 
   If uninstall Then
     Return Uninstall(assumeYes, keepApache, userMode, serverRoot, apacheBin, -
-                     cgiBinDir, confFile, extraConf, indexFile, sources)
+                     cgiBinDir, confFile, extraConf, sources)
 
   Say
   Say "RexxHTTP Installer for Windows"
@@ -164,7 +166,7 @@
   Say "Checking ooRexx..."
   If SysCmd("rexx -v >nul 2>&1") \== 0 Then Do
     Say "  ERROR: ooRexx is not installed or not in PATH."
-    Say "  RexxHTTP needs ooRexx 5.3.0 or later, from the Open Object Rexx"
+    Say "  RexxHTTP needs ooRexx 5.2.0 or later, from the Open Object Rexx"
     Say "  project: https://sourceforge.net/projects/oorexx/"
     Return 1
   End
@@ -302,7 +304,6 @@
   Say "  - download and unpack Apache into" serverRoot
   Say "  - enable cgi + actions and the RexxHTTP handler via an Include"
   Say "  - deploy the RexxHTTP sources to" cgiBinDir
-  Say "  - plant a smoke-test rexxlet at" indexFile
   If userMode Then
     Say "  - start Apache in its own window (no service), and smoke-test it"
   Else
@@ -395,7 +396,7 @@
   -- which variables are emitted). We pass the forward-slashed root: Apache reads
   -- it, and loadPackage accepts "/" on Windows too. .endOfLine is CRLF here, so
   -- strip the trailing one the routine adds, matching the fragment's CRLF.
-  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(fwdRoot, "    ")~strip("T", .endOfLine))
+  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(fwdRoot, "    ", srcRoot)~strip("T", .endOfLine))
   -- The fragment ships "ServerName localhost"; when we are on a non-default
   -- port, name the server with it (ServerName localhost:NNNN) so redirects and
   -- self-references use the right port.
@@ -424,6 +425,13 @@
       Return 1
     End
   End
+
+  -- The canonical RexxHTTP.rex ships with a Unix "#!/usr/bin/env rexx" shebang
+  -- (correct for the Linux/Mac installers, where env resolves rexx or PinShebang
+  -- pins it). On Windows Apache runs the processor through the ooRexx shebang
+  -- association, which expects "#!rexx" -- the env form does not run here. Rewrite
+  -- the first line of the DEPLOYED copy to "#!rexx", never the canonical source.
+  Call PinShebang cgiBinDir"\RexxHTTP.rex", "#!rexx"
   Say "  OK."
 
 --------------------------------------------------------------------------------
@@ -432,8 +440,9 @@
 -- Instead of enumerating what to deploy, copy the WHOLE package into htdocs
 -- and leave out only the scaffolding (see HtdocsExclude): install\, tests\,
 -- pack.rex, and the two repo-only metadata files. Everything else becomes the
--- browsable sample web: the root index rexxlet, apps\page.cls, the stylesheets,
--- the examples\ tree with their pre-rendered .highlighted sources, src\ as a
+-- browsable sample web: the root index rexxlet, bin\ (page factory + the two
+-- action rexxlets), the stylesheets,
+-- the examples\ tree (sources highlighted on request by the viewer), src\ as a
 -- readable copy, the manual PDF, readme.md and LICENSE. The AddHandler in the
 -- conf fragment runs only *.rxl files as rexxlets, so
 -- every .cls/.rex/.md copied here is served as text, never executed. src\
@@ -673,7 +682,7 @@
 /******************************************************************************/
 Uninstall: Procedure
   Use Strict Arg assumeYes, keepApache, userMode, serverRoot, apacheBin, -
-                 cgiBinDir, confFile, extraConf, indexFile, sources
+                 cgiBinDir, confFile, extraConf, sources
 
   Say
   Say "RexxHTTP Uninstaller for Windows"
@@ -708,7 +717,6 @@ Uninstall: Procedure
     confFile  = serverRoot"\conf\httpd.conf"
     extraConf = serverRoot"\conf\extra\rexxhttp.conf"
     docRoot   = serverRoot"\htdocs"
-    indexFile = docRoot"\index.rxl"
   End
 
   Say "Server root:" serverRoot
@@ -1040,7 +1048,8 @@ RewriteServerRoot:
 -- in httpd.conf, so we LoadModule them here rather than editing that file),
 -- declares the handler pointing straight at RexxHTTP.rex (no wrapper on
 -- Windows), and treats every *.rxl file in the document root as a rexxlet,
--- with DirectoryIndex index.rxl. ${SRVROOT} resolves to the rewritten ServerRoot.
+-- with DirectoryIndex wrapper.rxl (a one-line rexxlet that Calls
+-- RexxHTTP.home.rex). ${SRVROOT} resolves to the rewritten ServerRoot.
 ::Resource RexxHTTPConf
 # RexxHTTP drop-in configuration (Windows / Apache Lounge).
 # Included from httpd.conf by install\InstallWindows.rex.
@@ -1057,13 +1066,13 @@ ServerName localhost
 Action RexxHTTP /cgi-bin/RexxHTTP.rex
 
 <Directory "%docRoot%">
-    DirectoryIndex index.rxl readme.md
-    # Route every *.md through the Markdown renderer at /md/index.rxl: it turns
+    DirectoryIndex wrapper.rxl index.rxl readme.md
+    # Route every *.md through the Markdown renderer at /bin/markdown.rxl: it turns
     # the file into a styled HTML page (via pandoc when present), or serves
-    # it verbatim as UTF-8 text when pandoc is absent. Visiting /md/ directly
-    # shows a short help page. The Action target must name the rexxlet
-    # explicitly (/md/index.rxl): Apache does not apply DirectoryIndex to it.
-    Action markdown /md/index.rxl
+    # it verbatim as UTF-8 text when pandoc is absent. Visiting the rexxlet
+    # directly (/bin/markdown.rxl) shows its own source. The Action target
+    # must name the rexxlet explicitly: Apache does not apply DirectoryIndex.
+    Action markdown /bin/markdown.rxl
     AddHandler markdown .md
     # The AddType/AddCharset below is the static fallback: if the renderer is
     # ever removed, Apache still serves .md inline as UTF-8 plain text rather
@@ -1073,18 +1082,19 @@ Action RexxHTTP /cgi-bin/RexxHTTP.rex
     # the need arises, this is where it would be handled.
     AddType text/plain .md
     AddCharset utf-8 .md
-    # Route program source through the viewer at /src-viewer/index.rxl: it
+    # Route program source through the viewer at /bin/src-viewer.rxl: it
     # highlights the file on the fly when the Rexx Parser is present, or serves
-    # it verbatim as UTF-8 text when it is absent. Visiting /src-viewer/
-    # directly shows a short help page. As with markdown, the Action target
-    # must name the rexxlet explicitly. Note .rxl is deliberately NOT listed:
+    # it verbatim as UTF-8 text when it is absent. Visiting the rexxlet
+    # directly (/bin/src-viewer.rxl) shows its own source. As with markdown,
+    # the Action target must name the rexxlet explicitly. Note .rxl is
+    # deliberately NOT listed:
     # a rexxlet is run by RexxHTTP (see below), never shown as source.
-    Action src-viewer /src-viewer/index.rxl
-    AddHandler src-viewer .rex .rexx .cls .orx
+    Action src-viewer /bin/src-viewer.rxl
+    AddHandler src-viewer .rex .rexx .cls .orx .oryx
     # Static fallback, as for .md: if the viewer is ever removed, Apache still
     # serves these inline as UTF-8 plain text rather than offering a download.
-    AddType text/plain .rex .rexx .cls .orx
-    AddCharset utf-8 .rex .rexx .cls .orx
+    AddType text/plain .rex .rexx .cls .orx .oryx
+    AddCharset utf-8 .rex .rexx .cls .orx .oryx
     # Any *.rxl file is a rexxlet: hand it to the RexxHTTP processor.
     AddHandler RexxHTTP .rxl
     # Install-time SetEnv lines are spliced in on the line below (the installer

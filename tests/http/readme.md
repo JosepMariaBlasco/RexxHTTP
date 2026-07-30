@@ -3,8 +3,8 @@ RexxHTTP integration tests
 
 End-to-end integration tests for the RexxHTTP rexxlet processor. They
 exercise the whole pipeline via Apache + curl: a request goes through
-Apache to the wrapper, which `Call`s `RexxHTTP.rex`, which runs a rexxlet;
-the generated response (status, headers, body) is then verified.
+Apache to `RexxHTTP.rex`, which runs a rexxlet; the generated response
+(status, headers, body) is then verified.
 
 These are not unit tests of the classes in isolation. The point is to
 catch what only shows up through the real stack — lazy headers, cookie
@@ -15,7 +15,7 @@ things that bit earlier sessions when verified any other way.
 Prerequisites
 -------------
 
-- ooRexx 5.3.0 or later (the minimum supported version)
+- ooRexx 5.2.0 or later (the minimum supported version)
 - Apache 2 with the `cgid` and `actions` modules
 - curl
 
@@ -75,36 +75,52 @@ runner can point the suite at whatever deployment it set up:
 The montage
 -----------
 
-The runner deploys the five sources plus a one-line wrapper to
-`/var/www/html/RexxHTTP/`, and configures Apache so that the `Action`
-points at the **wrapper**, not at `RexxHTTP.rex` directly:
+The runner deploys the five sources to `/var/www/html/RexxHTTP/` and
+configures Apache so that the `Action` points straight at `RexxHTTP.rex`:
 
 ```
-Action RexxHTTPCGI /RexxHTTP/wrapper
+Action RexxHTTPCGI /RexxHTTP/RexxHTTP.rex
 ```
 
-The wrapper is a one-line LF Rexx script whose only job is to
-`Call "/var/www/html/RexxHTTP/RexxHTTP.rex"`. This mirrors the production
-deployment and sidesteps the CRLF-shebang problem: the sources are stored
-and checked out CRLF (see the repository's `.gitattributes`), so the
-kernel cannot exec `RexxHTTP.rex` directly (its `#!` line ends in CR).
-Reached via `Call` from the LF wrapper, that shebang is just an inert
-comment, and ooRexx reads the CRLF body fine.
+`RexxHTTP.rex` is LF with a `#!/usr/bin/env rexx` shebang, so the kernel
+execs it directly — no wrapper. The LF form is guaranteed at build time:
+`pack.rex` aborts the build if `RexxHTTP.rex` carries any CR. This mirrors
+the production deployment.
+
+The five sources are `HTTP.Request.cls`, `HTTP.Response.cls`,
+`HTTP.OutputStream.cls`, `HTTP.Cookie.cls`, and `RexxHTTP.rex`.
 
 The fixtures are deployed to `/var/www/html/test/` with a whitelist
 `.htaccess`: only the listed files are handled as rexxlets; anything else
-is served statically.
+is served statically. A few fixtures also carry per-fixture `SetEnv`
+lines in that `.htaccess` — the arg-policy probes (`polstrict`, `polbad`),
+the environment-pool probe (`envpool`), and the URL-reconstruction probes
+(`urlprobe`, `urlnobar`, `urlremap`) — so the suite can drive operator
+configuration through a real Apache sub-request.
+
+In addition to the flat fixture set, the runner builds a **twelve-cell
+CGI-contract topology** (`DeployMatrix`) in two physical zones: a docroot
+zone at `/var/www/html/mtx` (served at `/mtx`) and an aliased zone at
+`/opt/rexxhttp-matrix` (served at `/ali` via `Alias`). The same `cgivars`
+probe is deployed under several names in each zone — as a directly-named
+rexxlet, as an `Action` target, and as a `DirectoryIndex` — so the tests
+can cover the *docroot-vs-alias*, *rexxlet-vs-DirectoryIndex*, and
+*one-hop-vs-two-hop* axes of the CGI variable contract in one place.
 
 The real production montage may differ in detail. When `setup.md` is
-rewritten to the real deployment, the VirtualHost/wrapper resources in
-`RunHTTPTests.rex` should be aligned with it.
+rewritten to the real deployment, the conf resources in `RunHTTPTests.rex`
+should be aligned with it.
 
 
 Test fixtures
 -------------
 
-All fixtures are in `fixtures/`. Each is a small rexxlet exercising one
-facet of the processor:
+All fixtures are in `fixtures/`. Each is a small rexxlet (or, for a few
+cases, a plain data file) exercising one facet of the processor. They are
+grouped below by the area they probe; the whitelist order in
+`RunHTTPTests.rex` is the authoritative list.
+
+Basics and arguments:
 
 | File        | Purpose                                                   |
 |-------------|-----------------------------------------------------------|
@@ -112,14 +128,78 @@ facet of the processor:
 | `multi`     | Echo GET/POST args in order, including duplicates         |
 | `qs`        | Named-argument lookup (Value, Exists)                     |
 | `check`     | Report method, script_name, uri                           |
-| `setck`     | Set a plain session cookie via `HTTP.Cookie`              |
+| `readname`  | A field name with a space, percent-/plus-encoded          |
+| `arrout`    | `arrayout` array-of-values accessor                       |
+| `arroutopt` | `arrayout` accepting a caseless alias (`LINEAS`→LINES)    |
+| `argopt`    | Caseless arg accessor accepting an odd-cased name         |
+| `methodbody`| PUT/DELETE body/argument contract                         |
+| `chunkecho` | Chunked POST body reading                                 |
+| `nrdy`      | The three `HTTP.OutputStream` output methods (§3.8 guard) |
+
+Cookies:
+
+| File        | Purpose                                                   |
+|-------------|-----------------------------------------------------------|
+| `setck`     | Set a plain session cookie via `HTTP.Cookie`             |
 | `readck`    | Read cookies back from the request                        |
 | `setckopts` | Cookie with Max-Age, SameSite, HttpOnly                  |
-| `badck`     | Inconsistent cookie (SameSite=None without Secure)        |
+| `setpair`   | Two cookies; caller-encoded value round trip (`;`, `+`)   |
+| `readpair`  | Read two cookies; `"0"` not reported as a present name    |
+| `dupck`     | Duplicate cookie name: by-name is first-wins, count sees both |
+| `badck`     | Inconsistent cookie (SameSite=None without Secure) → error |
+| `badnm`     | Cookie name carrying a non-ASCII byte                     |
+| `bsnm`      | Cookie name carrying a backslash                          |
+| `addckfail` | `addcookie` after commit (raises post-flush)              |
+
+Headers, body and flushing:
+
+| File        | Purpose                                                   |
+|-------------|-----------------------------------------------------------|
 | `late`      | Set a header *after* writing body (lazy headers)          |
 | `partial`   | Explicit early flush, then more body                      |
-| `boom`      | Deliberate runtime error (error page)                     |
 | `htmltype`  | Override Content-Type to text/html                        |
+| `ctnorm`    | Content-Type set via bracket + underscore key             |
+| `ctnormsp`  | Content-Type via bracket key with a space                 |
+| `ctnormqm`  | Content-Type via quoted message name with a space         |
+| `ctnormws`  | Content-Type key with leading/trailing/internal whitespace |
+| `crlfhdr`   | CRLF injected into a header value (built in code)         |
+| `crlfck`    | CRLF injected into a cookie (built in code)               |
+| `crlfrdr`   | Double CRLF + smuggled Content-Type in a redirect         |
+| `commitfail`| Header set after an explicit flush (raises post-commit)   |
+| `flushcrash`| Runtime error *after* an explicit flush                   |
+
+Errors and redirects:
+
+| File        | Purpose                                                   |
+|-------------|-----------------------------------------------------------|
+| `boom`      | Deliberate runtime error (error page)                     |
+| `err404`    | `error(404, ...)` with a message                          |
+| `errgen`    | `error(503)` with no message                              |
+| `errescape` | Error message with characters needing HTML-escaping       |
+| `errreset`  | Body written before `error()` is discarded                |
+| `errthenfail`| `error()` then a further failure (double-pop guard, v98) |
+| `rdr`       | `redirect()` to a path (default status)                   |
+| `rdr301`    | `redirect(..., 301)`                                      |
+| `rdr303`    | `redirect(..., 303)`                                      |
+
+Argument policy, environment pool and URL reconstruction:
+
+| File        | Purpose                                                   |
+|-------------|-----------------------------------------------------------|
+| `polstrict` | `REXXHTTP_ARGPOLICY Strict` honoured (caseless)           |
+| `polbad`    | Unknown `REXXHTTP_ARGPOLICY` value → 500                  |
+| `envpool`   | `[]` reaches the environment pool; REDIRECT_ fallback     |
+| `enc`       | Encoder family via the instance accessor                  |
+| `urlprobe`  | script_name/request_url that match the real topology      |
+| `urlnobar`  | URL reconstruction via the base=="" fallback              |
+| `urlremap`  | URLBASE injects a prefix, proving live RFC reconstruction |
+
+CGI-variable contract matrix:
+
+| File        | Purpose                                                   |
+|-------------|-----------------------------------------------------------|
+| `cgivars`   | Probe deployed across the twelve-cell topology (`DeployMatrix`) |
+| `headwrap`  | Wrapper that always delivers a fixed file (`headwrap.data`) |
 
 
 What is tested
@@ -156,6 +236,13 @@ Framework
   `status`, `body`, and the raw `headers` block. An optional cookie-jar
   file makes successive calls share cookies (real round trips).
 - **`httpPost(url, data [, jar])`** — HTTP POST with a urlencoded body.
+- **`httpHead(url [, jar])`** — HTTP HEAD (headers only).
+- **`httpGetCookie(url, jar)`** — GET that records the response cookies
+  into the given jar, for a subsequent round-trip read.
+- **`httpPostChunked(url, data [, jar])`** — POST with a chunked
+  transfer-encoded body, to exercise streamed body reading.
+- **`httpVerb(verb, url [, data [, jar]])`** — arbitrary method (PUT,
+  DELETE, ...), for the method/body contract tests.
 - **`assertContains` / `assertNotContains`** — caseless body substring
   checks.
 - **`assertHeader(headers, name, valueSubstring, label)`** — assert a
@@ -170,8 +257,10 @@ Notes and known limitations
 ----------------------------
 
 - **Direct-call 404**: `RexxHTTP.rex` guards against being run as a
-  rexxlet itself (returning a 404). That guard is not tested here: in this
-  montage a direct request to the processor is intercepted by the
-  ScriptAlias and fails the CRLF-shebang exec before ooRexx runs. Reaching
-  the guard needs a request routed through the wrapper whose request_uri
-  contains the processor name, which is a montage concern.
+  rexxlet itself (returning a 404). With the Action pointing straight at
+  the LF processor, a direct URL hit runs it as a plain CGI under the
+  ScriptAlias, `REDIRECT_HANDLER` is empty, and the guard fires. Its 404
+  page is byte-shaped like Apache's stock 404 on purpose, so the suite
+  asserts on the status. This *is* tested here (`test_direct_invocation_404`),
+  along with the v99 regression tests that a query string merely mentioning
+  the processor name does not spuriously 404 a valid rexxlet.

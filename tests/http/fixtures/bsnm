@@ -1,0 +1,9 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- "5c"x: a backslash in the cookie name, built in code so the fixture file
+-- itself stays unambiguous. The backslash is an RFC 6265 separator; before
+-- v107 validatename omitted it and the name slipped through (audit §3.10).
+-- new must now reject it.
+c = .HTTP.Cookie~new("bad"||"5c"x||"name", "1")
+response~addcookie(c)
+Say "should not reach here"

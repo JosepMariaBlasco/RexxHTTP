@@ -42,8 +42,13 @@ details of installation come later, in
 <para>A rexxlet is nothing more than an ordinary &Rexx; program. Anyone who knows
 &Rexx; can already write one. Here is a complete, working rexxlet:</para>
 
+<indexterm><primary>examples</primary>
+<secondary>writing a one-line rexxlet</secondary></indexterm>
+<example>
+<title>Writing a one-line rexxlet</title>
 <programlisting language="rexx">
   Say "Hello, world!"</programlisting>
+</example>
 
 <para>One line. Request the rexxlet from a browser and <literal>Hello, world!</literal>
 will come back. That single line is the whole rexxlet:
@@ -59,18 +64,22 @@ what to say.</para>
 <indexterm><primary>arg</primary></indexterm>
 
 <para>To accept parameters, the rexxlet reads them from the request object. The
-most direct way to send some is the <emphasis role="italic">query string</emphasis>
-&mdash; the part of a URL after the <literal>?</literal>. Add
+most direct way to send some is the <emphasis role="italic">query string</emphasis>, the part of a URL after the <literal>?</literal>. Add
 <literal>?Name=Josep</literal> to the URL and the rexxlet can read <literal>Name</literal>
 back:</para>
 
+<indexterm><primary>examples</primary>
+<secondary>reading a query-string parameter</secondary></indexterm>
+<example>
+<title>Reading a query-string parameter</title>
 <programlisting language="rexx">
   If .request~arg("Name", "Omitted") Then Say "NAME parameter is missing"
   Else                                    Say "Hello," .request~arg("Name")"!"
 </programlisting>
+</example>
 
 <para>The <methodname>arg</methodname> method works similarly to the built-in
-&Rexx; <function>ARG</function> function, but it takes a name instead of a number
+&Rexx; ARG function, but it takes a name instead of a number
 to identify its arguments.</para>
 
 </section>
@@ -81,13 +90,16 @@ to identify its arguments.</para>
 <para>HTTP is a stateless protocol. An application that needs to keep state across
 requests can use cookies for that purpose: small named values the browser holds
 and sends back on every later request to the same place. The rexxlet reads an
-incoming cookie the same way it reads an argument &mdash;
-<methodname>cookie</methodname> on the request object, with the same options.</para>
+incoming cookie the same way it reads an argument: <methodname>cookie</methodname> on the request object, with the same options.</para>
 
 <para>The following rexxlet greets the visitor by name and remembers the name for next
 time. It can be read as one decision: has the visitor been seen before, and is a
 name being supplied now?</para>
 
+<indexterm><primary>examples</primary>
+<secondary>storing state in a cookie</secondary></indexterm>
+<example>
+<title>Storing state in a cookie</title>
 <programlisting language="rexx">  nameGiven = .request~arg("Name", "Exists")      -- was Name sent at all?
   newName   = .request~arg("Name")                -- its value ("" if empty)
   nameKnown = .request~cookie("Name", "Exists")   -- do we have a stored name?
@@ -109,6 +121,7 @@ name being supplied now?</para>
     When nameKnown Then Say "Welcome back," oldName"!"  -- no name, but we remember
     Otherwise           Say "NAME parameter is missing"
   End</programlisting>
+</example>
 
 <para>Every branch is ordinary &Rexx;; the only new things are the two cookie
 operations. Handing a fresh <classname>HTTP.Cookie</classname> to
@@ -126,6 +139,10 @@ how the rexxlet forgets a name when the visitor sends an empty one.</para>
 <para>For richer, structured responses a rexxlet sends HTML. When this happens,
 the rexxlet sets the <literal>Content-Type</literal> header:</para>
 
+<indexterm><primary>examples</primary>
+<secondary>sending HTML from a rexxlet</secondary></indexterm>
+<example>
+<title>Sending HTML from a rexxlet</title>
 <programlisting language="rexx"> .response~content_type = "text/html"
 
   Say "&lt;!DOCTYPE html&gt;"
@@ -136,6 +153,7 @@ the rexxlet sets the <literal>Content-Type</literal> header:</para>
   Say "    &lt;p&gt;This is a paragraph.&lt;/p&gt;"
   Say "  &lt;/body&gt;"
   Say "&lt;/html&gt;"</programlisting>
+</example>
 
 </section>
 
@@ -146,6 +164,10 @@ the rexxlet sets the <literal>Content-Type</literal> header:</para>
 <para>To handle large blocks of HTML, it is usually practical to use a
 <computeroutput>::RESOURCE</computeroutput> directive:</para>
 
+<indexterm><primary>examples</primary>
+<secondary>keeping the HTML in a resource</secondary></indexterm>
+<example>
+<title>Keeping the HTML in a resource</title>
 <programlisting language="rexx"> .response~content_type = "text/html"
   Say .resources~page
 
@@ -159,6 +181,7 @@ the rexxlet sets the <literal>Content-Type</literal> header:</para>
   &lt;/body&gt;
 &lt;/html&gt;
 ::END</programlisting>
+</example>
 
 </section>
 
@@ -170,10 +193,13 @@ the rexxlet sets the <literal>Content-Type</literal> header:</para>
 
 <para>HTML pages can display <emphasis role="italic">forms</emphasis> that collect
 data, and a rexxlet reads that data with the same <methodname>arg</methodname>
-method. A second resource holds a <emphasis role="italic">placeholder</emphasis>
-&mdash; a marker written here as <literal>%name%</literal> &mdash; that the rexxlet
+method. A second resource holds a <emphasis role="italic">placeholder</emphasis> (a marker written here as <literal>%name%</literal>) that the rexxlet
 replaces with the submitted value on the way out.</para>
 
+<indexterm><primary>examples</primary>
+<secondary>filling in the template</secondary></indexterm>
+<example>
+<title>Filling in the template</title>
 <programlisting language="rexx">
  .response~content_type = "text/html"
 
@@ -211,10 +237,11 @@ replaces with the submitted value on the way out.</para>
   &lt;/body&gt;
 &lt;/html&gt;
 ::END</programlisting>
+</example>
 
 <para>Ask for the rexxlet with no parameter and the first resource goes out
 untouched: a form with a single field. Fill it in and submit, and the browser
-comes back to the same rexxlet with <literal>Name</literal> set &mdash; the form
+comes back to the same rexxlet with <literal>Name</literal> set: the form
 has built the query string on the visitor's behalf, the very thing
 <xref linkend="stut-query-string" xrefstyle="select:title"/> typed out by
 hand.</para>
@@ -223,8 +250,8 @@ hand.</para>
 second resource and fills it in. The work is one line:
 <methodname>caselessChangeStr</methodname>, an ordinary &Rexx; string method,
 replaces every <literal>%name%</literal> in the page with the value that came in.
-Nothing about it is particular to the web &mdash; it is the same method one would
-use to edit any string &mdash; and that is the point: the page is just text, the
+Nothing about it is particular to the web; it is the same method one would
+use to edit any string. The page is just text, the
 substitution is just &Rexx;, and the template fills itself in with a tool that was
 already at hand. Reading the argument is the same <methodname>arg</methodname> from
 before, and it stays the same whether the form sends its data in the URL or in the
@@ -241,12 +268,16 @@ way.</para>
 <para>The greeter of the previous section forgets the visitor the moment the response goes
 out: send it a name and it fills in the page, but come back without one and it has
 nothing to show but the empty form again. <xref linkend="stut-cookies"
-xrefstyle="select:title"/> already solved remembering, with a cookie &mdash; only
+xrefstyle="select:title"/> already solved remembering, with a cookie, although
 there the answer came back as plain text. Nothing prevents doing both: store
 the name in a cookie when it is given, and serve the result as a proper HTML page
-either way. That is the whole chapter in one rexxlet &mdash; a form to ask, a
+either way. That is the whole chapter in one rexxlet: a form to ask, a
 template to fill, and a cookie to remember.</para>
 
+<indexterm><primary>examples</primary>
+<secondary>remembering the visitor across requests</secondary></indexterm>
+<example>
+<title>Remembering the visitor across requests</title>
 <programlisting language="rexx"> .response~content_type = "text/html"
 
   Select
@@ -299,13 +330,14 @@ template to fill, and a cookie to remember.</para>
   &lt;/body&gt;
 &lt;/html&gt;
 ::END</programlisting>
+</example>
 
 <para>Three visits tell the story. The first time, a stranger arrives with no
 name and no cookie, and the <literal>form</literal> resource goes out: the page
 asks who the visitor is. The form is filled in and submitted; now <literal>Name</literal> is set,
-so the rexxlet hands back a <classname>HTTP.Cookie</classname> &mdash; the same
+so the rexxlet hands back a <classname>HTTP.Cookie</classname> (the same
 <methodname>addcookie</methodname> from <xref linkend="stut-cookies"
-xrefstyle="select:title"/> &mdash; and fills the <literal>greeting</literal>
+xrefstyle="select:title"/>) and fills the <literal>greeting</literal>
 template with the supplied name. On a later visit no name is sent, but the browser
 sends the cookie along with the request; the rexxlet finds it with
 <methodname>cookie</methodname> and fills the <literal>welcome</literal> template
@@ -316,8 +348,8 @@ the cookie carries that value from one visit to the next; the resource holds the
 page as readable markup; <methodname>caselessChangeStr</methodname> drops the name
 into it; and <computeroutput>content_type</computeroutput> makes the browser
 render the result. None of it is more than a few lines, and together they are an
-ordinary web page that remembers its visitors &mdash; which is most of what a
-small web application ever has to do.</para>
+ordinary web page that remembers its visitors, which is most of what a
+small web application has to do.</para>
 
 </section>
 
@@ -328,11 +360,15 @@ small web application ever has to do.</para>
 <indexterm><primary>encodeHTML</primary></indexterm>
 
 <para>A rexxlet is an ordinary &Rexx; program which can reach out
-to the world &mdash; read a file, query a database, call another service over the network &mdash;
-and weave what it finds into its reply. The code in the following example
+to the world (read a file, query a database, call another service over the
+network) and weave what it finds into its reply. The code in the following example
 fetches two posts from a public test API, parses the JSON each
 returns, and lays them out as a page.</para>
 
+<indexterm><primary>examples</primary>
+<secondary>reaching out to the network</secondary></indexterm>
+<example>
+<title>Reaching out to the network</title>
 <programlisting language="rexx">
  .response~content_type = "text/html"
 
@@ -385,10 +421,11 @@ BadJSON:
 
 ::Requires "json.cls"
 </programlisting>
+</example>
 
 <para>The loop is the whole of it. For each post,
 <computeroutput>FetchJSON</computeroutput> downloads a URL and hands back a parsed
-object &mdash; or <literal>.nil</literal> if anything went wrong. The
+object, or &nil; if anything went wrong. The
 pieces are joined into the <literal>posts</literal> string, dropped into the
 template, and sent.</para>
 

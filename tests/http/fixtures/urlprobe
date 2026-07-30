@@ -11,3 +11,16 @@ response~content_type = "text/plain"
 -- each deployment of this probe sets (or omits) the pair to exercise both.
 Say "request_url=["request~request_url"]"
 Say "script_name=["request~script_name"]"
+
+-- §3.5 regression guard: script_name and document_uri must NOT mutate the
+-- instance variable `base` (they translate a LOCAL normBase now). Emit
+-- ~RexxHTTP_DIR (which returns base) before and after invoking both, so a
+-- test can assert it is unchanged. On Windows the old code left the second
+-- read carrying "/" instead of the native separator; on any platform the two
+-- reads must coincide.
+dirBefore = request~RexxHTTP_DIR
+ignore1 = request~script_name
+ignore2 = request~document_uri
+dirAfter = request~RexxHTTP_DIR
+Say "dir_before=["dirBefore"]"
+Say "dir_after=["dirAfter"]"

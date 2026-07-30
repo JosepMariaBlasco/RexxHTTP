@@ -80,6 +80,10 @@
     End
     When "Linux"   Then Call "Linux.install.orx"   opts
     When "MacOS"   Then Call "Mac.install.orx"     opts
+    Otherwise Do
+      Say "ERROR: unsupported platform" OSType()"."
+      Exit 1
+    End
   End
 
   Exit Result
@@ -105,8 +109,8 @@ Usage:
                 with no Windows service and no elevation, for machines where
                 you are not an administrator. Apache runs in its own window
                 (a start.cmd launcher is planted in the server root); it does
-                not start automatically with Windows. Install only.
+                not start automatically with Windows.
 
 ::END
 
-::Requires "InstallHelpers.cls"
+::Requires "InstallHelpers.cls"

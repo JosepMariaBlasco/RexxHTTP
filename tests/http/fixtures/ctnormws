@@ -1,0 +1,16 @@
+Use Arg request, response
+
+-- Extra whitespace in the header key: leading, trailing, and multiple internal
+-- blanks must all collapse to the same CONTENT-TYPE slot (v104 -- Space added
+-- before the translate). Mike C.'s contract: the comparison is caseless and
+-- strips outer blanks; internal blanks collapse because no CGI variable name
+-- carries a "--". This fixture drives the four key-normalising paths with
+-- messy spacing; the test asserts one Content-Type header with the last value.
+--
+-- Each line below re-sets the SAME logical header through a different path,
+-- with deliberately sloppy spacing. If normalisation works, they all target
+-- the one CONTENT-TYPE slot and the final write wins -- no stray duplicates.
+
+response["  content   type  "]  = "text/plain"                   -- []=  messy
+response[" Content-Type "]      = "text/html; charset=iso-8859-1" -- []= trims
+Say "<p>ct via bracket with extra whitespace</p>"

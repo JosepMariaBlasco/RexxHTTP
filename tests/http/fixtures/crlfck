@@ -1,0 +1,6 @@
+Use Arg request, response
+response~content_type = "text/plain"
+-- "0d0a"x: CRLF built in code, so the fixture file itself stays plain text.
+c = .HTTP.Cookie~new("sess", "ok"||"0d0a"x||"Set-Cookie: mal=si")
+response~addcookie(c)
+Say "should not reach here"
