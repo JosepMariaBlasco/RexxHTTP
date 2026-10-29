@@ -19,6 +19,8 @@
 /* Date     Version Details                                                   */
 /* -------- ------- --------------------------------------------------------- */
 /* 20260630    1.0  First version                                             */
+/* 20261029    1.1  Download link to the package zip (absolute URL: the zip   */
+/*                  is not planted in local installs)                         */
 /*                                                                            */
 /******************************************************************************/
 
@@ -92,4 +94,9 @@
         code &mdash; and at <code>src/</code>, the processor itself.</p>
       </a>
     </div>
+
+    <p class="muted text-center">Want your own copy? <a
+      href="https://rexx.epbcn.com/rexxhttp/rexxhttp-latest.zip">Download
+      the RexxHTTP package</a> (zip) from
+      <a href="https://rexx.epbcn.com/rexxhttp/">rexx.epbcn.com/rexxhttp</a>.</p>
 ::END

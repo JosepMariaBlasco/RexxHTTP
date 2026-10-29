@@ -39,6 +39,8 @@
 /* Date     Version Details                                                   */
 /* -------- ------- --------------------------------------------------------- */
 /* 20260611    1.0  First version                                             */
+/* 20261029    1.1  Footer: download link to the package zip (absolute URL:   */
+/*                  the zip is not planted in local installs)                 */
 /*                                                                            */
 /******************************************************************************/
 
@@ -260,7 +262,7 @@ Found:
   </main>
   <footer class="site-footer">
     <div class="wrap">
-      Served by <a href="%home%">RexxHTTP</a> &mdash; a rexxlet processor for ooRexx. <a href="%home%rexxhttp.pdf">Documentation</a>.
+      Served by <a href="%home%">RexxHTTP</a> &mdash; a rexxlet processor for ooRexx. <a href="%home%rexxhttp.pdf">Documentation</a>. <a href="https://rexx.epbcn.com/rexxhttp/rexxhttp-latest.zip">Download</a>.
       <br>
       Copyright &copy; <a href="https://rexx.epbcn.com/josep-maria-blasco/">Josep Maria Blasco</a>, 2006-%year%.
       Distributed under <a href="%home%LICENSE">the Apache 2.0 license</a>.
