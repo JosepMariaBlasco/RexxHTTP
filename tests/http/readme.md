@@ -70,6 +70,17 @@ runner can point the suite at whatever deployment it set up:
 
 - `REXXHTTP_TEST_BASEURL` (default `http://127.0.0.1`)
 - `REXXHTTP_TEST_PATH` (default `/test/`)
+- `REXXHTTP_TEST_DRIVE` (default empty): the drive the montage's disk
+  paths live on, where they have one (Windows: `C:`). The tests that check
+  a disk path (`filename`, `path_translated`, `script_filename`,
+  `RexxHTTP_DIR`) write it as on Linux and ask `HTTPTestCase` for the form
+  RexxHTTP reports on this machine: `onDisk` for a path resolved on disk
+  (the drive and the native separator), `asConfigured` for one written in
+  Apache's configuration (the drive, and `/` as written).
+
+The client keeps its working files (status, headers, body, cookie jars) in
+the system's temporary folder, through the framework's `TemporaryTestFile`,
+so the suite runs unchanged on Linux, macOS and Windows.
 
 
 The montage

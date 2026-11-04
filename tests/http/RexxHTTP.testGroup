@@ -576,20 +576,18 @@ Else
 
 ::Method test_cookie_roundtrip
   -- setck sets the cookie into a fresh jar; readck must read it back.
-  jar = "/tmp/rexxhttp-roundtrip.jar"
-  Address System "rm -f" jar
+  jar = self~newJar("rexxhttp-roundtrip.jar")
   self~httpGet(self~url("setck"), jar)
   r = self~httpGet(self~url("readck"), jar)
-  Address System "rm -f" jar
+  self~dropJar(jar)
   self~assertContains(r~entry("body"), "session=abc123", -
     "cookie round-trip: readck reads back the value setck wrote")
 
 ::Method test_cookie_roundtrip_count
-  jar = "/tmp/rexxhttp-roundtrip2.jar"
-  Address System "rm -f" jar
+  jar = self~newJar("rexxhttp-roundtrip2.jar")
   self~httpGet(self~url("setck"), jar)
   r = self~httpGet(self~url("readck"), jar)
-  Address System "rm -f" jar
+  self~dropJar(jar)
   self~assertContains(r~entry("body"), "count=1", -
     "cookie round-trip: exactly one cookie seen by readck")
 
@@ -597,20 +595,18 @@ Else
   -- Browsers send several cookies as "a=1; b=2" — separator "; " per
   -- RFC 6265. Both must be parsed (regression: split on ";" alone left
   -- a leading space in the second name).
-  jar = "/tmp/rexxhttp-pair1.jar"
-  Address System "rm -f" jar
+  jar = self~newJar("rexxhttp-pair1.jar")
   self~httpGet(self~url("setpair"), jar)
   r = self~httpGet(self~url("readpair?x=1"), jar)
-  Address System "rm -f" jar
+  self~dropJar(jar)
   self~assertContains(r~entry("body"), "count=2", -
     "cookie pair: both cookies of a browser-style Cookie header parsed")
 
 ::Method test_cookie_pair_first_by_name
-  jar = "/tmp/rexxhttp-pair2.jar"
-  Address System "rm -f" jar
+  jar = self~newJar("rexxhttp-pair2.jar")
   self~httpGet(self~url("setpair"), jar)
   r = self~httpGet(self~url("readpair?x=1"), jar)
-  Address System "rm -f" jar
+  self~dropJar(jar)
   self~assertContains(r~entry("body"), "first=plain", -
     "cookie pair: the first cookie is reachable by name")
 
@@ -619,11 +615,10 @@ Else
   -- its caller-encoded value must come back decoded: %3B as ";" without
   -- acting as a separator, %2B as "+" (percent-only decoding; the "+"
   -- rule belongs to form-urlencoded data, not to cookies).
-  jar = "/tmp/rexxhttp-pair3.jar"
-  Address System "rm -f" jar
+  jar = self~newJar("rexxhttp-pair3.jar")
   self~httpGet(self~url("setpair"), jar)
   r = self~httpGet(self~url("readpair?x=1"), jar)
-  Address System "rm -f" jar
+  self~dropJar(jar)
   self~assertContains(r~entry("body"), "second=a;b+c", -
     "cookie pair: second cookie reachable by name, value percent-decoded")
 
@@ -631,22 +626,20 @@ Else
   -- The argument counter no longer lives in the stem key space: with
   -- arguments present, arg("0","Exists") must be 0 (it used to find the
   -- counter and report an inexistent parameter named "0").
-  jar = "/tmp/rexxhttp-pair4.jar"
-  Address System "rm -f" jar
+  jar = self~newJar("rexxhttp-pair4.jar")
   self~httpGet(self~url("setpair"), jar)
   r = self~httpGet(self~url("readpair?x=1"), jar)
-  Address System "rm -f" jar
+  self~dropJar(jar)
   self~assertContains(r~entry("body"), "zeroarg=0", -
     "no parameter named 0 is reported when arguments are present")
 
 ::Method test_zero_cookie_not_reported
   -- Same for cookies: with cookies present and none named "0",
   -- cookie("0","Exists") must be 0.
-  jar = "/tmp/rexxhttp-pair5.jar"
-  Address System "rm -f" jar
+  jar = self~newJar("rexxhttp-pair5.jar")
   self~httpGet(self~url("setpair"), jar)
   r = self~httpGet(self~url("readpair?x=1"), jar)
-  Address System "rm -f" jar
+  self~dropJar(jar)
   self~assertContains(r~entry("body"), "zerocookie=0", -
     "no cookie named 0 is reported when cookies are present")
 
@@ -714,13 +707,16 @@ Else
   -- Elements present and separated by LF. NB: the test harness's slurp() reads
   -- the body line by line and rejoins WITHOUT a trailing terminator, so
   -- entry("body") cannot see the last LF -- assert only the inter-element joins
-  -- here, and check the final terminator via Content-Length below.
+  -- here, and check the final terminator on the raw bytes below.
   self~assertContains(r~entry("body"), "alpha"||"0A"x||"beta"||"0A"x||"gamma", -
     "arrayout writes the array elements joined by LF")
   -- The terminator IS on the wire: body is "alpha\nbeta\ngamma\n" = 17 bytes.
-  -- Without the v106 final terminator it would be 16. Content-Length is the
-  -- byte-accurate channel (slurp would hide the difference).
-  self~assertHeader(r~entry("headers"), "Content-Length", "17", -
+  -- Without the v106 final terminator it would be 16. entry("raw") is the
+  -- byte-accurate channel (slurp would hide the difference). Not
+  -- Content-Length: measured, Apache sends one under mod_cgid on Linux and
+  -- under mod_orx, but chunks the response under mod_cgi on Windows, with no
+  -- Content-Length and the very same 17 bytes.
+  self~assertSame("alpha"||"0A"x||"beta"||"0A"x||"gamma"||"0A"x, r~entry("raw"), -
     "arrayout terminates the last line with LF: body is 17 bytes, not 16" -
     "(deliberate LF-not-CRLF; converges with Stream~arrayout on LF platforms)")
 
@@ -1412,9 +1408,9 @@ Else
   -- translate branch is not taken, but the guard pins the invariant against a
   -- future edit that moved the mutation into the common path.)
   r = self~httpGet(self~url("urlprobe"))
-  self~assertContains(r~entry("body"), "dir_before=[/var/www/html/test]", -
+  self~assertContains(r~entry("body"), "dir_before=["self~asConfigured("/var/www/html/test")"]", -
     "RexxHTTP_DIR reads the configured base before script_name/document_uri")
-  self~assertContains(r~entry("body"), "dir_after=[/var/www/html/test]", -
+  self~assertContains(r~entry("body"), "dir_after=["self~asConfigured("/var/www/html/test")"]", -
     "script_name and document_uri leave the instance base unmutated")
 
 ::Method test_outputstream_non_ready_methods_refuse_and_return_1
@@ -1596,18 +1592,18 @@ Else
       -- /opt/rexxhttp-matrix (aliased). Absolute literals are legitimate here
       -- because DeployMatrix owns those roots -- change them there and this row
       -- changes with them.
-      c["doc/rexlet/1hop/plain"]   = "/var/www/html/mtx/probe.rxl"
-      c["doc/rexlet/1hop/extra"]   = "/var/www/html/mtx/probe.rxl"
-      c["doc/rexlet/2hop/plain"]   = "/var/www/html/mtx/target.mtx"
-      c["doc/rexlet/2hop/extra"]   = "/var/www/html/mtx/target.mtx"
-      c["doc/dirindex/1hop/plain"] = "/var/www/html/mtx/index.rxl"
-      c["doc/dirindex/2hop/plain"] = "/var/www/html/mtx/sub/index.mtx"
-      c["ali/rexlet/1hop/plain"]   = "/opt/rexxhttp-matrix/probe.rxl"
-      c["ali/rexlet/1hop/extra"]   = "/opt/rexxhttp-matrix/probe.rxl"
-      c["ali/rexlet/2hop/plain"]   = "/opt/rexxhttp-matrix/target.mtx"
-      c["ali/rexlet/2hop/extra"]   = "/opt/rexxhttp-matrix/target.mtx"
-      c["ali/dirindex/1hop/plain"] = "/opt/rexxhttp-matrix/index.rxl"
-      c["ali/dirindex/2hop/plain"] = "/opt/rexxhttp-matrix/sub/index.mtx"
+      c["doc/rexlet/1hop/plain"]   = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["doc/rexlet/1hop/extra"]   = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["doc/rexlet/2hop/plain"]   = self~onDisk("/var/www/html/mtx/target.mtx")
+      c["doc/rexlet/2hop/extra"]   = self~onDisk("/var/www/html/mtx/target.mtx")
+      c["doc/dirindex/1hop/plain"] = self~onDisk("/var/www/html/mtx/index.rxl")
+      c["doc/dirindex/2hop/plain"] = self~onDisk("/var/www/html/mtx/sub/index.mtx")
+      c["ali/rexlet/1hop/plain"]   = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
+      c["ali/rexlet/1hop/extra"]   = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
+      c["ali/rexlet/2hop/plain"]   = self~onDisk("/opt/rexxhttp-matrix/target.mtx")
+      c["ali/rexlet/2hop/extra"]   = self~onDisk("/opt/rexxhttp-matrix/target.mtx")
+      c["ali/dirindex/1hop/plain"] = self~onDisk("/opt/rexxhttp-matrix/index.rxl")
+      c["ali/dirindex/2hop/plain"] = self~onDisk("/opt/rexxhttp-matrix/sub/index.mtx")
     End
     When "filename" Then Do
       -- FILENAME: the on-disk path of the DOCUMENT the client requested -- the
@@ -1620,18 +1616,18 @@ Else
       -- reference to path_translated: the framework is literal-per-cell so each
       -- variable is anchored to its own observed value, and if the two ever
       -- diverge only the moved cells change here. Guaranteed exact in all twelve.
-      c["doc/rexlet/1hop/plain"]   = "/var/www/html/mtx/probe.rxl"
-      c["doc/rexlet/1hop/extra"]   = "/var/www/html/mtx/probe.rxl"
-      c["doc/rexlet/2hop/plain"]   = "/var/www/html/mtx/target.mtx"
-      c["doc/rexlet/2hop/extra"]   = "/var/www/html/mtx/target.mtx"
-      c["doc/dirindex/1hop/plain"] = "/var/www/html/mtx/index.rxl"
-      c["doc/dirindex/2hop/plain"] = "/var/www/html/mtx/sub/index.mtx"
-      c["ali/rexlet/1hop/plain"]   = "/opt/rexxhttp-matrix/probe.rxl"
-      c["ali/rexlet/1hop/extra"]   = "/opt/rexxhttp-matrix/probe.rxl"
-      c["ali/rexlet/2hop/plain"]   = "/opt/rexxhttp-matrix/target.mtx"
-      c["ali/rexlet/2hop/extra"]   = "/opt/rexxhttp-matrix/target.mtx"
-      c["ali/dirindex/1hop/plain"] = "/opt/rexxhttp-matrix/index.rxl"
-      c["ali/dirindex/2hop/plain"] = "/opt/rexxhttp-matrix/sub/index.mtx"
+      c["doc/rexlet/1hop/plain"]   = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["doc/rexlet/1hop/extra"]   = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["doc/rexlet/2hop/plain"]   = self~onDisk("/var/www/html/mtx/target.mtx")
+      c["doc/rexlet/2hop/extra"]   = self~onDisk("/var/www/html/mtx/target.mtx")
+      c["doc/dirindex/1hop/plain"] = self~onDisk("/var/www/html/mtx/index.rxl")
+      c["doc/dirindex/2hop/plain"] = self~onDisk("/var/www/html/mtx/sub/index.mtx")
+      c["ali/rexlet/1hop/plain"]   = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
+      c["ali/rexlet/1hop/extra"]   = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
+      c["ali/rexlet/2hop/plain"]   = self~onDisk("/opt/rexxhttp-matrix/target.mtx")
+      c["ali/rexlet/2hop/extra"]   = self~onDisk("/opt/rexxhttp-matrix/target.mtx")
+      c["ali/dirindex/1hop/plain"] = self~onDisk("/opt/rexxhttp-matrix/index.rxl")
+      c["ali/dirindex/2hop/plain"] = self~onDisk("/opt/rexxhttp-matrix/sub/index.mtx")
     End
     When "script_filename" Then Do
       -- SCRIPT_FILENAME: the on-disk path of the PROCESSOR -- the rexlet Apache
@@ -1643,18 +1639,18 @@ Else
       -- resolved index rexlet in one hop; the Action processor in two. It holds
       -- the value PATH_TRANSLATED carried before PATH_TRANSLATED took on its
       -- document meaning. Exact and deterministic in all twelve.
-      c["doc/rexlet/1hop/plain"]   = "/var/www/html/mtx/probe.rxl"
-      c["doc/rexlet/1hop/extra"]   = "/var/www/html/mtx/probe.rxl"
-      c["doc/rexlet/2hop/plain"]   = "/var/www/html/mtx/probe.rxl"
-      c["doc/rexlet/2hop/extra"]   = "/var/www/html/mtx/probe.rxl"
-      c["doc/dirindex/1hop/plain"] = "/var/www/html/mtx/index.rxl"
-      c["doc/dirindex/2hop/plain"] = "/var/www/html/mtx/probe.rxl"
-      c["ali/rexlet/1hop/plain"]   = "/opt/rexxhttp-matrix/probe.rxl"
-      c["ali/rexlet/1hop/extra"]   = "/opt/rexxhttp-matrix/probe.rxl"
-      c["ali/rexlet/2hop/plain"]   = "/opt/rexxhttp-matrix/probe.rxl"
-      c["ali/rexlet/2hop/extra"]   = "/opt/rexxhttp-matrix/probe.rxl"
-      c["ali/dirindex/1hop/plain"] = "/opt/rexxhttp-matrix/index.rxl"
-      c["ali/dirindex/2hop/plain"] = "/opt/rexxhttp-matrix/probe.rxl"
+      c["doc/rexlet/1hop/plain"]   = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["doc/rexlet/1hop/extra"]   = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["doc/rexlet/2hop/plain"]   = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["doc/rexlet/2hop/extra"]   = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["doc/dirindex/1hop/plain"] = self~onDisk("/var/www/html/mtx/index.rxl")
+      c["doc/dirindex/2hop/plain"] = self~onDisk("/var/www/html/mtx/probe.rxl")
+      c["ali/rexlet/1hop/plain"]   = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
+      c["ali/rexlet/1hop/extra"]   = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
+      c["ali/rexlet/2hop/plain"]   = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
+      c["ali/rexlet/2hop/extra"]   = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
+      c["ali/dirindex/1hop/plain"] = self~onDisk("/opt/rexxhttp-matrix/index.rxl")
+      c["ali/dirindex/2hop/plain"] = self~onDisk("/opt/rexxhttp-matrix/probe.rxl")
     End
     When "document_uri" Then Do
       -- DOCUMENT_URI: the URL-space path of the served DOCUMENT, carrying its
@@ -1816,12 +1812,12 @@ Else
 
 ::Method test_encoded_doc_filename_resolves
   r = self~httpGet(self~class~baseURL || "/mtx/spaced%20doc.mtx")
-  self~assertContains(r~entry("body"), "filename=[/var/www/html/mtx/spaced doc.mtx]", -
+  self~assertContains(r~entry("body"), "filename=["self~onDisk("/var/www/html/mtx/spaced doc.mtx")"]", -
     "rawResourcePath: %20 in an Action document name resolves to the real file")
 
 ::Method test_encoded_doc_path_translated_resolves
   r = self~httpGet(self~class~baseURL || "/mtx/spaced%20doc.mtx")
-  self~assertContains(r~entry("body"), "path_translated=[/var/www/html/mtx/spaced doc.mtx]", -
+  self~assertContains(r~entry("body"), "path_translated=["self~onDisk("/var/www/html/mtx/spaced doc.mtx")"]", -
     "rawResourcePath: path_translated is the decoded on-disk document path")
 
 ::Method test_encoded_doc_status_ok
