@@ -27,6 +27,8 @@
 /* 20250722         Add styles for rx-dskw                                    */
 /* 20251111    0.2e Support customizable line numbers in ANSI                 */
 /* 20251213    0.3a (Executor) Add support for named arguments                */
+/* 20261031         Directive keywords: a thin dotted underline, in their   */
+/*                  colour (Rony: a solid one draws the eye to them first)    */
 /*                                                                            */
 /******************************************************************************/
 
@@ -228,7 +230,7 @@
 
   /* Additionally, directive keywords and subkeywords are underlined          */
 
-  .rx-dkw, .rx-dskw { text-decoration:underline; }
+  .rx-dkw, .rx-dskw { text-decoration: underline dotted #ddddddff; text-decoration-thickness: .5px; text-underline-offset: .2em; }
 
 /******************************************************************************/
 /* Strings (including taken constants that are strings)                       */

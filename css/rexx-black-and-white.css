@@ -6,12 +6,13 @@
 /* For a black-and-white printer (Rony, 29/10/2026: "printing in b/w still    */
 /* gives nice, easy to read and understand syntax highlighted Rexx code").    */
 /* No colour at all: what tells the tokens apart is what survives any         */
-/* printer and any photocopy -- weight, slant, three greys, and two light     */
-/* grounds. No underlines: in code they distract (Rony, 29/10/2026).          */
+/* printer and any photocopy -- weight, slant, three greys, a light ground    */
+/* and a thin dotted line. No solid underlines: in code they distract (Rony,  */
+/* 29/10/2026).                                                               */
 /*                                                                            */
 /*   black, bold         keywords, subkeywords, "=" and "::"                  */
-/*   on a light grey     directives, as well (::METHOD name)                  */
-/*   on a lighter grey   labels                                               */
+/*   dotted underline    directives, as well (::METHOD); thin and grey        */
+/*   on a light grey     labels                                               */
 /*   black               variables, numbers, operators, names                 */
 /*   black, italic       exposed variables, environment symbols, methods,     */
 /*                       external calls                                       */
@@ -34,6 +35,8 @@
 /* Date     Version Details                                                   */
 /* -------- ------- --------------------------------------------------------- */
 /* 20261029    0.7  First release (from rexx-print.css; Rony: a b/w style)    */
+/* 20261031         Directive keywords: a thin dotted underline, half their   */
+/*                  colour (Rony: a solid one draws the eye to them first)    */
 /*                                                                            */
 /******************************************************************************/
 
@@ -237,14 +240,14 @@
     font-weight: bold;
   }
 
-  /* Directives stand out on a light grey ground (Rony, 29/10/2026, instead  */
-  /* of an underline). With an alpha, the ground is laid on what is under it */
-  /* -- the listing, or the wash of a spot= mark -- and never hides it.      */
+  /* Directives: a thin dotted underline, in grey (Rony, 31/10/2026: a      */
+  /* solid one, and then a grey ground, drew the eye to them first). The    */
+  /* other styles draw theirs in the directive's colour, half transparent.  */
 
   .rx-dir, .rx-dkw, .rx-dskw {
-    background-color: #0000001f;          /* 12% of black: #e0e0e0 on white   */
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    text-decoration: underline dotted #8c8c8c;
+    text-decoration-thickness: .5px;
+    text-underline-offset: .2em;
   }
 
 /******************************************************************************/
@@ -372,7 +375,8 @@
     /* Internal functions and procedures, labels and block instruction names  */
     /*------------------------------------------------------------------------*/
 
-    /* Labels, on a lighter grey than directives (Rony, 29/10/2026)          */
+    /* Labels, on a light grey (Rony, 29/10/2026). With an alpha, the ground */
+    /* is laid on what is under it, the wash of a spot= mark too.            */
     &.rx-label {
       background-color: #0000000f;        /* 6% of black: #f0f0f0 on white    */
       -webkit-print-color-adjust: exact;

@@ -798,7 +798,16 @@
   -- "v99 -- rawResourcePath".
   rel = self~decodeURIComponent(rel)
 
-  Return base || rel
+  -- The path joins the on-disk base and a tail taken from the URL, so it
+  -- carries "/". The SysIsFile walk in init that splits the document from
+  -- its trailing path looks for the native separator, as the handler-axis
+  -- walk does on PATH_TRANSLATED (which init translates first, for the same
+  -- reason). On Windows, without this, the walk found no "\" in the tail,
+  -- split nothing, and an Action with a trailing path (/doc.mtx/x/y) lost its
+  -- path_info and got a garbled filename. A no-op where the separator is "/".
+  file = base || rel
+  If .File~separator == "\" Then file = file~translate("\", "/")
+  Return file
 
 
 --------------------------------------------------------------------------------

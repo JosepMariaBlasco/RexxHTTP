@@ -287,7 +287,16 @@ Syntax:
   -- too much details about our internals
   document_root = Env(document_root)
   program_name  = error~program
-  If program_name~startsWith(document_root) Then
+  -- On Windows the program's name carries the native separator and
+  -- DOCUMENT_ROOT Apache's "/", and the file system ignores case: compare
+  -- them in one form (otherwise the full path reached the client). Shown
+  -- with "/", as the URL that named it.
+  If .File~separator == "\" Then Do
+    program_name = program_name~translate("/", "\")
+    If program_name~caselessStartsWith(document_root~translate("/", "\")) Then
+      program_name = SubStr(program_name, Length(document_root) + 1)
+  End
+  Else If program_name~startsWith(document_root) Then
     program_name = SubStr(program_name, Length(document_root) + 1)
 
   -- Print an error message that is as similar as possible

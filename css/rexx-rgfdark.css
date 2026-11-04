@@ -16,6 +16,8 @@
 /* Date     Version Details                                                   */
 /* -------- ------- --------------------------------------------------------- */
 /* 20250527    0.1  Initial, based on "rexx-dark.css" and "rexx-rgflight.css" */
+/* 20261031         Directive keywords: a thin dotted underline, in their   */
+/*                  colour (Rony: a solid one draws the eye to them first)    */
 /*                                                                            */
 /******************************************************************************/
 
@@ -168,7 +170,7 @@
   & .rx-dkw {
     color: #00ace6;
     /* font-weight: bold; */
-    text-decoration:underline;
+    text-decoration: underline dotted #00ace6ff; text-decoration-thickness: .5px; text-underline-offset: .2em;
   }
 
   /******************************************************************************/

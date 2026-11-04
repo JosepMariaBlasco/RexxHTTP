@@ -1,0 +1,32 @@
+/* index.rxl: a rexxlet that serves a page whose Rexx runs in the browser */
+.response~content_type = 'text/html; charset=utf-8'
+.response["Cross-Origin-Opener-Policy"]   = "same-origin"
+.response["Cross-Origin-Embedder-Policy"] = "require-corp"
+
+served = Date("S") Time()                   -- the server writes data into the client's Rexx
+page = .resources~PAGE~makeString("L", "0a"x)
+Say page~changeStr("%SERVED%", served)
+
+::Resource PAGE
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rexx in the browser, served by RexxHTTP</title>
+  <script src="/oorexx-wasm/ooRexx.js"></script>
+</head>
+<body>
+  <h1>Rexx in the browser, served by RexxHTTP</h1>
+  <p id="out"></p>
+  <script type="text/rexx">
+    served = "%SERVED%"
+    say "Hello from Rexx in the browser; the page was served at" served
+    total = 0
+    do i = 1 to 5
+      total = total + i
+    end
+    .js~page~document~getElementById("out")~textContent = "1 + ... + 5 =" total
+  </script>
+</body>
+</html>
+::END

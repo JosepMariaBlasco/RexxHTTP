@@ -19,6 +19,8 @@
 /* Date     Version Details                                                   */
 /* -------- ------- --------------------------------------------------------- */
 /* 20260309    0.5  First release                                             */
+/* 20261031         Directive keywords: a thin dotted underline, half their   */
+/*                  colour (Rony: a solid one draws the eye to them first)    */
 /*                                                                            */
 /******************************************************************************/
 
@@ -220,7 +222,7 @@
 
   /* Additionally, directive keywords and subkeywords are underlined          */
 
-  .rx-dkw, .rx-dskw { text-decoration:underline; }
+  .rx-dkw, .rx-dskw { text-decoration: underline dotted #2e59a280; text-decoration-thickness: .5px; text-underline-offset: .2em; }
 
 /******************************************************************************/
 /* Strings (including taken constants that are strings)                       */
