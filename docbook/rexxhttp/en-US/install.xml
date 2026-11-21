@@ -661,6 +661,30 @@ layouts it builds, and the guidance here is for the reader configuring RexxHTTP 
 hand into an existing site.</para>
 </section>
 
+<section id="install-logerrors"><title>Logging Errors</title>
+<indexterm><primary>REXXHTTP_LOGERRORS</primary></indexterm>
+<indexterm><primary>error log</primary></indexterm>
+
+<para>When a rexxlet fails, the processor answers with a
+<literal>500</literal> page that shows the error as &Rexx; reports it: the
+lines that were running and the error number and message. That page goes to
+the client only. A server that does not pass on a page of status 400 or more,
+replacing it with one of its own (Tomcat's CGI servlet does), loses it; and an
+operator may want errors in the log anyway. With</para>
+
+<programlisting>SetEnv REXXHTTP_LOGERRORS 1
+</programlisting>
+
+<para>the processor also writes the report to its standard error, which the
+server writes to its error log. Every line starts with
+<literal>RexxHTTP:</literal>, and the first one names the request. The value
+is caseless: <literal>1</literal>, <literal>yes</literal>,
+<literal>true</literal> and <literal>on</literal> turn it on; anything else, or
+no variable at all, leaves the error log as it was. It is read as
+<literal>REXXHTTP_ARGPOLICY</literal> is, so a per-directory
+<literal>SetEnv</literal> works.</para>
+</section>
+
 <section id="install-smoke-test"><title>Smoke Test</title>
 <indexterm><primary>smoke test</primary></indexterm>
 

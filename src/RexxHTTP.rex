@@ -24,6 +24,7 @@
 /*                  RexxHTTP.ConfigError, FINALLY restores .output; a         */
 /*                  condition thrown by a rexxlet gets a 500 page too; needs  */
 /*                  ooRexx 5.3.0 r13572                                       */
+/*                  REXXHTTP_LOGERRORS=1: error reports also go to stderr     */
 /*                                                                            */
 /******************************************************************************/
 
@@ -195,6 +196,8 @@ ConfigError:
   Say '<HR>'
   Say Env(server_signature)
   Say '</BODY></HTML>'
+  Call LogError .Array~of("Server misconfiguration: unknown" -
+    "REXXHTTP_ARGPOLICY value """detail"""")
 Exit
 
 --------------------------------------------------------------------------------
@@ -242,6 +245,7 @@ ConfigFailure:
     Say
     Say reason
   End
+  Call LogError .Array~of(reason)
 Exit
 
 --------------------------------------------------------------------------------
@@ -359,13 +363,14 @@ ErrorPage:
 
   -- Print an error message that is as similar as possible
   -- to a standard ooRexx error message
+  report = .Array~new
   Do frame Over error~stackFrames
-    Say frame~makeString
+    report~append(frame~makeString)
   End
   If error~condition == "SYNTAX" Then Do
-    Say "Error" error~rc "running" program_name "line" -
-      error~position":" error~errortext
-    Say "Error" error~code":" error~message
+    report~append("Error" error~rc "running" program_name "line" -
+      error~position":" error~errortext)
+    report~append("Error" error~code":" error~message)
   End
   Else Do
     -- Any other condition is error 4, as the interpreter reports a thrown
@@ -383,11 +388,42 @@ ErrorPage:
       code    = 4.1
       message = message"."
     End
-    Say "Error 4 running" program_name "line" error~position":" ErrorText(4)
-    Say "Error" code":" message
+    report~append("Error 4 running" program_name "line" error~position":" -
+      ErrorText(4))
+    report~append("Error" code":" message)
   End
 
+  Do line Over report
+    Say line
+  End
+  Call LogError report
+
 Exit
+
+--------------------------------------------------------------------------------
+-- LogError: copy an error report to stderr, when REXXHTTP_LOGERRORS says so  --
+--------------------------------------------------------------------------------
+
+-- The error pages go to the client only. Where the server does not pass a
+-- page of 400 or more on (Tomcat's CGIServlet replaces it with its own), the
+-- report is lost unless it is also logged. With REXXHTTP_LOGERRORS set to 1
+-- (or yes, true, on, in any case), the report is also written to stderr,
+-- which the server logs: Apache's error.log, Tomcat's log. The variable is
+-- resolved as request~unknown resolves (invariant 2): its own name, and
+-- REDIRECT_ plus its name when that is empty. Unset, nothing is logged, as
+-- before. Every line starts with "RexxHTTP:", the first one names the
+-- request.
+
+LogError: Procedure
+  Use Strict Arg report
+  flag = Env("REXXHTTP_LOGERRORS")
+  If flag == "" Then flag = Env("REDIRECT_REXXHTTP_LOGERRORS")
+  If WordPos(Translate(Strip(flag)), "1 YES TRUE ON") == 0 Then Return
+  Call LineOut "STDERR", "RexxHTTP: error serving" Env("REQUEST_URI")
+  Do line Over report
+    Call LineOut "STDERR", "RexxHTTP:" line
+  End
+Return
 
 --------------------------------------------------------------------------------
 -- Load our dependencies                                                      --

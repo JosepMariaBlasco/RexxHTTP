@@ -84,7 +84,9 @@ a proof.
    raised HALT get the 500 page (error 4.1, or 4.901 with a description,
    for the last two); anything else it *raised* is ignored, as before. Keep
    that clause around the call alone: an active `Catch any` counts as a
-   NOVALUE trap for the code of its own block.
+   NOVALUE trap for the code of its own block. With `REXXHTTP_LOGERRORS`
+   set to 1 (yes, true, on), the error reports also go to stderr, that is,
+   to the server's error log (`LogError`); unset, nothing changes.
 
 The request/response contract
 -----------------------------
