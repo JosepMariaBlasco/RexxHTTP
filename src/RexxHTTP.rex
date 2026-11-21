@@ -20,65 +20,96 @@
 /*                  Change the way request~message works -- see 'unknown'.    */
 /*                  By default, it looks in the environment variable pool.    */
 /* 20260611    1.0  Global refactor, switch to Apache license                 */
+/* 20261121         The run is a DO block: CATCH reports SYNTAX errors and    */
+/*                  RexxHTTP.ConfigError, FINALLY restores .output; a         */
+/*                  condition thrown by a rexxlet gets a 500 page too; needs  */
+/*                  ooRexx 5.3.0 r13572                                       */
 /*                                                                            */
 /******************************************************************************/
 
-  Signal on syntax
+  -- The whole run is one block. A SYNTAX error anywhere in it -- in the
+  -- processor, in the classes, or in the rexxlet -- ends up in its CATCH
+  -- clause, which reports it as a 500 page; so does a configuration error
+  -- that the request object throws (USER RexxHTTP.ConfigError). The 404, 400
+  -- and 500 pages of the processor itself are internal routines that EXIT,
+  -- called from inside the block, so that they are covered too.
 
-  -- If RexxHTTP.rex is called directly, simulate a 404 Not Found error
-  If Direct() Then Signal NotFound
+  Do
 
-  REXX_PATH = Env("REDIRECT_REXX_PATH")
-  Call Value "REXX_PATH", REXX_PATH, "ENVIRONMENT"
+    -- If RexxHTTP.rex is called directly, simulate a 404 Not Found error
+    If Direct() Then Call NotFound
 
-  -- Create the request and response objects
- .local~request  = .HTTP.Request~new()
- .local~response = .HTTP.Response~new()
-  -- The response object creates a buffered output stream
-  bufferedOutput       = .response~output
+    REXX_PATH = Env("REDIRECT_REXX_PATH")
+    Call Value "REXX_PATH", REXX_PATH, "ENVIRONMENT"
 
-  -- The rexxlet we have to call has been computed by the request object.
-  -- SCRIPT_FILENAME is the processor's disk path -- the file to execute --
-  -- whereas FILENAME/PATH_TRANSLATED now name the requested document.
-  callee   = .request~script_filename
+    -- Create the request and response objects
+   .local~request  = .HTTP.Request~new()
+   .local~response = .HTTP.Response~new()
+    -- The response object creates a buffered output stream
+    bufferedOutput       = .response~output
 
-  -- Apply the argument policy BEFORE running the rexxlet. validate parses
-  -- the request arguments eagerly (consuming any POST body) and reports
-  -- the first violation. We reject here, while output is still untouched,
-  -- so the error page is clean. "" means the request is acceptable.
-  violation = .request~validate
-  If violation \== "" Then Do
-    Parse var violation code":"detail
-    If code == "badpolicy" Then Signal ConfigError   -- operator error: 500
-    Else                        Signal BadRequest    -- client error:   400
+    -- The rexxlet we have to call has been computed by the request object.
+    -- SCRIPT_FILENAME is the processor's disk path -- the file to execute --
+    -- whereas FILENAME/PATH_TRANSLATED now name the requested document.
+    callee   = .request~script_filename
+
+    -- Apply the argument policy BEFORE running the rexxlet. validate parses
+    -- the request arguments eagerly (consuming any POST body) and reports
+    -- the first violation. We reject here, while output is still untouched,
+    -- so the error page is clean. "" means the request is acceptable.
+    violation = .request~validate
+    If violation \== "" Then Do
+      Parse var violation code":"detail
+      If code == "badpolicy" Then Call ConfigError     -- operator error: 500
+      Else                        Call BadRequest      -- client error:   400
+    End
+
+    -- Set the buffered output stream as the default output stream.
+    -- NOTE: .output~destination is a STACK, not a setter -- with an argument it
+    -- PUSHES a new destination, without one it POPS back to the previous. The
+    -- return value is NOT the previous destination (it is the one just pushed),
+    -- so there is nothing worth keeping.
+    --
+    -- We keep NO bookkeeping flag for "did we push?". The single source of
+    -- truth is the stack itself: .output~current is the destination on top,
+    -- and it is our buffer if and only if it isA HTTP.OutputStream. The
+    -- FINALLY clause below decides whether to pop by asking that question --
+    -- so error(), which pops on its own, can never desynchronise a flag from
+    -- the real stack state (the v97 double-pop bug). current is a READ, not
+    -- a pop, and on an un-redirected stack it returns STDOUT (a .Stream),
+    -- never .NIL, so the test is safe to ask in any state.
+   .output~destination(bufferedOutput)
+    Do
+      Do
+        -- Call our rexxlet!
+        Call (callee) .request, .response, bufferedOutput
+      Finally
+        -- Restore the previous output stream, however the rexxlet ended (it
+        -- returned, or it left a condition that the CATCH below handles):
+        -- an error page is written to the CGI stream, not into the buffer.
+        -- Only if our buffer is still on top: a rexxlet that called
+        -- error()/404() already popped it, and popping again would empty
+        -- the stack and leave .output on .NIL.
+        If .output~current~isA(.HTTP.OutputStream) Then .output~destination
+      End
+    Catch uncaught = Any
+      -- Whatever the rexxlet did not catch itself. See RexxletCondition.
+      Call RexxletCondition uncaught
+    End
+
+    -- Flush the response. This will write the headers if necessary
+   .response~flush
+
+    -- We're done!
+    Exit
+
+  Catch config = User RexxHTTP.ConfigError
+    Call ConfigFailure config
+
+  Catch error = Syntax
+    Call ErrorPage error
   End
 
-  -- Set the buffered output stream as the default output stream.
-  -- NOTE: .output~destination is a STACK, not a setter -- with an argument it
-  -- PUSHES a new destination, without one it POPS back to the previous. The
-  -- return value is NOT the previous destination (it is the one just pushed),
-  -- so there is nothing worth keeping.
-  --
-  -- We keep NO bookkeeping flag for "did we push?". The single source of truth
-  -- is the stack itself: .output~current is the destination on top, and it is
-  -- our buffer if and only if it isA HTTP.OutputStream. Both this normal path
-  -- and the Syntax handler decide whether to pop by asking that question --
-  -- so error(), which pops on its own, can never desynchronise a flag from
-  -- the real stack state (the v97 double-pop bug). current is a READ, not a
-  -- pop, and on an un-redirected stack it returns STDOUT (a .Stream), never
-  -- .NIL, so the test is safe to ask in any state.
- .output~destination(bufferedOutput)
-    -- Call our rexxlet!
-    Call (callee) .request, .response, bufferedOutput
-  -- Restore the previous output stream, but only if our buffer is still on
-  -- top: a rexxlet that called error()/404() already popped it, and popping
-  -- again would empty the stack and leave .output on .NIL.
-  If .output~current~isA(.HTTP.OutputStream) Then .output~destination
-
-  -- Flush the response. This will write the headers if necessary
- .response~flush
-
-  -- We're done!
   Exit
 
 --------------------------------------------------------------------------------
@@ -181,56 +212,83 @@ Reason: Procedure
   End
 
 --------------------------------------------------------------------------------
--- Syntax error handler                                                       --
+-- ConfigFailure: report a configuration error as a 500 page                  --
 --------------------------------------------------------------------------------
 
-Syntax:
+-- The request object throws USER RexxHTTP.ConfigError when the operator's
+-- configuration cannot work (see rawResourcePath and init in
+-- HTTP.Request.cls); the description is the reason, shown as the page. The
+-- page honours the response's state the same three ways ErrorPage does.
+-- Today the condition is thrown while .request is still being built, so
+-- .response does not exist yet and we take the Else (Say straight to the CGI
+-- stream). The .response arms are hardening for any future use of the channel
+-- from a point where a response is live.
 
-  error     = Condition("O")
-
-  Signal off syntax                               -- Avoid loops
-
-  -- Pop the buffered stream off .output's destination stack, but only if it
-  -- is actually on top. Popping an empty stack leaves .output on .NIL, and
-  -- .NIL does not understand SAY -- the error page below would die with a
-  -- 97.1 instead of reaching the client. We ask the stack itself
-  -- (.output~current isA HTTP.OutputStream) rather than trusting a flag, so
-  -- a rexxlet that already popped -- e.g. via error() -- is handled correctly:
-  -- current is then STDOUT, the test is false, and we do NOT pop again. This
-  -- is the fix for the v97 double-pop (error() + this handler both popping).
-  -- The pop call takes NO argument on purpose: that is what asks for a pop
-  -- (an argument would push again). current is a read, never a pop.
-  If .output~current~isA(.HTTP.OutputStream) Then .output~destination
-
-  If error~code == 98.900 Then Do
-    -- 98.900 is our internal signal: a configuration condition a method
-    -- deliberately raised (see rawResourcePath) to surface as a clean 500
-    -- page rather than a stack trace. Honour the response's state the same
-    -- three ways the generic path below does. Today rawResourcePath raises
-    -- this while .request is still being built, so .response does not exist
-    -- yet and we take the Else (Say straight to the CGI stream, as the
-    -- deployed version already does). The .response arms are hardening for
-    -- any future use of the channel from a point where a response is live.
-    reason = error~additional[1]
-    If .response~isA(.HTTP.Response) Then Do
-      -- A live, untouched response: let error() reset the body, set the
-      -- 500 status/type and HTML-escape the reason, then commit so the
-      -- headers and page actually go out. If it is already committed the
-      -- headers are on the wire; don't try to re-emit -- the condition is
-      -- still in error~additional for the log via the generic path is not
-      -- reached, so we simply stop without corrupting the stream.
-      If \.response~committed, \.response~committing Then Do
-       .response~error(500, reason)
-      End
+ConfigFailure:
+  Use Strict Arg config
+  reason = config~description
+  If .response~isA(.HTTP.Response) Then Do
+    -- A live, untouched response: let error() reset the body, set the 500
+    -- status/type and HTML-escape the reason, then commit so the headers and
+    -- page actually go out. If it is already committed, the headers are on
+    -- the wire; we simply stop without corrupting the stream.
+    If \.response~committed, \.response~committing Then Do
+     .response~error(500, reason)
     End
-    Else Do
-      Say "Status: 500 Internal Server Error"
-      Say "Content-type: text/html; charset=utf-8"
-      Say
-      Say reason
-    End
-    Exit
   End
+  Else Do
+    Say "Status: 500 Internal Server Error"
+    Say "Content-type: text/html; charset=utf-8"
+    Say
+    Say reason
+  End
+Exit
+
+--------------------------------------------------------------------------------
+-- RexxletCondition: what to do with a condition the rexxlet did not catch    --
+--------------------------------------------------------------------------------
+
+-- The CATCH ANY clause around the call of the rexxlet gets every condition
+-- that leaves the rexxlet. Only the call is inside that block: an active
+-- CATCH ANY counts as a NOVALUE trap for the code of its block (not for an
+-- external routine such as the rexxlet: measured), and the processor's own
+-- code is kept out of it. Each kind is handled as before THROW existed, and
+-- a thrown condition gets a page of its own:
+--
+--   SYNTAX              the error page, as always (ErrorPage).
+--   thrown (THROW)      the error page, with the error that the interpreter
+--                       would report for it: 4.1, or 4.901 with the
+--                       description. Before, the run ended without a page,
+--                       the error went to the server log, and Apache sent
+--                       its own 500.
+--   HALT, raised        the error page with error 4.1: an untrapped HALT
+--                       became SYNTAX 4.1, which the old trap reported.
+--   anything else, raised (RAISE USER, NOTREADY, ERROR...): ignored, as an
+--                       untrapped raised condition is. The rexxlet has
+--                       ended; the response is flushed as usual.
+
+RexxletCondition:
+  Use Strict Arg uncaught
+  If uncaught~condition == "SYNTAX" Then Call ErrorPage uncaught
+  If uncaught~thrown == .true       Then Call ErrorPage uncaught
+  If uncaught~condition == "HALT"   Then Call ErrorPage uncaught
+Return
+
+--------------------------------------------------------------------------------
+-- ErrorPage: report an error as a 500 page                                   --
+--------------------------------------------------------------------------------
+
+-- Called with the condition object: from the CATCH clause of the main block
+-- (SYNTAX), and from RexxletCondition (SYNTAX, a thrown condition, a raised
+-- HALT). The buffered stream is no longer on .output's destination stack:
+-- the FINALLY clause around the call of the rexxlet has popped it (and an
+-- error before that call happened before it was pushed), so Say writes to
+-- the CGI stream. An error in here is not caught: the CATCH clauses of a
+-- block are inactive while one of them runs (it used to be "Signal off
+-- syntax").
+
+ErrorPage:
+  Use Strict Arg error
 
   -- Commit the response. This will emit the page headers.
   --
@@ -304,9 +362,30 @@ Syntax:
   Do frame Over error~stackFrames
     Say frame~makeString
   End
-  Say "Error" error~rc "running" program_name "line" -
-    error~position":" error~errortext
-  Say "Error" error~code":" error~message
+  If error~condition == "SYNTAX" Then Do
+    Say "Error" error~rc "running" program_name "line" -
+      error~position":" error~errortext
+    Say "Error" error~code":" error~message
+  End
+  Else Do
+    -- Any other condition is error 4, as the interpreter reports a thrown
+    -- condition that nothing catches: 4.901 when it was thrown with a
+    -- description, 4.1 otherwise (an untrapped raised HALT was 4.1, with
+    -- or without one).
+    description = error~description
+    If description == .nil Then description = ""
+    message = "Program interrupted with" error~condition "condition"
+    If error~thrown == .true, description \== "" Then Do
+      code    = 4.901
+      message = message":" description"."
+    End
+    Else Do
+      code    = 4.1
+      message = message"."
+    End
+    Say "Error 4 running" program_name "line" error~position":" ErrorText(4)
+    Say "Error" code":" message
+  End
 
 Exit
 

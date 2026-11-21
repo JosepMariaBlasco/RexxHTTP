@@ -20,6 +20,8 @@
 /*                  By default, it looks in the environment variable pool.    */
 /* 20260611    1.0  Global refactor, switch to Apache license                 */
 /* 20260615         Add decoding methods                                      */
+/* 20261121         THROW instead of RAISE for SYNTAX; a configuration        */
+/*                  error is USER RexxHTTP.ConfigError, not SYNTAX 98.900     */
 /*                                                                            */
 /******************************************************************************/
 
@@ -45,7 +47,7 @@
 
   -- A third redirect level = three chained Actions: unsupported topology.
   If Env("REDIRECT_REDIRECT_REDIRECT_REXXHTTP_BASE") \== "" Then
-    Raise syntax 98.900 array -
+    Throw user RexxHTTP.ConfigError description -
       ("rawResourcePath: unsupported Action chain (three redirect levels)")
 
   -- Two redirect levels? -- A rexxlet used as an Action
@@ -508,9 +510,9 @@
 
   If Arg() = 0  Then Return nargs
 
-  If Arg(1,'o') Then Raise syntax 93.903 array (1)
+  If Arg(1,'o') Then Throw syntax 93.903 array (1)
 
-  If Arg() > 2  Then Raise syntax 93.902 array (2)
+  If Arg() > 2  Then Throw syntax 93.902 array (2)
 
   n = .Validate~requestClassType(1, Arg(1), .String)
 
@@ -520,7 +522,7 @@
     option = option~translate~strip~left(1)
     If option = "" Then option = "V"
     If "NVEO"~pos(option) == 0 Then
-      Raise syntax 93.914 array (2,"NVEO",option)
+      Throw syntax 93.914 array (2,"NVEO",option)
   End
 
   If n~datatype("w"), n > 0 Then Do
@@ -588,9 +590,9 @@
 
   If Arg() = 0  Then Return ncookies
 
-  If Arg(1,'o') Then Raise syntax 93.903 array (1)
+  If Arg(1,'o') Then Throw syntax 93.903 array (1)
 
-  If Arg() > 2  Then Raise syntax 93.902 array (2)
+  If Arg() > 2  Then Throw syntax 93.902 array (2)
 
   n = .Validate~requestClassType(1, Arg(1), .String)
 
@@ -600,7 +602,7 @@
     option = option~translate~strip~left(1)
     If option = "" Then option = "V"
     If "NVEO"~pos(option) == 0 Then
-      Raise syntax 93.914 array (2,"NVEO",option)
+      Throw syntax 93.914 array (2,"NVEO",option)
   End
 
   If n~datatype("w"), n > 0 Then Do
@@ -749,7 +751,8 @@
 --     rel  = REQUEST_URI (query string stripped) with urlbase peeled off     --
 --     file = base || rel                                                     --
 --                                                                            --
---   One condition is a configuration error, reported as 500 via Raise:       --
+--   One condition is a configuration error, thrown as USER                   --
+--   RexxHTTP.ConfigError and reported by the processor as a 500 page:        --
 --     - REXXHTTP_BASE present but REXXHTTP_URLBASE empty at the resource      --
 --       level: the operator wrote the base but forgot the paired urlbase      --
 --       ("*" is the docroot value; empty is never legitimate here). Because  --
@@ -772,7 +775,7 @@
   -- here is the operator's forgotten SetEnv (docroot legitimately carries
   -- the "*" sentinel, never "").
   If urlbase == "" Then
-    Raise syntax 98.900 array -
+    Throw user RexxHTTP.ConfigError description -
       ("rawResourcePath: REXXHTTP_BASE set without a paired REXXHTTP_URLBASE")
 
   -- Clean original URL: REQUEST_URI without any query string.
@@ -907,7 +910,7 @@
   Expose envvars
 
   Use arg message, args
-  If args~dimension(1) > 0 Then Raise syntax 93.902 array (0)
+  If args~dimension(1) > 0 Then Throw syntax 93.902 array (0)
 
   -- ONE branch for the whole pool: read the variable directly and, if it
   -- comes back empty, retry it REDIRECT_-prefixed. Client headers (HTTP_*)

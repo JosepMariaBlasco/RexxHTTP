@@ -19,6 +19,7 @@
 /*                  Change the way request~message works -- see 'unknown'.    */
 /*                  By default, it looks in the environment variable pool.    */
 /* 20260611    1.0  Global refactor, switch to Apache license                 */
+/* 20261121         THROW instead of RAISE for SYNTAX                         */
 /*                                                                            */
 /******************************************************************************/
 
@@ -299,4 +300,4 @@
 --------------------------------------------------------------------------------
 ::Routine Error
 
-  Raise syntax 93.900 array (Arg(1))
+  Throw syntax 93.900 array (Arg(1))

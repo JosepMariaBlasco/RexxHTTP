@@ -40,8 +40,11 @@ FetchJSON: Procedure
   -- Neither subsumes the other. The .nil return below already handles curl
   -- being absent or the fetch failing.
   savedTrace = Trace("Off")
-  Address Command "curl -sf --connect-timeout 5 --max-time 15" url With Output Stem lines. Error Stem discard.
-  Call Trace savedTrace
+  Do
+    Address Command "curl -sf --connect-timeout 5 --max-time 15" url With Output Stem lines. Error Stem discard.
+  Finally
+    Call Trace savedTrace
+  End
   If RC \= 0 Then Return .nil
 
   text = ""
@@ -50,10 +53,11 @@ FetchJSON: Procedure
     text = text || lines.i
   End
 
-  Signal On Syntax Name BadJSON
-  Return .json~fromJson(text)
-
-BadJSON:
-  Return .nil
+  -- Not JSON after all? Then there is nothing to aggregate.
+  Do
+    Return .json~fromJson(text)
+  Catch Syntax
+    Return .nil
+  End
 
 ::Requires "json.cls"

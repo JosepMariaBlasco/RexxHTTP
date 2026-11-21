@@ -70,6 +70,22 @@ a proof.
    partial response, or the processor flushes automatically at the end).
    Any refactor of the OutputStream must preserve this exactly.
 
+4. **Conditions: THROW, CATCH and FINALLY, with one exception.** The
+   classes throw their SYNTAX errors (`Throw syntax 93.9xx ...`; for SYNTAX
+   it reports exactly what RAISE did, only `THROWN` is 1). The read side of
+   `HTTP.OutputStream` keeps `Raise notready`: it must behave as `.stdout`
+   does, and a thrown NOTREADY is not trapped by `Call On Notready`
+   (measured). A configuration error is `Throw user RexxHTTP.ConfigError`,
+   with the reason as its description. `RexxHTTP.rex` runs as one DO block:
+   its CATCH clauses report `RexxHTTP.ConfigError` and SYNTAX as 500 pages,
+   and a FINALLY clause around the call of the rexxlet restores `.output`.
+   Around the call only, a `Catch any` handles what the rexxlet leaves
+   uncaught (`RexxletCondition`): SYNTAX, any condition it *threw*, and a
+   raised HALT get the 500 page (error 4.1, or 4.901 with a description,
+   for the last two); anything else it *raised* is ignored, as before. Keep
+   that clause around the call alone: an active `Catch any` counts as a
+   NOVALUE trap for the code of its own block.
+
 The request/response contract
 -----------------------------
 

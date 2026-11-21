@@ -403,10 +403,11 @@ FetchJSON: Procedure
     If i &gt; 1 Then text ||= "0a"x
     text ||= lines.i
   End
-  Signal On Syntax Name BadJSON
-  Return .json~fromJson(text)
-BadJSON:
-  Return .nil
+  Do
+    Return .json~fromJson(text)
+  Catch Syntax
+    Return .nil
+  End
 
 ::RESOURCE page
 &lt;!DOCTYPE html&gt;

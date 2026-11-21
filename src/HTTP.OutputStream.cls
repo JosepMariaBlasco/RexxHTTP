@@ -19,6 +19,7 @@
 /*                  Change the way request~message works -- see 'unknown'.    */
 /*                  By default, it looks in the environment variable pool.    */
 /* 20260611    1.0  Global refactor, switch to Apache license                 */
+/* 20261121         THROW instead of RAISE for SYNTAX (NOTREADY stays RAISE)  */
 /*                                                                            */
 /******************************************************************************/
 
@@ -43,7 +44,7 @@
 
   Use Strict Arg underlyingstream, response
   If Arg(1)~class \= .Stream Then
-    Raise Syntax 93.948 array (1,"Stream")
+    Throw Syntax 93.948 array (1,"Stream")
 
   stream_name = self~class~id
 
@@ -125,16 +126,16 @@
   Expose buffer eol state
 
   -- Max two args
-  If Arg() > 2 Then Raise syntax 93.902 array (2)
+  If Arg() > 2 Then Throw syntax 93.902 array (2)
 
   -- First argument must not be omitted...
-  If Arg(1,'O') Then Raise Syntax 93.903 array (1)
+  If Arg(1,'O') Then Throw Syntax 93.903 array (1)
 
   -- ... and must be an array...
   array = Arg(1)~request("ARRAY")
-  If array == .nil Then Raise syntax 93.939 array (1)
+  If array == .nil Then Throw syntax 93.939 array (1)
   -- ... of dimension 1.
-  If array~dimension \== 1 Then Raise syntax 93.939 array (1)
+  If array~dimension \== 1 Then Throw syntax 93.939 array (1)
 
   -- Second argument must be one of "LINES", "CHARS". If omitted, assume "LINES"
   If Arg(2,'O') Then option = "LINES"
@@ -143,7 +144,7 @@
     option = option~strip~translate~left(1)
     If option = "" Then option = "L"
     If "LC"~pos(option) == 0 Then
-      Raise syntax 93.914 array (2,"LC",option)
+      Throw syntax 93.914 array (2,"LC",option)
     If option == "L" Then option = "LINES"
     If option == "C" Then option = "CHARS"
   End
@@ -178,7 +179,7 @@
   Expose buffer state
 
   -- Max two args
-  If Arg() > 2 Then Raise syntax 93.902 array (2)
+  If Arg() > 2 Then Throw syntax 93.902 array (2)
 
   -- First argument must be a string. If not specified, close the stream
   If Arg(1,'O') Then Do
@@ -191,7 +192,7 @@
   End
 
   -- Cannot position transient streams
-  If Arg(2,'E') Then Raise syntax 93.958
+  If Arg(2,'E') Then Throw syntax 93.958
 
   If state \== "READY" Then Return 1  -- There was an error
 
@@ -227,17 +228,17 @@
   Select
     When verb == "OPEN"     Then Return self~open(options)
     When verb == "CLOSE"    Then Do
-      If options \== "" Then Raise Syntax 93
+      If options \== "" Then Throw Syntax 93
       Return self~close
       End
     When verb == "FLUSH"    Then Do
-      If options \== "" Then Raise Syntax 93
+      If options \== "" Then Throw Syntax 93
       Return self~flush()
       End
     When verb == "SEEK"     Then Return self~seek(options)
     When verb == "POSITION" Then Return self~seek(options)
     When verb == "QUERY"    Then Return self~query(options)
-    Otherwise               Raise Syntax 93
+    Otherwise               Throw Syntax 93
   End
 
 --------------------------------------------------------------------------------
@@ -294,7 +295,7 @@
   Expose buffer state eol
 
   -- Max two args
-  If Arg() > 2 Then Raise syntax 93.902 array (2)
+  If Arg() > 2 Then Throw syntax 93.902 array (2)
 
   -- First argument must be a string.
   -- If not specified, close the stream (i.e., flush and continue)
@@ -307,7 +308,7 @@
   End
 
   -- Cannot position transient streams
-  If Arg(2,'E') Then Raise syntax 93.958
+  If Arg(2,'E') Then Throw syntax 93.958
 
   If state \== "READY" Then Return 1 -- There was a previous error
 
@@ -331,7 +332,7 @@
 --------------------------------------------------------------------------------
 
 ::Method position
-  Raise syntax 93.958
+  Throw syntax 93.958
 
 --------------------------------------------------------------------------------
 -- QUALIFY                                                                    --
@@ -350,8 +351,8 @@
   Expose stream_name buffer opened datetime timestamp
 
   -- We want exactly one argument...
-  If Arg() < 1 Then Raise syntax 93.903 array (1)
-  If Arg() > 1 Then Raise syntax 93.902 array (1)
+  If Arg() < 1 Then Throw syntax 93.903 array (1)
+  If Arg() > 1 Then Throw syntax 93.902 array (1)
 
   -- ...which can be converted into a string...
   query = .Validate~requestClassType(1, Arg(1), .String)
@@ -363,13 +364,13 @@
   Select
     When query == "DATETIME"   Then Return datetime
     When query == "EXISTS"     Then Return stream_name
-    When query == "HANDLE"     Then Raise syntax 93
+    When query == "HANDLE"     Then Throw syntax 93
     When query == "SIZE"       Then Return ""
     When query == "STREAMTYPE" Then Return "UNKNOWN"
     When query == "TIMESTAMP"  Then Return timestamp
     When option  == "POSITION" |,
          option  == "SEEK"     Then Return 1
-    Otherwise Raise syntax 93
+    Otherwise Throw syntax 93
   End
 
 --------------------------------------------------------------------------------
@@ -387,7 +388,7 @@
 --------------------------------------------------------------------------------
 
 ::Method seek
-  Raise syntax 93.958
+  Throw syntax 93.958
 
 --------------------------------------------------------------------------------
 -- STATE                                                                      --

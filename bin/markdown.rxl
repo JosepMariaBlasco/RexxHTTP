@@ -17,6 +17,7 @@
 /* 20260704    1.0  First version                                             */
 /* 20260729         Dual path to show own source                              */
 /* 20261121         Find FencedCode.cls with ParserComponent (src-viewer.cls) */
+/*                  Restore the trace setting in a FINALLY clause             */
 /*                                                                            */
 /******************************************************************************/
 
@@ -44,13 +45,17 @@
   --   binary is a FAILURE, which the default Trace Normal would echo to
   --   stderr (Apache's error.log) three lines per request even though the
   --   degradation path below handles it. Trace(setting) pushes the new
-  --   setting and returns the previous one, so we restore it afterwards.]
+  --   setting and returns the previous one, which the FINALLY clause puts
+  --   back however the probe ends.]
 
   savedTrace = Trace("Off")
+  Do
     Address COMMAND "pandoc -v" With  -
       Output Stem discard.            -
       Error  Stem discard.
-  Call Trace savedTrace
+  Finally
+    Call Trace savedTrace
+  End
 
   -- No? Serve the file verbatim as UTF-8 plain text.
 

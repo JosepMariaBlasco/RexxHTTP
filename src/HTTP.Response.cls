@@ -20,6 +20,7 @@
 /*                  By default, it looks in the environment variable pool.    */
 /* 20260611    1.0  Global refactor, switch to Apache license                 */
 /* 20260615         Add encoding methods                                      */
+/* 20261121         THROW instead of RAISE for SYNTAX                         */
 /*                                                                            */
 /******************************************************************************/
 
@@ -62,7 +63,7 @@
   Expose headers committed
 
   If committed Then
-    Raise syntax 93.900 array (-
+    Throw syntax 93.900 array (-
       "Cannot set a header: the response is already committed")
 
   Use Strict Arg headervalue, headername
@@ -85,13 +86,13 @@
   -- dropped after commit. The commit state outranks argument validation,
   -- so this guard precedes the type check below.
   If committed Then
-    Raise syntax 93.900 array (-
+    Throw syntax 93.900 array (-
       "Cannot add a cookie: the response is already committed")
 
   Use Strict Arg Cookie
 
  If \Cookie~isA(.HTTP.Cookie) Then
-    Raise syntax 93.948 array (1,"HTTP.COOKIE")
+    Throw syntax 93.948 array (1,"HTTP.COOKIE")
 
   name   = Cookie~name
   path   = Cookie~path
@@ -215,7 +216,7 @@
   Do i = 1 To s~length
     c = s~substr(i,1)
     If c~c2d < 32 | c~c2d == 127 Then
-      Raise syntax 93.900 array (-
+      Throw syntax 93.900 array (-
         label "contains a control character (CR, LF, or other; 0x"c~c2x")" -
         "at position" i "-- rejected to prevent HTTP response splitting")
   End
@@ -383,7 +384,7 @@
   Use Strict Arg status, detail = ""
 
   If self~committed Then
-    Raise syntax 93.900 array (-
+    Throw syntax 93.900 array (-
       "Cannot send an error response: the response is already committed")
 
   -- Discard any body buffered before this call (e.g. a half-built page).
@@ -449,7 +450,7 @@
   Use Strict Arg location, status = 302
 
   If self~committed Then
-    Raise syntax 93.900 array (-
+    Throw syntax 93.900 array (-
       "Cannot redirect: the response is already committed")
 
   self~rejectControlChars("Redirect location", location)
@@ -476,11 +477,11 @@
 
   If message~right(1) == "=" Then Do
     If committed Then
-      Raise syntax 93.900 array (-
+      Throw syntax 93.900 array (-
         "Cannot set a header: the response is already committed")
     headername = message~left(message~length-1)~space~upper~translate("--","_ ")
-    If args~dimension(1) < 1 Then Raise syntax 93.901 array (1)
-    If args~dimension(1) > 1 Then Raise syntax 93.902 array (1)
+    If args~dimension(1) < 1 Then Throw syntax 93.901 array (1)
+    If args~dimension(1) > 1 Then Throw syntax 93.902 array (1)
     headervalue = .Validate~requestClassType(1, args[1], .String)
     self~rejectControlChars("Header '"headername"' value", headervalue)
     headers[headername] = headervalue
@@ -489,6 +490,6 @@
 
   -- "response~content_type" syntax
 
-  If args~dimension(1) > 0 Then Raise syntax 93.902 array (0)
+  If args~dimension(1) > 0 Then Throw syntax 93.902 array (0)
 
   Return headers[message~space~upper~translate("--","_ ")]
