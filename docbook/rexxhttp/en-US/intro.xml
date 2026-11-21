@@ -83,7 +83,7 @@ reproduces the Apache License 2.0, under which RexxHTTP is
 released.</para></listitem>
 </itemizedlist>
 
-<para>RexxHTTP requires &Rexx; 5.2.0 or later and Apache 2.4 or later. It is
+<para>RexxHTTP requires &Rexx; 5.3.0 r13572 or later and Apache 2.4 or later. It is
 released under the Apache License 2.0 and published at
 <ulink url="https://rexx.epbcn.com/rexxhttp/">https://rexx.epbcn.com/rexxhttp/</ulink>
 and on GitHub at

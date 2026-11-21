@@ -26,7 +26,7 @@
 /* Apache the user set up for something else.                                 */
 /*                                                                            */
 /* Prerequisites the installer checks but does NOT install:                   */
-/*   - ooRexx 5.2.0 or later (out of scope; from the ooRexx project).         */
+/*   - ooRexx 5.3.0 r13572 or later (out of scope; from the ooRexx project).  */
 /*   - The Visual C++ Redistributable (x64, the 14.x "2015-2022" family).     */
 /*     Apache Lounge binaries will not start without it; its absence shows up */
 /*     as a missing VCRUNTIME140.dll. The installer detects it and, if it is  */
@@ -166,7 +166,7 @@
   Say "Checking ooRexx..."
   If SysCmd("rexx -v >nul 2>&1") \== 0 Then Do
     Say "  ERROR: ooRexx is not installed or not in PATH."
-    Say "  RexxHTTP needs ooRexx 5.2.0 or later, from the Open Object Rexx"
+    Say "  RexxHTTP needs ooRexx 5.3.0 r13572 or later, from the Open Object Rexx"
     Say "  project: https://sourceforge.net/projects/oorexx/"
     Return 1
   End
@@ -396,7 +396,7 @@
   -- which variables are emitted). We pass the forward-slashed root: Apache reads
   -- it, and loadPackage accepts "/" on Windows too. .endOfLine is CRLF here, so
   -- strip the trailing one the routine adds, matching the fragment's CRLF.
-  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(fwdRoot, "    ", srcRoot)~strip("T", .endOfLine))
+  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(fwdRoot, "    ")~strip("T", .endOfLine))
   -- The fragment ships "ServerName localhost"; when we are on a non-default
   -- port, name the server with it (ServerName localhost:NNNN) so redirects and
   -- self-references use the right port.

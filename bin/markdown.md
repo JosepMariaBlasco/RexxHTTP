@@ -30,8 +30,8 @@ title is taken from the document's first `<h1>`: a file that opens with
 top-level heading gets a loud `*** missing title ***` instead — a nudge to the
 author to add one.
 
-If the [Rexx Parser](https://rexx.epbcn.com/rexx-parser/) is installed, the
-renderer highlights any ` ```rexx ` fenced blocks *before* handing the document
+If the [Rexx Parser](https://rexx.epbcn.com/rexx-parser/), which ooRexx carries,
+is found, the renderer highlights any ` ```rexx ` fenced blocks *before* handing the document
 to Pandoc. Pandoc passes embedded HTML through untouched, so the highlighted
 blocks survive into the final page, and the code-style chooser in the banner can
 restyle them. Without the Parser the fences render as plain `<pre><code>` and

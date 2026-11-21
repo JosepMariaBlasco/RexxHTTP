@@ -75,7 +75,7 @@ rexx install
 </programlisting>
 
 <para>It first checks the prerequisites (that the &Rexx; interpreter is
-version 5.2.0 or later, and that the tools it needs are present), then
+version 5.3.0 r13572 or later, and that the tools it needs are present), then
 shows what it is about to do and asks for confirmation before changing anything.
 When the installation is finished, it prints an address for you to open and
 confirm the result works. On Linux and Windows that is
@@ -154,36 +154,30 @@ handler. Either way the uninstaller cleans up after itself completely, with no
 manual step left to the user.</para>
 </section>
 
-<section id="install-highlighter"><title>Optional: the Rexx Highlighter</title>
+<section id="install-highlighter"><title>The Rexx Highlighter</title>
 <indexterm><primary>Rexx Highlighter</primary></indexterm>
 <indexterm><primary>Rexx Parser</primary></indexterm>
 <indexterm><primary>syntax highlighting</primary></indexterm>
 
-<para>RexxHTTP optionally supports the <application>Rexx Highlighter</application>,
-which colours the Rexx program listings it serves. It is entirely optional: with
-no highlighter available, listings are served uncoloured and nothing else
-changes.</para>
-
-<para>The highlighter is part of the <application>Rexx
+<para>RexxHTTP uses the <application>Rexx Highlighter</application> to colour
+the Rexx program listings it serves. The highlighter is part of the
+<application>Rexx
 Parser</application>,<footnote><para><ulink url="https://rexx.epbcn.com/rexx-parser/">https://rexx.epbcn.com/rexx-parser/</ulink></para></footnote>
-a separate &Rexx; package. What matters is that the Parser be reachable
-<emphasis role="italic">at install time</emphasis>: the installer looks for it
-then (in the current directory, in <envar>REXX_PATH</envar>, and in
-<envar>PATH</envar>) and, if it finds it, records its location in the
-Apache configuration. It does not have to be on the system <envar>PATH</envar>
-permanently; it only has to be findable while RexxHTTP is being installed.</para>
+which &Rexx; carries: from 5.3.0 r13572, the minimum RexxHTTP requires, the
+&Rexx; installation puts <filename>parser.cls</filename> and a
+<filename>parser</filename> directory beside it in its
+<filename>bin</filename> directory. There is nothing to install
+separately.</para>
 
-<para>Because that location is written into the configuration once, the Parser
-must not be moved afterwards: RexxHTTP reads the recorded path at run time and
-does not search for the Parser again. Move the Parser and highlighting stops
-until RexxHTTP is reinstalled. If the Parser is not present at install time, no
-location is recorded and listings are simply served uncoloured; installing the
-Parser and reinstalling RexxHTTP enables highlighting later.</para>
-
-<para>On some distributions the Parser is already present and reachable out of
-the box: the
-<application>net-oo-rexx</application><footnote><para><ulink url="https://github.com/RexxLA/net-oo-rexx/tree/main">https://github.com/RexxLA/net-oo-rexx/tree/main</ulink></para></footnote> bundle, for instance,
-ships it ready to use, so highlighting works with no extra setup.</para>
+<para>The listings are coloured by the source viewer and by the Markdown
+renderer, which look for <filename>parser.cls</filename> at run time, in the
+current directory, in <envar>REXX_PATH</envar> and in <envar>PATH</envar>. The
+<envar>PATH</envar> that Apache gives a CGI program need not include the
+&Rexx; <filename>bin</filename> directory, so the installer looks for
+<filename>parser.cls</filename> while it runs and, if it finds it, adds its
+directory to the <envar>REXX_PATH</envar> it writes into the Apache
+configuration. If the Parser cannot be found, nothing fails: listings are
+served uncoloured and nothing else changes.</para>
 </section>
 
 <section id="install-manual"><title>Installing by Hand</title>
@@ -205,7 +199,7 @@ whole montage serves a request.</para>
 <indexterm><primary>cgid module</primary></indexterm>
 <indexterm><primary>actions module</primary></indexterm>
 
-<para>RexxHTTP needs &Rexx; 5.2.0 or later and an Apache 2.4 server with the CGI
+<para>RexxHTTP needs &Rexx; 5.3.0 r13572 or later and an Apache 2.4 server with the CGI
 module (<literal>cgid</literal> or <literal>cgi</literal>) and the
 <literal>actions</literal> module enabled. Installing Apache and enabling those
 two modules is the subject of the next section; this one covers what has to be

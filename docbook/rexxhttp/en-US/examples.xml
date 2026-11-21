@@ -344,11 +344,9 @@ work. Here it is, without its licence header:</para>
 
   source = .File~readLines(.request~filename)
 
-  -- See if the highlighter is reachable
+  -- See if the highlighter is reachable (ParserComponent is in src-viewer.cls)
 
-  FencedCode.cls = .File~searchPath("FencedCode.cls",                -
-    (".",Value("REXX_PATH",,environment),VALUE("PATH",,environment)) -
-  )
+  FencedCode.cls = ParserComponent("FencedCode.cls")
 
   If FencedCode.cls \== .Nil Then Do
    .context~package~loadPackage( FencedCode.cls~absolutePath )
@@ -565,10 +563,8 @@ full, without its licence header:</para>
 <programlisting language="rexx">::Routine ShowSource Public
   Use Strict Arg filename
 
-  -- Is the highlighter reachable on the Rexx search path?
-  Highlighter.cls = .File~searchPath("Highlighter.cls",              -
-    (".",Value("REXX_PATH",,environment),Value("PATH",,environment)) -
-  )
+  -- Is the highlighter reachable?
+  Highlighter.cls = ParserComponent("Highlighter.cls")
 
   -- No Parser? Serve the raw file as plain text -- the source still arrives.
   If Highlighter.cls == .Nil Then Do
@@ -591,9 +587,31 @@ full, without its licence header:</para>
 
  .HTML.Page~new( .File~new(filename)~name ) -
    ~body( highlighted~makeString )          -
-   ~done
+   ~done</programlisting>
+</example>
 
-::Requires "HTML.Page.cls"</programlisting>
+<para>The highlighter is found by a second routine in the same file,
+<methodname>ParserComponent</methodname>, which the renderer uses too. The
+Parser is the one &Rexx; carries: <filename>parser.cls</filename>, in the
+&Rexx; <filename>bin</filename> directory, with its files in a
+<filename>parser</filename> directory beside it.</para>
+
+<indexterm><primary>examples</primary>
+<secondary>ParserComponent routine, in full</secondary></indexterm>
+<example>
+<title>The <methodname>ParserComponent</methodname> routine, in full</title>
+<programlisting language="rexx">::Routine ParserComponent Public
+  Use Strict Arg name
+
+  parser = .File~searchPath("parser.cls",                            -
+    (".",Value("REXX_PATH",,environment),Value("PATH",,environment)) -
+  )
+  If parser == .Nil Then Return .Nil
+
+  component = .File~new("parser" || .File~separator || name, parser~parentFile)
+  If \component~exists Then Return .Nil
+
+  Return component</programlisting>
 </example>
 
 <para>The shape is the same graceful degradation the renderer showed: look for the
@@ -627,8 +645,8 @@ directly.</para>
 <indexterm><primary>Rexx Parser</primary></indexterm>
 
 <para>Like the renderer, the viewer never insists on the tool it would like.
-<methodname>ShowSource</methodname> looks for the Rexx Parser's highlighter on the
-search path; finding it, it highlights the source in the default
+<methodname>ShowSource</methodname> asks <methodname>ParserComponent</methodname>
+for the Rexx Parser's highlighter; finding it, it highlights the source in the default
 <emphasis role="italic">dark</emphasis> style (the code-style chooser in the banner
 can restyle it in the browser) and emits HTML. Not finding it, it serves the raw
 file as UTF-8 plain text. The source always arrives &mdash; highlighted when it can

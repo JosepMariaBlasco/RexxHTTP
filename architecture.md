@@ -167,8 +167,8 @@ of doing its job.
 What they have in common is that neither insists on its tools. The renderer
 uses [Pandoc](https://pandoc.org/) when Pandoc is installed and serves the raw
 Markdown as plain UTF-8 text when it is not. Both it and the viewer use the
-[Rexx Parser](https://rexx.epbcn.com/rexx-parser/) for highlighting when the
-Parser is installed, and emit unhighlighted text when it is not — which is why
+[Rexx Parser](https://rexx.epbcn.com/rexx-parser/), which ooRexx carries, for
+highlighting when they find it, and emit unhighlighted text when they do not — which is why
 both of them load their highlighting class dynamically rather than with
 `::Requires`, a directive for a missing file being fatal at load time. And
 underneath both, the

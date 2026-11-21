@@ -29,7 +29,7 @@
 /*     bit; the package is built on Windows and arrives without it.           */
 /*                                                                            */
 /* Prerequisites the installer checks but does NOT install:                   */
-/*   - ooRexx 5.2.0 or later (out of scope; from the ooRexx project).         */
+/*   - ooRexx 5.3.0 r13572 or later (out of scope; from the ooRexx project).  */
 /*   - Homebrew itself. If absent, the installer stops with the link rather   */
 /*     than run Homebrew's remote install script unattended.                  */
 /*   - curl (ships with macOS). Used for the smoke test.                      */
@@ -126,7 +126,7 @@
   Say "Checking ooRexx..."
   If SysCmd("rexx -v >/dev/null 2>&1") \== 0 Then Do
     Say "  ERROR: ooRexx is not installed or not in PATH."
-    Say "  RexxHTTP needs ooRexx 5.2.0 or later, from the Open Object Rexx"
+    Say "  RexxHTTP needs ooRexx 5.3.0 r13572 or later, from the Open Object Rexx"
     Say "  project: https://sourceforge.net/projects/oorexx/"
     Return 1
   End
@@ -252,7 +252,7 @@
   -- Splice in the install-time SetEnv lines (RexxHTTPSetEnvLines documents
   -- which variables are emitted). docRoot is the installation root the whole
   -- package was planted under, where src/RexxHTTP.CommonRoutines.cls now lives.
-  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ", srcRoot)~strip("T", .endOfLine))
+  frag = frag~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ")~strip("T", .endOfLine))
   -- The fragment ships "ServerName localhost"; when we are on a non-default
   -- port, name the server with it so redirects and self-references use it.
   If port \== 8080 Then

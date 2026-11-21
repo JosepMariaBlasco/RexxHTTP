@@ -55,29 +55,32 @@
   Return msg
 
 /******************************************************************************/
-/* Minimum-version guard. RexxHTTP requires ooRexx 5.2.0 or later. The driver */
-/* itself is a .rex, so a working interpreter is a given -- what is not given */
-/* is that it is recent enough, so the check is on the VERSION, not on mere   */
-/* presence. The comparison is compound on purpose: a major above 5 passes    */
-/* outright, and only within the 5.x line is a release of 2 or more required, */
-/* so a future 6.0.0 (release 0) is not rejected for the wrong reason. Both   */
-/* sides of the '&' are always evaluable (neither depends on the other        */
-/* holding first), so ooRexx's non-short-circuiting '&' is safe here.         */
-/* The message lives in its companion routine so the wording stays            */
-/* in one place:                                                              */
+/* Minimum-version guard. RexxHTTP requires ooRexx 5.3.0 r13572 or later:     */
+/* that is the revision whose bin directory carries the Rexx Parser           */
+/* (parser.cls, r13570-r13572), which the viewers use to highlight. The       */
+/* driver itself is a .rex, so a working interpreter is a given -- what is    */
+/* not given is that it is recent enough, so the check is on the VERSION,     */
+/* not on mere presence. Any version above 5.3.0 passes outright; 5.3.0       */
+/* itself needs the revision. Comparing major, release and modification as    */
+/* one number keeps a future 6.0.0 from being rejected for the wrong reason.  */
+/* The message lives in its companion routine so the wording stays in one     */
+/* place:                                                                     */
 /*                                                                            */
 /*   If \RexxVersionOK() Then Do                                              */
 /*     Say RexxVersionMsg(); Exit 1                                           */
 /*   End                                                                      */
 /******************************************************************************/
 ::Routine RexxVersionOK Public
-  major   = .RexxInfo~majorVersion
-  release = .RexxInfo~release
-  Return major > 5 | (major == 5 & release >= 2)
+  version = .RexxInfo~majorVersion * 10000 + .RexxInfo~release * 100 -
+          + .RexxInfo~modification
+  If version > 50300 Then Return .true
+  If version < 50300 Then Return .false
+  Return .RexxInfo~revision >= 13572
 
 ::Routine RexxVersionMsg Public
-  msg = "ERROR: RexxHTTP requires ooRexx 5.2.0 or later; this is" -
-        .RexxInfo~version"." "Please upgrade the interpreter and try again."
+  msg = "ERROR: RexxHTTP requires ooRexx 5.3.0 r13572 or later; this is" -
+        .RexxInfo~version "r" || .RexxInfo~revision"."                   -
+        "Please upgrade the interpreter and try again."
   Return msg
 
 /******************************************************************************/
@@ -688,64 +691,25 @@ BadArg:
   Else Address System sudo "mkdir -p" '"'dir'"'
   Return
 
--- Locate the Rexx Parser's bin/ directory in the user's environment at install
--- time, or "" when it cannot be found. This runs where we DO see the user's
--- environment (unlike Apache's child at runtime), so the result can be frozen
+-- Locate the directory of the Rexx Parser that ooRexx carries (parser.cls,
+-- with its parser/ folder beside it; ooRexx installs both in its bin
+-- directory since 5.3.0 r13571), or "" when it cannot be found. This runs where
+-- we DO see the user's environment (unlike Apache's child at runtime, whose
+-- PATH need not include ooRexx's bin directory), so the result can be frozen
 -- into the Apache config (SetEnv REXX_PATH; see RexxHTTPSetEnvLines).
 --
--- Search order, first hit wins: current directory, then REXX_PATH, then PATH.
--- The anchor is the file Rexx.Parser.cls. From the file we return its PARENT
--- directory.
---
--- When srcRoot is supplied (the RexxHTTP package root being installed), we also
--- consider a Parser checked out as a SIBLING of RexxHTTP: <srcRoot>/../rexx-parser
--- /bin. Convention -- rexxhttp/ and rexx-parser/ side by side under a common
--- parent -- so one ".." hop off srcRoot lands on the sibling; .File normalizes
--- it. This catches the common developer checkout even when the sibling bin/ is
--- on no search variable. The sibling is folded into the standard order by
--- TEMPORARILY prepending it to PATH for the probe, then restoring PATH (measured
--- in ooRexx 5.3.0: SysSearchPath does see a variable set in-process via
--- Call Value ..."ENVIRONMENT"). PATH is restored on every exit path.
---
--- SysSearchPath takes the NAME of an environment variable (not its value) and
--- returns the absolute path of the first matching file, or "" if none; a
--- missing variable yields "" without error. We probe the current directory
--- separately with .File~exists so the cwd->REXX_PATH->PATH order is explicit
--- and does not depend on SysSearchPath's internal handling of ".".
+-- Search order, first hit wins: REXX_PATH, then PATH. The anchor is the file
+-- parser.cls; we return its PARENT directory. SysSearchPath takes the NAME of
+-- an environment variable (not its value) and returns the absolute path of the
+-- first matching file, or "" if none; a missing variable yields "" without
+-- error.
 ::Routine ParserBin Public
-  Use Strict Arg srcRoot = ""
-  anchor = "Rexx.Parser.cls"
-
-  -- 1. Current directory.
-  cwdHit = .File~new(anchor)
-  If cwdHit~exists Then Return cwdHit~parentFile~absolutePath
-
-  -- Temporarily fold a sibling rexx-parser/bin into PATH, if srcRoot was given
-  -- and the sibling directory resolves. Saved for restoration below.
-  savedPath = .Nil
-  If srcRoot \== "" Then Do
-    sep     = .File~separator
-    sibling = .File~new(srcRoot || sep || ".." || sep || "rexx-parser" || sep || "bin")~absolutePath
-    If .File~new(sibling)~exists Then Do
-      savedPath = Value("PATH", , "ENVIRONMENT")
-      Call Value "PATH", sibling || .File~pathSeparator || savedPath, "ENVIRONMENT"
-    End
-  End
-
-  -- 2. REXX_PATH, then 3. PATH (with the sibling prepended, if any).
-  found = ""
+  anchor = "parser.cls"
   Do var Over .Array~of("REXX_PATH", "PATH")
     hit = SysSearchPath(var, anchor)
-    If hit \== "" Then Do
-      found = .File~new(hit)~parentFile~absolutePath
-      Leave
-    End
+    If hit \== "" Then Return .File~new(hit)~parentFile~absolutePath
   End
-
-  -- Restore PATH no matter what (only touched if we prepended above).
-  If savedPath \== .Nil Then Call Value "PATH", savedPath, "ENVIRONMENT"
-
-  Return found                             -- "" => not found; rexxlet degrades
+  Return ""                                -- not found; rexxlets degrade
 
 -- Produce the SetEnv lines the Apache config fragment needs for point 17, as a
 -- single string of complete lines (native line terminators). Three variables,
@@ -766,7 +730,8 @@ BadArg:
 --   REXX_PATH         the package's own bin/ (<docRoot>/bin), so a rexxlet can
 --                     resolve ::Requires "HTML.Page.cls" (and the other loadable
 --                     classes that live there) no matter which directory the
---                     rexxlet itself sits in -- PLUS the Parser's bin/ when found.
+--                     rexxlet itself sits in -- PLUS the directory of ooRexx's
+--                     parser.cls when found (see ParserBin).
 --                     Apache prefixes REXX_PATH to REDIRECT_REXX_PATH across
 --                     the Action; RexxHTTP.rex reinjects it before calling the
 --                     rexxlet, and ooRexx reads it at ::Requires time (and
@@ -774,22 +739,16 @@ BadArg:
 --                     the slash form the Apache config uses; entries are joined
 --                     with the platform list separator.
 --
--- srcRoot is the RexxHTTP package root being installed FROM (the source tree),
--- distinct from docRoot (the install TARGET). Passed through to ParserBin so a
--- Parser checked out as a sibling of RexxHTTP is detected. Optional: when
--- omitted, sibling detection is simply skipped.
---
 -- Returned as text so each installer can splice it into the fragment it writes,
 -- wherever that installer puts SetEnv directives. Empty variables are never
 -- emitted (an empty REXXHTTP_BASE would be a bug in the caller; guard anyway).
 ::Routine RexxHTTPSetEnvLines Public
-  Use Strict Arg docRoot, indent = "", srcRoot = ""
+  Use Strict Arg docRoot, indent = ""
   eol = .endOfLine
   out = .MutableBuffer~new
 
-  -- Locate the Parser once (sibling detection uses srcRoot when given).
-  -- The Parser half of REXX_PATH derives from this single probe.
-  parserBin = ParserBin(srcRoot)
+  -- Locate the Parser once: the Parser half of REXX_PATH derives from it.
+  parserBin = ParserBin()
 
   If docRoot \== "" Then Do
     out~append(indent, "SetEnv REXXHTTP_BASE """docRoot"""", eol)
@@ -801,11 +760,11 @@ BadArg:
     -- outside this clean-machine installer's scope.
     out~append(indent, "SetEnv REXXHTTP_URLBASE *", eol)
     -- REXX_PATH: the package's own bin/ (so ::Requires in a rexxlet resolves
-    -- regardless of the rexxlet's own directory), plus the Parser's bin/ when
-    -- found -- markdown.rxl locates FencedCode.cls by scanning REXX_PATH, and the
-    -- Parser classes live outside <docRoot>/bin (in the separate rexx-parser
-    -- package), so without this entry highlighting silently stays off even with
-    -- the Parser installed. docRoot is already in the slash form the Apache
+    -- regardless of the rexxlet's own directory), plus the directory of
+    -- ooRexx's parser.cls when found -- the viewers locate it on ".",
+    -- REXX_PATH and PATH, and Apache's child need not have ooRexx's bin
+    -- directory on its PATH, so without this entry highlighting could silently
+    -- stay off even with the Parser installed. docRoot is already in the slash form the Apache
     -- config wants, so "/bin" is glued with "/"; entries are joined with the
     -- platform list separator.
     rexxPath = docRoot"/bin"

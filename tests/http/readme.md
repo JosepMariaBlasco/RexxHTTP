@@ -15,7 +15,7 @@ things that bit earlier sessions when verified any other way.
 Prerequisites
 -------------
 
-- ooRexx 5.2.0 or later (the minimum supported version)
+- ooRexx 5.3.0 r13572 or later (the minimum supported version)
 - Apache 2 with the `cgid` and `actions` modules
 - curl
 

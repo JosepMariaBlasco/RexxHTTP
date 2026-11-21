@@ -109,7 +109,7 @@
   Address System "rexx -v > /dev/null 2>&1"
   If RC \== 0 Then Do
     Say "  ERROR: ooRexx is not installed or not in PATH."
-    Say "  RexxHTTP needs ooRexx 5.2.0 or later. Install it first, from the"
+    Say "  RexxHTTP needs ooRexx 5.3.0 r13572 or later. Install it first, from the"
     Say "  Open Object Rexx project: https://sourceforge.net/projects/oorexx/"
     Return 1
   End
@@ -242,7 +242,7 @@
   -- Splice in the install-time SetEnv lines (see the %SETENV% marker in the
   -- ::Resource); RexxHTTPSetEnvLines documents which variables are emitted.
   -- docRoot is the installation root the whole package was planted under.
-  conf = conf~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ", srcRoot)~strip("T", .endOfLine))
+  conf = conf~changeStr("%SETENV%", RexxHTTPSetEnvLines(docRoot, "    ")~strip("T", .endOfLine))
   Call Stream tmpConf, "C", "Open Write Replace"
   Call CharOut tmpConf, conf
   Call Stream tmpConf, "C", "Close"

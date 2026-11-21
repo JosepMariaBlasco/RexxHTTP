@@ -43,7 +43,9 @@ Download
 Requirements
 ------------
 
-- [ooRexx](https://www.oorexx.org/) 5.2.0 or later.
+- [ooRexx](https://www.oorexx.org/) 5.3.0 r13572 or later. It carries the
+  [Rexx Parser](https://rexx.epbcn.com/rexx-parser/), which highlights the
+  Rexx programs that the site shows.
 - [Apache](https://httpd.apache.org/) 2.4 or later,
   with `cgid` and `actions` enabled.
 - (Optional) [Pandoc](https://pandoc.org/), to

@@ -16,6 +16,7 @@
 /* -------- ------- --------------------------------------------------------- */
 /* 20260704    1.0  First version                                             */
 /* 20260729         Dual path to show own source                              */
+/* 20261121         Find FencedCode.cls with ParserComponent (src-viewer.cls) */
 /*                                                                            */
 /******************************************************************************/
 
@@ -73,11 +74,9 @@
 
   source = .File~readLines(.request~filename)
 
-  -- See if the highlighter is reachable
+  -- See if the highlighter is reachable (ParserComponent is in src-viewer.cls)
 
-  FencedCode.cls = .File~searchPath("FencedCode.cls",                -
-    (".",Value("REXX_PATH",,environment),VALUE("PATH",,environment)) -
-  )
+  FencedCode.cls = ParserComponent("FencedCode.cls")
 
   If FencedCode.cls \== .Nil Then Do
    .context~package~loadPackage( FencedCode.cls~absolutePath )

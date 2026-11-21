@@ -15,6 +15,8 @@
 /* Date     Version Details                                                   */
 /* -------- ------- --------------------------------------------------------- */
 /* 20260729    1.0  Extracted from src-viewer.rxl so it can be reused         */
+/* 20261121    1.1  ParserComponent: find the Parser that ooRexx carries      */
+/*                  (parser.cls and its parser/ folder), and only that one    */
 /*                                                                            */
 /******************************************************************************/
 
@@ -34,10 +36,8 @@
 ::Routine ShowSource Public
   Use Strict Arg filename
 
-  -- Is the highlighter reachable on the Rexx search path?
-  Highlighter.cls = .File~searchPath("Highlighter.cls",              -
-    (".",Value("REXX_PATH",,environment),Value("PATH",,environment)) -
-  )
+  -- Is the highlighter reachable?
+  Highlighter.cls = ParserComponent("Highlighter.cls")
 
   -- No Parser? Serve the raw file as plain text -- the source still arrives.
   If Highlighter.cls == .Nil Then Do
@@ -61,5 +61,29 @@
  .HTML.Page~new( .File~new(filename)~name ) -
    ~body( highlighted~makeString )          -
    ~done
+
+--------------------------------------------------------------------------------
+-- ParserComponent -- Locate one file of the Rexx Parser, or .Nil.            --
+--                                                                            --
+-- The Parser is the one ooRexx carries since 5.3.0 r13570: parser.cls in     --
+-- ooRexx's bin directory, which is on PATH, and its parser/ folder beside    --
+-- it. parser.cls is searched for on ".", REXX_PATH and PATH, in that order,  --
+-- and the component in that parser/ folder. Highlighter.cls and              --
+-- FencedCode.cls load parser.cls themselves. The caller loads the component, --
+-- so that a routine in it (FencedCode) is visible to the caller.             --
+--------------------------------------------------------------------------------
+
+::Routine ParserComponent Public
+  Use Strict Arg name
+
+  parser = .File~searchPath("parser.cls",                            -
+    (".",Value("REXX_PATH",,environment),Value("PATH",,environment)) -
+  )
+  If parser == .Nil Then Return .Nil
+
+  component = .File~new("parser" || .File~separator || name, parser~parentFile)
+  If \component~exists Then Return .Nil
+
+  Return component
 
 ::Requires "HTML.Page.cls"

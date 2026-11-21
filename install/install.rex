@@ -39,8 +39,8 @@
     Exit 1
   End
 
-  -- RexxHTTP requires ooRexx 5.2.0 or later. Stop early on an interpreter
-  -- too old, before touching arguments or the system.
+  -- RexxHTTP requires ooRexx 5.3.0 r13572 or later. Stop early on an
+  -- interpreter too old, before touching arguments or the system.
   If \RexxVersionOK() Then Do
     Say RexxVersionMsg()
     Exit 1

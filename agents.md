@@ -136,7 +136,10 @@ same key.
 Environment
 -----------
 
-- **Minimum ooRexx version: 5.2.0.** Earlier versions are not supported.
+- **Minimum ooRexx version: 5.3.0 r13572.** Earlier versions are not supported.
+  From that revision ooRexx carries the Rexx Parser (`parser.cls` and its
+  `parser/` folder, in ooRexx's bin directory), which the viewers use to
+  highlight (`ParserComponent`, in `bin/src-viewer.cls`). No stand-alone Parser.
 - **Apache 2** with the `cgid` and `actions` modules.
 
 Line endings
